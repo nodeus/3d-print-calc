@@ -6,7 +6,7 @@
 build/
 bin/
 desktop/build/
-release/
+/release/
 
 # Wails / frontend (dist и package.json.md5 — артефакты `wails build`, в git не идут;
 # package-lock.json — коммитим. Каноническая сборка десктопа — `wails build`,
