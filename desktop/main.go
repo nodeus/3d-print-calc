@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"log"
 	"os"
@@ -22,9 +23,13 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// App — корень биндингов. Методы — в app.go.
+// App — корень биндингов. Методы — в app.go, backup.go.
 type App struct {
-	db *sqlite.DB
+	ctx         context.Context
+	db          *sqlite.DB
+	dbPath      string
+	pendingFile []byte // файл после preview, до apply
+	pendingPath string
 }
 
 func main() {
@@ -41,11 +46,21 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		Bind: []any{app},
+		Bind:       []any{app},
+		OnStartup:  app.startup,
+		OnShutdown: app.shutdown,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+}
+
+func (a *App) shutdown(ctx context.Context) {
+	_ = ctx
 }
 
 // initDB открывает app.db, накатывает миграции и сеет при первом запуске.
@@ -58,16 +73,28 @@ func (a *App) initDB() error {
 		}
 		path = filepath.Join(filepath.Dir(exe), "app.db")
 	}
-	db, err := sqlite.Open(path)
+	a.dbPath = path
+	db, err := openDB(path)
 	if err != nil {
 		return err
 	}
 	a.db = db
+	return nil
+}
+
+// openDB открывает файл, накатывает миграции и сеет пустую БД.
+func openDB(path string) (*sqlite.DB, error) {
+	db, err := sqlite.Open(path)
+	if err != nil {
+		return nil, err
+	}
 	if err := db.MigrateFS(migrationsFS, "assets/migrations"); err != nil {
-		return err
+		db.Close()
+		return nil, err
 	}
 	if _, err := seed.SeedAll(db, bytes.NewReader(seedCSV)); err != nil {
-		return err
+		db.Close()
+		return nil, err
 	}
-	return nil
+	return db, nil
 }

@@ -76,7 +76,7 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
-	matIDs, spoolIDs, priceByCode, n, err := seedMaterials(db)
+	n, err := seedMaterials(db)
 	if err != nil {
 		return st, err
 	}
@@ -96,9 +96,36 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
+	imp, err := ImportRows(db, printerID, rows)
+	if err != nil {
+		return st, err
+	}
+	st.Linked, st.Stubs, st.Jobs = imp.Linked, imp.Stubs, len(rows)
+	st.Materials += st.Stubs
+	return st, nil
+}
+
+// ImportRows импортирует разобранные строки истории (upsert по filename+start_at).
+// Справочник подтягивается из БД: неизвестные коды → стабы. Возвращает статистику.
+func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error) {
+	var st Stats
+	mats := db.Materials()
+	list, err := mats.List()
+	if err != nil {
+		return st, fmt.Errorf("ERR_SEED_MATERIALS: %w", err)
+	}
+	matIDs := make(map[string]models.Material, len(list))
+	spoolIDs := map[string]int64{}
+	priceByCode := map[string]float64{}
+	for _, m := range list {
+		matIDs[m.Code] = m
+		if spools, err := mats.ListSpools(m.ID); err == nil && len(spools) > 0 {
+			spoolIDs[m.Code] = spools[0].ID
+			priceByCode[m.Code] = float64(spools[0].Price) / 100
+		}
+	}
 	amortHour := calc.AmortCalendarHour(47454, 1096, 8) // СПИ 3 года календарных
 	jobs := db.Jobs()
-	mats := db.Materials()
 	for _, r := range rows {
 		code := importers.ParseMaterial(r.Filename)
 		m, ok := matIDs[code]
@@ -131,15 +158,17 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 		})
 		if _, err := jobs.Upsert(models.Job{
 			Filename: r.Filename, StartAt: r.StartTime.Format("2006-01-02 15:04"),
+			EndAt:     r.EndTime.Format("2006-01-02 15:04"),
 			PrinterID: printerID, SpoolID: spoolID, Status: r.Status,
 			PrintSec: r.PrintDuration, TotalSec: r.TotalDuration,
-			WeightG: weightG, LengthM: r.FilamentUsed / 1000, CostSnapshot: string(snap),
+			EstimatedSec: r.EstimatedTime, SizeBytes: r.Size, FilamentTotalMm: r.FilamentTotal,
+			WeightG: weightG, LengthM: r.FilamentUsed / 1000, Slicer: r.Slicer,
+			CostSnapshot: string(snap),
 		}); err != nil {
 			return st, err
 		}
 	}
 	st.Jobs = len(rows)
-	st.Materials += st.Stubs
 	return st, nil
 }
 
@@ -160,36 +189,22 @@ func seedPrinter(db DB) (int64, error) {
 	})
 }
 
-// seedMaterials сеет справочник (пропуск, если не пуст).
-// Возвращает карты код→материал/катушка/цена и число материалов.
-func seedMaterials(db DB) (map[string]models.Material, map[string]int64, map[string]float64, int, error) {
+// seedMaterials сеет справочник (пропуск, если не пуст). Возвращает число материалов.
+func seedMaterials(db DB) (int, error) {
 	mats := db.Materials()
-	matIDs := map[string]models.Material{}
-	spoolIDs := map[string]int64{}
-	priceByCode := map[string]float64{}
 	existing, err := mats.List()
 	if err != nil {
-		return nil, nil, nil, 0, fmt.Errorf("ERR_SEED_MATERIALS: %w", err)
+		return 0, fmt.Errorf("ERR_SEED_MATERIALS: %w", err)
 	}
 	if len(existing) > 0 {
-		for _, m := range existing {
-			matIDs[m.Code] = m
-		}
-		return matIDs, spoolIDs, priceByCode, len(existing), nil
+		return len(existing), nil
 	}
 	for _, sm := range materials {
-		_, spoolID, err := upsertMaterial(mats, sm.code, sm.price, sm.density, ExcelDate(sm.serial))
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-		m, _ := mats.GetByCode(sm.code)
-		matIDs[sm.code] = m
-		priceByCode[sm.code] = float64(sm.price) / 100
-		if spoolID != 0 {
-			spoolIDs[sm.code] = spoolID
+		if _, _, err := upsertMaterial(mats, sm.code, sm.price, sm.density, ExcelDate(sm.serial)); err != nil {
+			return 0, err
 		}
 	}
-	return matIDs, spoolIDs, priceByCode, len(materials), nil
+	return len(materials), nil
 }
 
 // upsertMaterial вставляет материал и (при price>0) одну катушку.
