@@ -210,17 +210,25 @@ func (a *App) WeightFromLength(density, diameterMM, lengthMM float64) float64 {
 }
 
 // JobInput — сохранение результата калькулятора в историю.
+// Material/Tariff/... — контекст расчёта для снапшота v2 (перенос и пересчёт).
 type JobInput struct {
-	Filename  string  `json:"filename"`
-	PrinterID int64   `json:"printerId"`
-	SpoolID   int64   `json:"spoolId"`
-	Status    string  `json:"status"`
-	TotalSec  int64   `json:"totalSec"`
-	WeightG   float64 `json:"weightG"`
-	LengthM   float64 `json:"lengthM"`
-	Cost      float64 `json:"cost"`
-	Price     float64 `json:"price"`
-	Currency  string  `json:"currency"`
+	Filename     string  `json:"filename"`
+	PrinterID    int64   `json:"printerId"`
+	SpoolID      int64   `json:"spoolId"`
+	Status       string  `json:"status"`
+	TotalSec     int64   `json:"totalSec"`
+	WeightG      float64 `json:"weightG"`
+	LengthM      float64 `json:"lengthM"`
+	Cost         float64 `json:"cost"`
+	Price        float64 `json:"price"`
+	Currency     string  `json:"currency"`
+	Material     string  `json:"material"`
+	Tariff       float64 `json:"tariff"`
+	PowerKW      float64 `json:"powerKW"`
+	AmortPerHour float64 `json:"amortPerHour"`
+	OpRate       float64 `json:"opRate"`
+	PrepH        float64 `json:"prepH"`
+	PostH        float64 `json:"postH"`
 }
 
 // SaveJob сохраняет расчёт (manager+). StartAt — сейчас (импорт истории — через CSV).
@@ -234,12 +242,27 @@ func (a *App) SaveJob(in JobInput) (int64, error) {
 	if in.Status == "" {
 		in.Status = "completed"
 	}
+	// Катушка по материалу (вместо вечного 0): для привязки и пересчёта.
+	spoolID := in.SpoolID
+	if spoolID == 0 && in.Material != "" {
+		if m, err := a.db.Materials().GetByCode(in.Material); err == nil {
+			if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
+				spoolID = spools[0].ID
+			}
+		}
+	}
 	snap, _ := json.Marshal(map[string]any{
-		"cost": in.Cost, "price": in.Price, "currency": in.Currency,
+		"v": 2, "material": in.Material, "currency": in.Currency,
+		"cost": in.Cost, "price": in.Price,
+		"input": map[string]any{
+			"tariff": in.Tariff, "powerKW": in.PowerKW,
+			"amortPerHour": in.AmortPerHour, "opRate": in.OpRate,
+			"prepH": in.PrepH, "postH": in.PostH,
+		},
 	})
 	return a.db.Jobs().Upsert(models.Job{
 		Filename: in.Filename, StartAt: time.Now().Format("2006-01-02 15:04"),
-		PrinterID: in.PrinterID, SpoolID: in.SpoolID, Status: in.Status, Origin: "manual",
+		PrinterID: in.PrinterID, SpoolID: spoolID, Status: in.Status, Origin: "manual",
 		PrintSec: in.TotalSec, TotalSec: in.TotalSec,
 		WeightG: in.WeightG, LengthM: in.LengthM, CostSnapshot: string(snap),
 	})
@@ -251,6 +274,36 @@ func (a *App) DeleteJob(id int64) error {
 		return err
 	}
 	return a.db.Jobs().DeleteJob(id)
+}
+
+// JobEdit — поля правки ручной работы (материал отдельно: не колонка jobs).
+type JobEdit struct {
+	ID           int64   `json:"id"`
+	Filename     string  `json:"filename"`
+	Status       string  `json:"status"`
+	StartAt      string  `json:"startAt"`
+	EndAt        string  `json:"endAt"`
+	PrintSec     int64   `json:"printSec"`
+	TotalSec     int64   `json:"totalSec"`
+	EstimatedSec int64   `json:"estimatedSec"`
+	SizeBytes    int64   `json:"sizeBytes"`
+	WeightG      float64 `json:"weightG"`
+	LengthM      float64 `json:"lengthM"`
+	Slicer       string  `json:"slicer"`
+	Material     string  `json:"material"`
+}
+
+// UpdateManualJob правит ручную работу с автопересчётом (manager+).
+func (a *App) UpdateManualJob(in JobEdit) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Jobs().UpdateManual(models.Job{
+		ID: in.ID, Filename: in.Filename, Status: in.Status,
+		StartAt: in.StartAt, EndAt: in.EndAt,
+		PrintSec: in.PrintSec, TotalSec: in.TotalSec, EstimatedSec: in.EstimatedSec,
+		SizeBytes: in.SizeBytes, WeightG: in.WeightG, LengthM: in.LengthM, Slicer: in.Slicer,
+	}, in.Material)
 }
 
 // GetJobs возвращает историю (limit<=0 — всё).

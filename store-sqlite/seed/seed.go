@@ -167,7 +167,12 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 			AmortPerHour: amortHour, OpRate: DefaultOpRate,
 		})
 		snap, _ := json.Marshal(map[string]any{
-			"material": code, "weight_g": weightG, "cost": res.Cost, "currency": "RUB",
+			"v": 2, "material": code, "weight_g": weightG, "cost": res.Cost, "currency": "RUB",
+			"input": map[string]any{
+				"tariff": DefaultTariff, "powerKW": DefaultPower,
+				"amortPerHour": amortHour, "opRate": DefaultOpRate,
+				"prepH": 0, "postH": 0,
+			},
 		})
 		if _, err := jobs.Upsert(models.Job{
 			Filename: r.Filename, StartAt: r.StartTime.Format("2006-01-02 15:04"),

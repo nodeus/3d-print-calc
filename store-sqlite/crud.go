@@ -1,8 +1,10 @@
 package sqlite
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"3dprint-calc/core/calc"
 	"3dprint-calc/core/models"
 )
 
@@ -110,4 +112,89 @@ func (r *printersRepo) Delete(id int64) error {
 		return fmt.Errorf("ERR_PRINTER_DELETE: %w", err)
 	}
 	return nil
+}
+
+// legacy-тарифы сида/импорта для пересчёта старых снапшотов v1.
+const (
+	legacyTariff = 7.08
+	legacyPower  = 0.35
+	legacyOpRate = 100.0
+)
+
+// snapshotCtx вытаскивает контекст тарифов из снапшота (v2) или legacy-дефолты.
+func snapshotCtx(raw string) (tariff, powerKW, amortPerHour, opRate, prepH, postH float64) {
+	tariff, powerKW, opRate = legacyTariff, legacyPower, legacyOpRate
+	amortPerHour = calc.AmortCalendarHour(47454, 1096, 8)
+	var snap struct {
+		Input map[string]float64 `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
+		return tariff, powerKW, amortPerHour, opRate, prepH, postH
+	}
+	get := func(k string, fb float64) float64 {
+		if v, ok := snap.Input[k]; ok {
+			return v
+		}
+		return fb
+	}
+	return get("tariff", tariff), get("powerKW", powerKW),
+		get("amortPerHour", amortPerHour), get("opRate", opRate),
+		get("prepH", 0), get("postH", 0)
+}
+
+// UpdateManual правит ручную работу (origin=manual) и АВТОМАТИЧЕСКИ пересчитывает
+// себестоимость: цена материала — текущая (первая катушка), тарифы — из контекста
+// снапшота (v1 → legacy-дефолты). Снапшот перезаписывается как v2.
+func (r *jobsRepo) UpdateManual(j models.Job, material string) error {
+	if j.ID == 0 {
+		return fmt.Errorf("ERR_JOB_SAVE: пустой id")
+	}
+	var origin, oldSnap string
+	if err := r.db.QueryRow(`SELECT origin, cost_snapshot FROM jobs WHERE id=?`, j.ID).
+		Scan(&origin, &oldSnap); err != nil {
+		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
+	}
+	if origin != "" && origin != "manual" {
+		return fmt.Errorf("ERR_JOB_SAVE: править можно только работы, добавленные вручную")
+	}
+	pricePerKg := 0.0
+	if material != "" {
+		if m, err := r.materialPrice(material); err == nil {
+			pricePerKg = m
+		}
+	}
+	tariff, powerKW, amortPerHour, opRate, prepH, postH := snapshotCtx(oldSnap)
+	res := calc.Calculate(calc.Input{
+		TotalSec: float64(j.TotalSec), WeightG: j.WeightG, PricePerKg: pricePerKg,
+		Tariff: tariff, PowerKW: powerKW, AmortPerHour: amortPerHour,
+		OpRate: opRate, PrepH: prepH, PostH: postH,
+	})
+	snap, _ := json.Marshal(map[string]any{
+		"v": 2, "material": material, "cost": res.Cost, "currency": "RUB",
+		"input": map[string]any{
+			"tariff": tariff, "powerKW": powerKW, "amortPerHour": amortPerHour,
+			"opRate": opRate, "prepH": prepH, "postH": postH,
+		},
+	})
+	if _, err := r.db.Exec(`UPDATE jobs SET filename=?, status=?, start_at=?, end_at=?,
+		print_sec=?, total_sec=?, estimated_sec=?, size_bytes=?, weight_g=?, length_m=?,
+		slicer=?, cost_snapshot=? WHERE id=?`,
+		j.Filename, j.Status, j.StartAt, j.EndAt, j.PrintSec, j.TotalSec,
+		j.EstimatedSec, j.SizeBytes, j.WeightG, j.LengthM, j.Slicer, string(snap), j.ID); err != nil {
+		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
+	}
+	return nil
+}
+
+// materialPrice возвращает текущую цену кг (первая катушка) или 0.
+func (r *jobsRepo) materialPrice(code string) (float64, error) {
+	var id int64
+	if err := r.db.QueryRow(`SELECT id FROM materials WHERE code=?`, code).Scan(&id); err != nil {
+		return 0, err
+	}
+	var price int64
+	if err := r.db.QueryRow(`SELECT price FROM spools WHERE material_id=? ORDER BY archived, id LIMIT 1`, id).Scan(&price); err != nil {
+		return 0, err
+	}
+	return float64(price) / 100, nil
 }

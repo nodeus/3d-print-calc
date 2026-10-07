@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"encoding/json"
 	"testing"
 
 	"3dprint-calc/core/models"
@@ -138,5 +139,61 @@ func TestUserDeleteGuards(t *testing.T) {
 	if err := repo.Delete(a1); err != nil {
 		// repo-уровень удаляет; guards — в App (см. desktop TestRolesDeleteGuards)
 		t.Fatalf("repo Delete: %v", err)
+	}
+}
+
+func TestUpdateManualReprice(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, err := mats.UpsertByCode(models.Material{Code: "PETG-R", Type: "PETG", Density: 1.27, Diameter: 1.75})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Катушка 1000 ₽/кг → 1 ₽/г.
+	if _, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	jobs := db.Jobs()
+	id, err := jobs.Upsert(models.Job{Filename: "r.gcode", StartAt: "2026-01-01 10:00", Origin: "manual", TotalSec: 3600, WeightG: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// import править нельзя.
+	imp, _ := jobs.Upsert(models.Job{Filename: "i.gcode", StartAt: "2026-01-01 10:00", Origin: "import"})
+	if err := jobs.UpdateManual(models.Job{ID: imp}, "PETG-R"); err == nil {
+		t.Fatal("правка import обязана блокироваться")
+	}
+	// Правка веса 10→20г: мат составит 20₽ (плюс свет/амортизация/труд по контексту).
+	if err := jobs.UpdateManual(models.Job{
+		ID: id, Filename: "r.gcode", StartAt: "2026-01-01 10:00", Status: "completed",
+		TotalSec: 3600, WeightG: 20,
+	}, "PETG-R"); err != nil {
+		t.Fatalf("UpdateManual: %v", err)
+	}
+	list, _ := jobs.List(0)
+	var got models.Job
+	for _, j := range list {
+		if j.ID == id {
+			got = j
+		}
+	}
+	var snap struct {
+		V        int                `json:"v"`
+		Material string             `json:"material"`
+		Cost     float64            `json:"cost"`
+		Input    map[string]float64 `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(got.CostSnapshot), &snap); err != nil {
+		t.Fatalf("снапшот битый: %v", err)
+	}
+	if snap.V != 2 || snap.Material != "PETG-R" {
+		t.Fatalf("снапшот: %+v", snap)
+	}
+	// mat=20, elec=7.08*0.35*1=2.478, amort≈5.41 → cost≈27.89.
+	if snap.Cost < 27.5 || snap.Cost > 28.5 {
+		t.Fatalf("cost = %v, хочу ~27.89", snap.Cost)
+	}
+	if got.WeightG != 20 || got.Status != "completed" {
+		t.Fatalf("поля не сохранились: %+v", got)
 	}
 }

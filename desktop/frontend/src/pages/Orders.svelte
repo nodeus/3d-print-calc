@@ -3,6 +3,7 @@
   import { wails, type Order, type OrderDetail, type Customer } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { askConfirm } from '../lib/confirm';
   import { openOrderId } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
@@ -123,7 +124,7 @@
   async function removeOrder() {
     if (!detail) return;
     error = '';
-    if (!confirm(`${orderNo(detail.order)}?`)) return;
+    if (!(await askConfirm(`${$t("common.delete_q")} «${orderNo(detail.order)}»?`))) return;
     try {
       await wails.deleteOrder(detail.order.ID);
       detail = null;

@@ -147,6 +147,29 @@ export interface JobInput {
   cost: number;
   price: number;
   currency: string;
+  material: string;
+  tariff: number;
+  powerKW: number;
+  amortPerHour: number;
+  opRate: number;
+  prepH: number;
+  postH: number;
+}
+
+export interface JobEdit {
+  id: number;
+  filename: string;
+  status: string;
+  startAt: string;
+  endAt: string;
+  printSec: number;
+  totalSec: number;
+  estimatedSec: number;
+  sizeBytes: number;
+  weightG: number;
+  lengthM: number;
+  slicer: string;
+  material: string;
 }
 
 export interface BackupManifest {
@@ -297,6 +320,7 @@ declare global {
           UpdateOrder(o: Order): Promise<void>;
           DeleteOrder(id: number): Promise<void>;
           DeleteJob(id: number): Promise<void>;
+          UpdateManualJob(job: JobEdit): Promise<void>;
           OrderNumberSettings(): Promise<Record<string, string>>;
           SetOrderNumberSettings(template: string, seq: string): Promise<void>;
           PreviewOrderNumber(template: string): Promise<string>;
@@ -369,6 +393,7 @@ export const wails = {
   updateOrder: (o: Order) => api().UpdateOrder(o),
   deleteOrder: (id: number) => api().DeleteOrder(id),
   deleteJob: (id: number) => api().DeleteJob(id),
+  updateManualJob: (job: JobEdit) => api().UpdateManualJob(job),
   orderNumberSettings: () => api().OrderNumberSettings(),
   setOrderNumberSettings: (template: string, seq: string) => api().SetOrderNumberSettings(template, seq),
   previewOrderNumber: (template: string) => api().PreviewOrderNumber(template),

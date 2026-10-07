@@ -9,6 +9,7 @@
   import Orders from './pages/Orders.svelte';
   import Reports from './pages/Reports.svelte';
   import Info from './pages/Info.svelte';
+  import Confirm from './lib/Confirm.svelte';
   import { t, initLocale } from './lib/i18n';
   import { user, refreshUser } from './lib/session';
   import { goTab } from './lib/nav';
@@ -77,8 +78,7 @@
   </nav>
   <main>
     {#key tab}
-      <svelte:boundary>
-        {#if tab === 'calc'}<Calculator />
+      <svelte:boundary>        {#if tab === 'calc'}<Calculator />
         {:else if tab === 'history'}<History />
         {:else if tab === 'materials'}<Materials />
         {:else if tab === 'printers'}<Printers />
@@ -94,6 +94,7 @@
       </svelte:boundary>
     {/key}
   </main>
+  <Confirm />
 {/if}
 
 <style>
