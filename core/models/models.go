@@ -39,35 +39,35 @@ type Customer struct {
 
 // Maker — дизайнер/моделлер/печатник со ставкой.
 type Maker struct {
-	ID         int64
-	Type       MakerType
-	Name       string
-	RatePerH   int64 // минорные единицы/час
-	Currency   string
+	ID       int64
+	Type     MakerType
+	Name     string
+	RatePerH int64 // минорные единицы/час
+	Currency string
 }
 
 // Material — справочник пластика (код уникален).
 type Material struct {
-	ID        int64
-	Code      string // напр. PETG-NIT-W4
-	Type      string // PLA | PETG | ABS | ...
-	Vendor    string
-	ColorHex  string
-	Density   float64 // г/см³, напр. 1.27
-	Diameter  float64 // мм, напр. 1.75
+	ID       int64
+	Code     string // напр. PETG-NIT-W4
+	Type     string // PLA | PETG | ABS | ...
+	Vendor   string
+	ColorHex string
+	Density  float64 // г/см³, напр. 1.27
+	Diameter float64 // мм, напр. 1.75
 }
 
 // Spool — закупочная партия (катушка) с ценой и остатком.
 type Spool struct {
-	ID            int64
-	MaterialID    int64
-	Price         int64 // минорные единицы
-	Currency      string
-	FxRate        float64
-	BoughtAt      string // ISO-дата
-	WeightInitG   float64
-	WeightLeftG   float64
-	Archived      bool
+	ID          int64
+	MaterialID  int64
+	Price       int64 // минорные единицы
+	Currency    string
+	FxRate      float64
+	BoughtAt    string // ISO-дата
+	WeightInitG float64
+	WeightLeftG float64
+	Archived    bool
 }
 
 // Printer — принтер со своим расчётом амортизации.
