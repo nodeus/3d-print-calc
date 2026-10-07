@@ -64,7 +64,7 @@ func (a *App) MoonrakerApply() (sqlite.ImportReport, error) {
 	if len(a.pendingMoonraker) == 0 {
 		return rep, errNoPending()
 	}
-	st, err := seed.ImportRows(a.db, a.pendingPrinterID, a.pendingMoonraker)
+	st, err := seed.ImportRows(a.db, a.pendingPrinterID, a.pendingMoonraker, "moonraker")
 	if err != nil {
 		return rep, err
 	}

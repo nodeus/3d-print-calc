@@ -241,10 +241,18 @@ func (a *App) SaveJob(in JobInput) (int64, error) {
 	})
 	return a.db.Jobs().Upsert(models.Job{
 		Filename: in.Filename, StartAt: time.Now().Format("2006-01-02 15:04"),
-		PrinterID: in.PrinterID, SpoolID: in.SpoolID, Status: in.Status,
+		PrinterID: in.PrinterID, SpoolID: in.SpoolID, Status: in.Status, Origin: "manual",
 		PrintSec: in.TotalSec, TotalSec: in.TotalSec,
 		WeightG: in.WeightG, LengthM: in.LengthM, CostSnapshot: string(snap),
 	})
+}
+
+// DeleteJob удаляет работу из истории (manager+, только manual).
+func (a *App) DeleteJob(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Jobs().DeleteJob(id)
 }
 
 // GetJobs возвращает историю (limit<=0 — всё).

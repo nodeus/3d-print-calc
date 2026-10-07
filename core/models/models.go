@@ -98,6 +98,7 @@ type Job struct {
 	PrinterID       int64
 	SpoolID         int64
 	Status          string
+	Origin          string // import | manual | moonraker (удаление из UI — только manual)
 	PrintSec        int64
 	TotalSec        int64
 	EstimatedSec    int64
@@ -113,6 +114,7 @@ type Job struct {
 type Order struct {
 	ID           int64
 	CustomerID   int64
+	Number       string // номер по шаблону (ordnum); пусто у старых — фолбэк #id
 	Currency     string
 	FxRate       float64
 	MarginProfit float64
