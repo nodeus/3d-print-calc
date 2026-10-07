@@ -18,9 +18,12 @@ const (
 )
 
 // Input — входные данные одного расчёта.
+//
+// Поля PurgeWasteG..RoundStep опциональны: нулевое значение сохраняет
+// поведение legacy-формулы (AGENTS.md, раздел 3).
 type Input struct {
 	TotalSec     float64 // общее время печати, сек
-	WeightG      float64 // вес изделия, г
+	WeightG      float64 // вес изделия, г (все копии на столе суммарно)
 	PricePerKg   float64 // цена материала за кг
 	Tariff       float64 // тариф электроэнергии за кВт·ч
 	PowerKW      float64 // мощность принтера, кВт
@@ -36,40 +39,71 @@ type Input struct {
 	MarginProfit float64 // наценка на прибыль, доля
 	MarginDev    float64 // наценка на развитие, доля
 	Fees         float64 // фиксированные допы
+
+	MaintPerHour float64 // ТО/износ оснастки, ₽/час (0 = не учитывать)
+	PurgeWasteG  float64 // purge-башня/брак/поддержки сверх веса, г (0 = нет)
+	Copies       int     // копий на столе; итоги — за стол, per-copy — делением (<=1 = одна)
+	VATRate      float64 // НДС, доля (0 = без НДС); применяется после округления
+	RoundStep    float64 // шаг округления цены: 1/5/10/50 (<=0 = без округления)
 }
 
 // Result — построчный результат расчёта.
 type Result struct {
-	MatCost  float64
-	ElecCost float64
-	Amort    float64
-	Labor    float64
-	Subtotal float64
-	FailAdj  float64
-	Cost     float64
-	Price    float64
+	MatCost   float64
+	PurgeCost float64
+	ElecCost  float64
+	Amort     float64
+	Maint     float64
+	Labor     float64
+	Subtotal  float64
+	FailAdj   float64
+	Cost      float64 // себестоимость стола
+	Price     float64 // цена стола до округления/НДС
+
+	PriceRounded float64 // цена стола после RoundStep
+	PriceVAT     float64 // финал стола с НДС
+	CostPerCopy  float64 // себестоимость одной копии
+	PricePerCopy float64 // финальная цена одной копии
 }
 
 // Calculate считает себестоимость и цену. Формулы — см. AGENTS.md раздел 3.
+//
+// Порядок: subtotal(+maint+purge) → fail → cost → price(+margins+fees) →
+// round(step) → VAT. Per-copy — делением финалов на Copies.
 func Calculate(in Input) Result {
 	hours := in.TotalSec / 3600
 	mat := in.PricePerKg / 1000 * in.WeightG
+	purge := in.PricePerKg / 1000 * in.PurgeWasteG
 	elec := in.Tariff * in.PowerKW * hours
 	amort := in.AmortPerHour * hours
+	maint := in.MaintPerHour * hours
 	labor := in.OpRate*in.PrepH + in.OpRate*in.PostH + in.DesignerRate*in.ModelH + in.ModelPrice
-	subtotal := mat + elec + amort + labor + in.ExtraMat
+	subtotal := mat + purge + elec + amort + maint + labor + in.ExtraMat
 	failAdj := subtotal * in.FailRate
 	cost := subtotal + failAdj
 	price := cost*(1+in.MarginProfit+in.MarginDev) + in.Fees
+	rounded := RoundStep(price, in.RoundStep)
+	withVAT := rounded * (1 + in.VATRate)
+
+	copies := in.Copies
+	if copies < 1 {
+		copies = 1
+	}
 	return Result{
-		MatCost:  mat,
-		ElecCost: elec,
-		Amort:    amort,
-		Labor:    labor,
-		Subtotal: subtotal,
-		FailAdj:  failAdj,
-		Cost:     cost,
-		Price:    price,
+		MatCost:      mat,
+		PurgeCost:    purge,
+		ElecCost:     elec,
+		Amort:        amort,
+		Maint:        maint,
+		Labor:        labor,
+		Subtotal:     subtotal,
+		FailAdj:      failAdj,
+		Cost:         cost,
+		Price:        price,
+		PriceRounded: rounded,
+		PriceVAT:     withVAT,
+		CostPerCopy:  cost / float64(copies),
+		PricePerCopy: withVAT / float64(copies),
 	}
 }
 
