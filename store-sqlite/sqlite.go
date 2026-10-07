@@ -183,7 +183,7 @@ func (r *materialsRepo) List() ([]models.Material, error) {
 		return nil, fmt.Errorf("ERR_MATERIAL_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Material
+	out := []models.Material{}
 	for rows.Next() {
 		var m models.Material
 		if err := rows.Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density, &m.Diameter, &m.Note); err != nil {
@@ -215,7 +215,7 @@ func (r *materialsRepo) ListSpools(materialID int64) ([]models.Spool, error) {
 		return nil, fmt.Errorf("ERR_SPOOL_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Spool
+	out := []models.Spool{}
 	for rows.Next() {
 		var s models.Spool
 		var archived int
@@ -255,7 +255,7 @@ func (r *printersRepo) List() ([]models.Printer, error) {
 		return nil, fmt.Errorf("ERR_PRINTER_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Printer
+	out := []models.Printer{}
 	for rows.Next() {
 		var p models.Printer
 		if err := rows.Scan(&p.ID, &p.Name, &p.Model, &p.PurchasePrice, &p.Currency,
@@ -343,7 +343,7 @@ func (r *jobsRepo) List(limit int) ([]models.Job, error) {
 		return nil, fmt.Errorf("ERR_JOB_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Job
+	out := []models.Job{}
 	for rows.Next() {
 		var j models.Job
 		var printerID, spoolID sql.NullInt64

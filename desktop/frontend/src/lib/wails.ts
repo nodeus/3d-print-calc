@@ -247,8 +247,18 @@ export interface Debt {
   status: string;
 }
 
+export interface PDFSection {
+  Title: string;
+  Headers: string[];
+  Rows: string[][];
+}
+
 declare global {
   interface Window {
+    runtime: {
+      EventsOn(event: string, callback: (data: never) => void): void;
+      EventsOff(event: string): void;
+    };
     go: {
       main: {
         App: {
@@ -310,6 +320,7 @@ declare global {
           DeleteCustomer(id: number): Promise<void>;
           DeleteUser(id: number): Promise<void>;
           AppVersion(): Promise<Record<string, string>>;
+          ExportPDF(title: string, sections: PDFSection[]): Promise<string>;
         };
       };
     }
@@ -381,4 +392,22 @@ export const wails = {
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),
+  exportPDF: (title: string, sections: PDFSection[]) => api().ExportPDF(title, sections),
+  onImportProgress: (cb: (done: number, total: number) => void): void => {
+    try {
+      window.runtime.EventsOn('import-progress', (d: unknown) => {
+        const m = d as { done: number; total: number };
+        cb(m.done, m.total);
+      });
+    } catch {
+      /* не под wails (dev) — прогресса нет */
+    }
+  },
+  offImportProgress: (): void => {
+    try {
+      window.runtime.EventsOff('import-progress');
+    } catch {
+      /* noop */
+    }
+  },
 };

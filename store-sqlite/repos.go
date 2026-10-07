@@ -58,7 +58,7 @@ func (r *usersRepo) List() ([]models.User, error) {
 		return nil, fmt.Errorf("ERR_USER_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.User
+	out := []models.User{}
 	for rows.Next() {
 		var u models.User
 		var role string
@@ -132,7 +132,7 @@ func (r *customersRepo) List() ([]models.Customer, error) {
 		return nil, fmt.Errorf("ERR_CUSTOMER_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Customer
+	out := []models.Customer{}
 	for rows.Next() {
 		var c models.Customer
 		if err := rows.Scan(&c.ID, &c.Name, &c.Contact, &c.Currency, &c.Note); err != nil {
@@ -210,7 +210,7 @@ func (r *ordersRepo) List() ([]models.Order, error) {
 		return nil, fmt.Errorf("ERR_ORDER_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Order
+	out := []models.Order{}
 	for rows.Next() {
 		var o models.Order
 		var custID sql.NullInt64
@@ -293,7 +293,7 @@ func (r *ordersRepo) Items(orderID int64) ([]models.OrderItem, error) {
 		return nil, fmt.Errorf("ERR_ORDER_ITEM: %w", err)
 	}
 	defer rows.Close()
-	var out []models.OrderItem
+	out := []models.OrderItem{}
 	for rows.Next() {
 		var it models.OrderItem
 		var jobID sql.NullInt64
@@ -328,7 +328,7 @@ func (r *ordersRepo) Payments(orderID int64) ([]models.Payment, error) {
 		return nil, fmt.Errorf("ERR_PAYMENT: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Payment
+	out := []models.Payment{}
 	for rows.Next() {
 		var p models.Payment
 		if err := rows.Scan(&p.ID, &p.OrderID, &p.Amount, &p.PaidAt, &p.Note); err != nil {

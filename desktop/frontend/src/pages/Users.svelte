@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { wails, type UserDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
+  import { downloadPDF } from '../lib/pdf';
 
   let list: UserDTO[] = $state([]);
   let login = $state('');
@@ -11,7 +12,7 @@
 
   async function load() {
     try {
-      list = await wails.listUsers();
+      list = (await wails.listUsers()) ?? [];
     } catch (e) {
       error = String(e);
     }
@@ -49,6 +50,16 @@
       error = String(e);
     }
   }
+
+  async function toPDF() {
+    await downloadPDF($t('nav.users'), [
+      {
+        Title: '',
+        Headers: [$t('auth.login'), $t('users.role')],
+        Rows: list.map((u) => [u.login, u.role]),
+      },
+    ]);
+  }
 </script>
 
 <div class="row">
@@ -62,6 +73,7 @@
   <button onclick={create}>{$t('users.add')}</button>
 </div>
 {#if error}<p class="err">{error}</p>{/if}
+<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 <table>
   <thead><tr><th>{$t('auth.login')}</th><th>{$t('users.role')}</th><th class="no-print"></th></tr></thead>
   <tbody>

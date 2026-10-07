@@ -3,6 +3,7 @@
   import { wails, type PrinterDTO, type Printer, type ImportReport } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { downloadPDF } from '../lib/pdf';
   import { money, num } from '../lib/format';
 
   let printers: PrinterDTO[] = $state([]);
@@ -16,6 +17,8 @@
   let status: Record<number, string> = $state({});
   let report: ImportReport | null = $state(null);
   let applied: ImportReport | null = $state(null);
+  let importing = $state(false);
+  let progress = $state({ done: 0, total: 0 });
 
   function blank(): Printer {
     return {
@@ -28,7 +31,7 @@
 
   async function load() {
     try {
-      printers = await wails.printers();
+      printers = (await wails.printers()) ?? [];
       for (const p of printers) urls[p.ID] = p.MoonrakerURL ?? '';
     } catch (e) {
       error = String(e);
@@ -114,14 +117,34 @@
 
   async function apply() {
     error = '';
+    importing = true;
+    progress = { done: 0, total: 0 };
+    wails.onImportProgress((done, total) => {
+      progress = { done, total };
+    });
     try {
       applied = await wails.moonrakerApply();
       report = null;
     } catch (e) {
       error = String(e);
+    } finally {
+      importing = false;
+      wails.offImportProgress();
     }
   }
+
+  async function toPDF() {
+    await downloadPDF($t('nav.printers'), [
+      {
+        Title: '',
+        Headers: [$t('printer.name'), $t('printer.model'), $t('printer.price'), $t('printer.amort'), $t('printer.method')],
+        Rows: printers.map((p) => [p.Name, p.Model, money(p.PurchasePrice / 100, p.Currency, 'ru'), num(p.amortPerHour), p.AmortMethod]),
+      },
+    ]);
+  }
 </script>
+
+<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 
 {#if canWrite($user) && !editId && !isNew}
   <div class="row no-print"><button onclick={startAdd}>{$t('printer.add')}</button></div>
@@ -186,7 +209,8 @@
   </div>
 {/each}
 {#if report}<p>{$t('set.csv_preview')}: total {report.total}, new {report.new}, existing {report.existing}</p>{/if}
-{#if report?.dryRun && canWrite($user)}<button class="warn no-print" onclick={apply}>{$t('set.csv_apply')}</button>{/if}
+{#if report?.dryRun && canWrite($user)}<button class="warn no-print" onclick={apply} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
+{#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
 {#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs})</p>{/if}
 
 <style>

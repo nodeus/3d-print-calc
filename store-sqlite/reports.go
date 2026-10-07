@@ -24,7 +24,7 @@ func (d *DB) RevenueByMonth() ([]MonthRevenue, error) {
 		return nil, fmt.Errorf("ERR_REPORT: %w", err)
 	}
 	defer rows.Close()
-	var out []MonthRevenue
+	out := []MonthRevenue{}
 	for rows.Next() {
 		var r MonthRevenue
 		if err := rows.Scan(&r.Month, &r.Total, &r.Orders); err != nil {
@@ -55,7 +55,7 @@ func (d *DB) TopMaterials(limit int) ([]MaterialStat, error) {
 		return nil, fmt.Errorf("ERR_REPORT: %w", err)
 	}
 	defer rows.Close()
-	var out []MaterialStat
+	out := []MaterialStat{}
 	for rows.Next() {
 		var s MaterialStat
 		if err := rows.Scan(&s.Code, &s.Jobs, &s.Weight, &s.Cost); err != nil {
@@ -82,7 +82,7 @@ func (d *DB) PrinterLoad() ([]PrinterStat, error) {
 		return nil, fmt.Errorf("ERR_REPORT: %w", err)
 	}
 	defer rows.Close()
-	var out []PrinterStat
+	out := []PrinterStat{}
 	for rows.Next() {
 		var s PrinterStat
 		if err := rows.Scan(&s.Name, &s.Jobs, &s.TotalSec); err != nil {
@@ -113,7 +113,7 @@ func (d *DB) Debts() ([]Debt, error) {
 		return nil, fmt.Errorf("ERR_REPORT: %w", err)
 	}
 	defer rows.Close()
-	var out []Debt
+	out := []Debt{}
 	for rows.Next() {
 		var x Debt
 		if err := rows.Scan(&x.OrderID, &x.Customer, &x.Total, &x.Paid, &x.Status); err != nil {

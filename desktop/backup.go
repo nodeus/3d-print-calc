@@ -7,6 +7,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"3dprint-calc/core/export"
 	"3dprint-calc/core/models"
 	sqlite "3dprint-calc/store-sqlite"
 )
@@ -138,13 +139,44 @@ func (a *App) PreviewHistoryCSV() (sqlite.ImportReport, error) {
 	if err != nil {
 		return rep, err
 	}
-	rep, err = a.db.ImportHistory(bytes.NewReader(data), true)
+	rep, err = a.db.ImportHistory(bytes.NewReader(data), true, nil)
 	if err != nil {
 		return rep, err
 	}
 	a.pendingFile = data
 	a.pendingPath = path
 	return rep, nil
+}
+
+// emitProgress шлёт прогресс импорта во фронт (событие import-progress).
+// Без wails-контекста (тесты) — молча пропускает: runtime.EventsEmit
+// с чужим контекстом роняет процесс.
+func (a *App) emitProgress(done, total int) {
+	if !a.eventsOn {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "import-progress", map[string]any{"done": done, "total": total})
+}
+
+// ExportPDF строит A4-отчёт из секций (заголовки+строки уже отформатированы
+// фронтом) и сохраняет через диалог. Футер каждой страницы — nodeus.ru.
+func (a *App) ExportPDF(title string, sections []export.Section) (string, error) {
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		DefaultFilename: "report.pdf",
+		Title:           title,
+		Filters:         []runtime.FileFilter{{DisplayName: "PDF (*.pdf)", Pattern: "*.pdf"}},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	data, err := export.BuildPDF(title, sections)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // ApplyHistoryCSV применяет запомненный PreviewHistoryCSV импорт (manager+).
@@ -156,7 +188,7 @@ func (a *App) ApplyHistoryCSV() (sqlite.ImportReport, error) {
 	if len(a.pendingFile) == 0 {
 		return rep, errNoPending()
 	}
-	rep, err := a.db.ImportHistory(bytes.NewReader(a.pendingFile), false)
+	rep, err := a.db.ImportHistory(bytes.NewReader(a.pendingFile), false, a.emitProgress)
 	if err != nil {
 		return rep, err
 	}
