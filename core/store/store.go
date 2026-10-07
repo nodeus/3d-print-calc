@@ -15,7 +15,7 @@ type Materials interface {
 	Delete(id int64) error          // блок, если есть катушки
 	AddSpool(s models.Spool) (int64, error)
 	ListSpools(materialID int64) ([]models.Spool, error)
-	UpdateSpool(s models.Spool) error // цена/валюта/остаток партии
+	UpdateSpool(s models.Spool) error                                     // цена/валюта/остаток партии
 	SetMaterialPrice(materialID, priceMinor int64, currency string) error // цена первой катушки (создаст при отсутствии)
 }
 
