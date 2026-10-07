@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { wails, type BackupManifest, type ImportReport } from '../lib/wails';
   import { t, locale, switchLocale } from '../lib/i18n';
+  import { user, isAdmin } from '../lib/session';
+  import Users from './Users.svelte';
 
   let currency = $state('RUB');
   const codes = ['RUB', 'USD', 'EUR', 'KZT', 'BYN'];
@@ -82,8 +84,16 @@
 
 {#if error}<p class="err">{error}</p>{/if}
 
+{#if isAdmin($user)}
+  <div class="card wide">
+    <h3>{$t('nav.users')}</h3>
+    <Users />
+  </div>
+{/if}
+
 <style>
   .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; max-width: 560px; margin-bottom: 12px; }
+  .card.wide { max-width: none; }
   h3 { margin: 0 0 8px; font-size: 15px; }
   label { display: flex; flex-direction: column; margin-bottom: 8px; font-size: 13px; }
   select { padding: 6px; font-size: 14px; }

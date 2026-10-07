@@ -47,10 +47,55 @@ export interface MaterialDTO {
   id: number;
   code: string;
   type: string;
+  vendor: string;
+  colorHex: string;
+  note: string;
   density: number;
   diameter: number;
   pricePerKg: number;
   currency: string;
+  spoolId: number;
+  spoolLeftG: number;
+}
+
+export interface Spool {
+  ID: number;
+  MaterialID: number;
+  Price: number;
+  Currency: string;
+  FxRate: number;
+  BoughtAt: string;
+  WeightInitG: number;
+  WeightLeftG: number;
+  Archived: boolean;
+}
+
+export interface Material {
+  ID: number;
+  Code: string;
+  Type: string;
+  Vendor: string;
+  ColorHex: string;
+  Density: number;
+  Diameter: number;
+  Note: string;
+}
+
+export interface Printer {
+  ID: number;
+  Name: string;
+  Model: string;
+  PurchasePrice: number;
+  Currency: string;
+  CommissioningDate: string;
+  LifeYears: number;
+  HoursPerDay: number;
+  CalendarMode: string;
+  AmortMethod: string;
+  PowerKW: number;
+  MaintPerHour: number;
+  ResourceHours: number;
+  MoonrakerURL: string;
 }
 
 export interface PrinterDTO {
@@ -75,13 +120,18 @@ export interface JobDTO {
   ID: number;
   Filename: string;
   StartAt: string;
+  EndAt: string;
   PrinterID: number;
   SpoolID: number;
   Status: string;
   PrintSec: number;
   TotalSec: number;
+  EstimatedSec: number;
+  SizeBytes: number;
+  FilamentTotalMm: number;
   WeightG: number;
   LengthM: number;
+  Slicer: string;
   CostSnapshot: string;
 }
 
@@ -240,6 +290,16 @@ declare global {
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
           MoonrakerApply(): Promise<ImportReport>;
+          AddMaterial(code: string, matType: string, density: number, pricePerKg: number): Promise<number>;
+          UpdateMaterial(m: Material): Promise<void>;
+          DeleteMaterial(id: number): Promise<void>;
+          UpdateSpool(s: Spool): Promise<void>;
+          AddPrinter(p: Printer): Promise<number>;
+          UpdatePrinter(p: Printer): Promise<void>;
+          DeletePrinter(id: number): Promise<void>;
+          DeleteCustomer(id: number): Promise<void>;
+          DeleteUser(id: number): Promise<void>;
+          AppVersion(): Promise<Record<string, string>>;
         };
       };
     }
@@ -291,4 +351,15 @@ export const wails = {
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
   moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
   moonrakerApply: () => api().MoonrakerApply(),
+  addMaterial: (code: string, matType: string, density: number, pricePerKg: number) =>
+    api().AddMaterial(code, matType, density, pricePerKg),
+  updateMaterial: (m: Material) => api().UpdateMaterial(m),
+  deleteMaterial: (id: number) => api().DeleteMaterial(id),
+  updateSpool: (s: Spool) => api().UpdateSpool(s),
+  addPrinter: (p: Printer) => api().AddPrinter(p),
+  updatePrinter: (p: Printer) => api().UpdatePrinter(p),
+  deletePrinter: (id: number) => api().DeletePrinter(id),
+  deleteCustomer: (id: number) => api().DeleteCustomer(id),
+  deleteUser: (id: number) => api().DeleteUser(id),
+  appVersion: () => api().AppVersion(),
 };

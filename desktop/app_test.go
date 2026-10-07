@@ -140,3 +140,37 @@ func TestRoles(t *testing.T) {
 		t.Fatalf("Login новым паролем: %v", err)
 	}
 }
+
+// TestRolesDeleteGuards: нельзя удалить себя и последнего админа.
+func TestRolesDeleteGuards(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{db: db, dbPath: path}
+	me, err := app.Login("admin", "admin123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.DeleteUser(me.ID); err == nil {
+		t.Fatal("самоудаление обязано блокироваться")
+	}
+	// Второй админ — удаление первого разрешено.
+	other, err := app.CreateUser("admin2", "pass1234", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.Logout()
+	if _, err := app.Login("admin2", "pass1234"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.DeleteUser(me.ID); err != nil {
+		t.Fatalf("DeleteUser: %v", err)
+	}
+	// Теперь admin2 — последний админ: самоудаление всё равно запрещено (себя).
+	if err := app.DeleteUser(other); err == nil {
+		t.Fatal("самоудаление последнего админа обязано блокироваться")
+	}
+}

@@ -38,6 +38,17 @@
       error = String(e);
     }
   }
+
+  async function remove(u: UserDTO) {
+    error = '';
+    if (!confirm(`${u.login}?`)) return;
+    try {
+      await wails.deleteUser(u.id);
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
 </script>
 
 <div class="row">
@@ -52,7 +63,7 @@
 </div>
 {#if error}<p class="err">{error}</p>{/if}
 <table>
-  <thead><tr><th>{$t('auth.login')}</th><th>{$t('users.role')}</th></tr></thead>
+  <thead><tr><th>{$t('auth.login')}</th><th>{$t('users.role')}</th><th class="no-print"></th></tr></thead>
   <tbody>
     {#each list as u}
       <tr>
@@ -64,6 +75,7 @@
             <option value="viewer">viewer</option>
           </select>
         </td>
+        <td class="no-print"><button onclick={() => remove(u)}>✕</button></td>
       </tr>
     {/each}
   </tbody>

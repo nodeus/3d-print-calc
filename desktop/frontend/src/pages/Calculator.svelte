@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order } from '../lib/wails';
+  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order, type JobDTO } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
   import { money } from '../lib/format';
+  import { prefillJob } from '../lib/prefill';
+  import { get } from 'svelte/store';
 
   let materials: MaterialDTO[] = $state([]);
   let printers: PrinterDTO[] = $state([]);
@@ -45,6 +47,39 @@
   let result: CalcResult | null = $state(null);
   let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
   let density = $derived(materials.find((m) => m.code === matCode)?.density ?? 1.27);
+  let historyJobs: JobDTO[] = $state([]);
+  let historyId = $state(0);
+  let stubWarn = $state('');
+
+  function snapMaterial(j: JobDTO): string {
+    try {
+      return JSON.parse(j.CostSnapshot)?.material ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  // Применить работу из истории: материал (если есть в справочнике), вес, время, имя.
+  function applyJob(j: JobDTO) {
+    const code = snapMaterial(j);
+    stubWarn = '';
+    if (code && materials.some((m) => m.code === code)) {
+      matCode = code;
+    } else if (code) {
+      stubWarn = `${code}: ${$t('calc.stub_warn')}`;
+    }
+    weightG = Math.round(j.WeightG * 100) / 100;
+    filamentMM = null;
+    timeH = Math.floor(j.TotalSec / 3600);
+    timeM = Math.round((j.TotalSec % 3600) / 60);
+    filename = j.Filename;
+    recalc();
+  }
+
+  function applyHistorySelect(id: number) {
+    const j = historyJobs.find((x) => x.ID === id);
+    if (j) applyJob(j);
+  }
 
   onMount(async () => {
     try {
@@ -53,9 +88,17 @@
       currency = await wails.getBaseCurrency();
       orders = (await wails.listOrders()).filter((o) => ['draft', 'quoted', 'in_work'].includes(o.Status));
       if (orders.length) orderId = orders[0].ID;
+      historyJobs = await wails.jobs(0);
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
       if (printers.length) selectPrinter(printers[0].ID);
-      await recalc();
+      // Переход из истории: применить один раз и очистить.
+      const pre = get(prefillJob);
+      if (pre) {
+        prefillJob.set(null);
+        applyJob(pre);
+      } else {
+        await recalc();
+      }
     } catch (e) {
       console.error(e);
     }
@@ -173,6 +216,15 @@
 <div class="grid">
   <section class="card">
     <div class="row">
+      <label>{$t('calc.job')}
+        <select value={historyId} onchange={(e) => applyHistorySelect(Number(e.currentTarget.value))}>
+          <option value={0}>—</option>
+          {#each historyJobs as j}<option value={j.ID}>{j.Filename} ({j.StartAt})</option>{/each}
+        </select>
+      </label>
+    </div>
+    {#if stubWarn}<p class="warn">{stubWarn}</p>{/if}
+    <div class="row">
       <label>{$t('calc.material')}
         <select bind:value={matCode} onchange={recalc}>
           {#each materials as m}<option value={m.code}>{m.code} — {m.pricePerKg}/кг</option>{/each}
@@ -278,5 +330,6 @@
   .final { font-size: 18px; border-top: 2px solid #333; margin-top: 4px; padding-top: 8px; }
   .percopy { color: #666; font-size: 13px; }
   .ok { color: green; }
+  .warn { color: #b60; }
   button { padding: 8px 14px; align-self: end; }
 </style>

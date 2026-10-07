@@ -93,3 +93,23 @@ func TestConnRefused(t *testing.T) {
 		t.Fatal("отказ соединения обязан вернуть ошибку")
 	}
 }
+
+func TestNormalizeBase(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"192.168.0.109:7125", "http://192.168.0.109:7125"}, // кейс пользователя
+		{"192.168.0.109:7125/", "http://192.168.0.109:7125"},
+		{"  192.168.0.109:7125  ", "http://192.168.0.109:7125"},
+		{"http://192.168.0.109:7125", "http://192.168.0.109:7125"},
+		{"http://192.168.0.109:7125/", "http://192.168.0.109:7125"},
+		{"https://printer.local", "https://printer.local"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := NormalizeBase(c.in); got != c.want {
+			t.Errorf("NormalizeBase(%q) = %q, хочу %q", c.in, got, c.want)
+		}
+		if got := New(c.in).base; c.want != "" && got != c.want {
+			t.Errorf("New(%q).base = %q, хочу %q", c.in, got, c.want)
+		}
+	}
+}

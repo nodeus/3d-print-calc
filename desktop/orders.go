@@ -25,6 +25,14 @@ func (a *App) SaveCustomer(c models.Customer) (int64, error) {
 	return a.db.Customers().Save(c)
 }
 
+// DeleteCustomer — удалить заказчика (manager+). Блок при заказах — в store.
+func (a *App) DeleteCustomer(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Customers().Delete(id)
+}
+
 // OrderDetail — заказ с позициями, оплатами и балансом.
 type OrderDetail struct {
 	Order    models.Order       `json:"order"`

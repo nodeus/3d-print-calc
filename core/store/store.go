@@ -11,14 +11,19 @@ type Materials interface {
 	UpsertByCode(m models.Material) (int64, error)
 	GetByCode(code string) (models.Material, error)
 	List() ([]models.Material, error)
+	Update(m models.Material) error // всё кроме кода (код — ключ и сидит в снапшотах)
+	Delete(id int64) error          // блок, если есть катушки
 	AddSpool(s models.Spool) (int64, error)
 	ListSpools(materialID int64) ([]models.Spool, error)
+	UpdateSpool(s models.Spool) error // цена/валюта/остаток партии
 }
 
 // Printers — парк принтеров.
 type Printers interface {
 	Save(p models.Printer) (int64, error)
 	List() ([]models.Printer, error)
+	Update(p models.Printer) error // все поля по id
+	Delete(id int64) error         // блок, если есть работы
 	SetMoonrakerURL(id int64, url string) error
 }
 
@@ -35,13 +40,15 @@ type Users interface {
 	List() ([]models.User, error)
 	SetRole(id int64, role models.Role) error
 	SetPassword(id int64, phc string) error
+	Delete(id int64) error // guards (не себя/не последнего админа) — в App
 	Count() (int, error)
 }
 
 // Customers — заказчики.
 type Customers interface {
-	Save(c models.Customer) (int64, error) // insert; обновление — через Save с ID? v1: только insert+list
+	Save(c models.Customer) (int64, error) // insert (ID=0) или update
 	List() ([]models.Customer, error)
+	Delete(id int64) error // блок, если есть заказы
 }
 
 // Orders — заказы, позиции, оплаты.
