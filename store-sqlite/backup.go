@@ -258,7 +258,8 @@ type ImportReport struct {
 }
 
 // ImportHistory импортирует CSV принтера. dryRun=true — только отчёт без записи.
-func (d *DB) ImportHistory(r io.Reader, dryRun bool) (ImportReport, error) {
+// onProgress — прогресс применения (nil — молча).
+func (d *DB) ImportHistory(r io.Reader, dryRun bool, onProgress seed.ProgressFunc) (ImportReport, error) {
 	var rep ImportReport
 	rep.DryRun = dryRun
 	rows, err := importers.ParseHistory(r)
@@ -281,7 +282,7 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool) (ImportReport, error) {
 	if len(printers) == 0 {
 		return rep, fmt.Errorf("ERR_IMPORT: нет принтеров — создайте принтер перед импортом")
 	}
-	st, err := seed.ImportRows(d, printers[0].ID, rows, "import")
+	st, err := seed.ImportRows(d, printers[0].ID, rows, "import", onProgress)
 	if err != nil {
 		return rep, err
 	}

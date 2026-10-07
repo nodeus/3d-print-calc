@@ -12,6 +12,8 @@
   let backupManifest: BackupManifest | null = $state(null);
   let csvReport: ImportReport | null = $state(null);
   let csvApplied: ImportReport | null = $state(null);
+  let importing = $state(false);
+  let progress = $state({ done: 0, total: 0 });
   let error = $state('');
   // Нумерация заказов
   let numTemplate = $state('');
@@ -74,6 +76,23 @@
       console.error(e);
     }
   }
+
+  async function applyCSV() {
+    error = '';
+    importing = true;
+    progress = { done: 0, total: 0 };
+    wails.onImportProgress((done, total) => {
+      progress = { done, total };
+    });
+    try {
+      csvApplied = await wails.applyHistoryCSV();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      importing = false;
+      wails.offImportProgress();
+    }
+  }
 </script>
 
 <div class="card">
@@ -110,8 +129,9 @@
     <button onclick={() => run(wails.exportJobsCSV, (p) => (backupPath = p))}>{$t('set.csv_jobs_out')}</button>
     <button onclick={() => run(wails.exportMaterialsCSV, (p) => (backupPath = p))}>{$t('set.csv_mats_out')}</button>
     <button onclick={() => run(wails.previewHistoryCSV, (r) => (csvReport = r))}>{$t('set.csv_in')}</button>
-    {#if csvReport?.dryRun}<button class="warn" onclick={() => run(wails.applyHistoryCSV, (r) => (csvApplied = r))}>{$t('set.csv_apply')}</button>{/if}
+    {#if csvReport?.dryRun}<button class="warn" onclick={applyCSV} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
   </div>
+  {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
   {#if csvReport}<p>{$t('set.csv_preview')}: total {csvReport.total}, new {csvReport.new}, existing {csvReport.existing}</p>{/if}
   {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs})</p>{/if}
 </div>

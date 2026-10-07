@@ -16,6 +16,8 @@
   let status: Record<number, string> = $state({});
   let report: ImportReport | null = $state(null);
   let applied: ImportReport | null = $state(null);
+  let importing = $state(false);
+  let progress = $state({ done: 0, total: 0 });
 
   function blank(): Printer {
     return {
@@ -114,11 +116,19 @@
 
   async function apply() {
     error = '';
+    importing = true;
+    progress = { done: 0, total: 0 };
+    wails.onImportProgress((done, total) => {
+      progress = { done, total };
+    });
     try {
       applied = await wails.moonrakerApply();
       report = null;
     } catch (e) {
       error = String(e);
+    } finally {
+      importing = false;
+      wails.offImportProgress();
     }
   }
 </script>
@@ -186,7 +196,8 @@
   </div>
 {/each}
 {#if report}<p>{$t('set.csv_preview')}: total {report.total}, new {report.new}, existing {report.existing}</p>{/if}
-{#if report?.dryRun && canWrite($user)}<button class="warn no-print" onclick={apply}>{$t('set.csv_apply')}</button>{/if}
+{#if report?.dryRun && canWrite($user)}<button class="warn no-print" onclick={apply} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
+{#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
 {#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs})</p>{/if}
 
 <style>

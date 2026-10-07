@@ -249,6 +249,10 @@ export interface Debt {
 
 declare global {
   interface Window {
+    runtime: {
+      EventsOn(event: string, callback: (data: never) => void): void;
+      EventsOff(event: string): void;
+    };
     go: {
       main: {
         App: {
@@ -381,4 +385,21 @@ export const wails = {
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),
+  onImportProgress: (cb: (done: number, total: number) => void): void => {
+    try {
+      window.runtime.EventsOn('import-progress', (d: unknown) => {
+        const m = d as { done: number; total: number };
+        cb(m.done, m.total);
+      });
+    } catch {
+      /* не под wails (dev) — прогресса нет */
+    }
+  },
+  offImportProgress: (): void => {
+    try {
+      window.runtime.EventsOff('import-progress');
+    } catch {
+      /* noop */
+    }
+  },
 };

@@ -101,7 +101,7 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
-	imp, err := ImportRows(db, printerID, rows, "import")
+	imp, err := ImportRows(db, printerID, rows, "import", nil)
 	if err != nil {
 		return st, err
 	}
@@ -110,10 +110,14 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	return st, nil
 }
 
+// ProgressFunc сообщает ход импорта: done из total. Вызывается каждые
+// 25 строк и в конце (done == total). nil — без отчётов.
+type ProgressFunc func(done, total int)
+
 // ImportRows импортирует разобранные строки истории (upsert по filename+start_at).
 // Справочник подтягивается из БД: неизвестные коды → стабы. Возвращает статистику.
 // origin — происхождение работ: import (CSV/сид) или moonraker.
-func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string) (Stats, error) {
+func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string, onProgress ProgressFunc) (Stats, error) {
 	if origin == "" {
 		origin = "import"
 	}
@@ -135,7 +139,7 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 	}
 	amortHour := calc.AmortCalendarHour(47454, 1096, 8) // СПИ 3 года календарных
 	jobs := db.Jobs()
-	for _, r := range rows {
+	for i, r := range rows {
 		code := importers.ParseMaterial(r.Filename)
 		m, ok := matIDs[code]
 		if !ok && code != "" {
@@ -175,6 +179,9 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 			CostSnapshot: string(snap),
 		}); err != nil {
 			return st, err
+		}
+		if onProgress != nil && ((i+1)%25 == 0 || i+1 == len(rows)) {
+			onProgress(i+1, len(rows))
 		}
 	}
 	st.Jobs = len(rows)

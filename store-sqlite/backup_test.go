@@ -11,6 +11,24 @@ import (
 	"3dprint-calc/store-sqlite/seed"
 )
 
+// progressCounter возвращает ProgressFunc, считающий вызовы: done растёт,
+// финал равен total. Используется в импортных тестах.
+func progressCounter(t *testing.T, wantTotal int) (seed.ProgressFunc, *int) {
+	t.Helper()
+	calls := 0
+	last := -1
+	return func(done, total int) {
+		calls++
+		if total != wantTotal {
+			t.Errorf("progress total = %d, хочу %d", total, wantTotal)
+		}
+		if done <= last {
+			t.Errorf("progress не монотонен: %d после %d", done, last)
+		}
+		last = done
+	}, &calls
+}
+
 func seedTestDB(t *testing.T, dir string) *DB {
 	t.Helper()
 	db, err := Open(filepath.Join(dir, "src.db"))
@@ -119,7 +137,7 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 	if err := db2.Migrate("../migrations"); err != nil {
 		t.Fatal(err)
 	}
-	rep, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true)
+	rep, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true, nil)
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}
@@ -130,22 +148,26 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 		t.Fatalf("dry-run обязан ничего не писать: %v", n)
 	}
 	// Apply без принтера — ошибка с понятным кодом.
-	if _, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false); err == nil {
+	if _, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false, nil); err == nil {
 		t.Fatal("apply без принтера обязан вернуть ошибку")
 	}
 	// Apply с принтером.
 	if _, err := db2.Printers().Save(models.Printer{Name: "K1C", HoursPerDay: 8, LifeYears: 3, CalendarMode: "calendar", AmortMethod: "calendar"}); err != nil {
 		t.Fatal(err)
 	}
-	rep2, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false)
+	prog, calls := progressCounter(t, 490)
+	rep2, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false, prog)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if rep2.New != 490 {
 		t.Fatalf("apply report = %+v", rep2)
 	}
+	if *calls == 0 {
+		t.Fatal("progress ни разу не вызван")
+	}
 	// Повторный импорт тех же данных: всё существующее, дублей нет.
-	rep3, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true)
+	rep3, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true, nil)
 	if err != nil {
 		t.Fatalf("reimport: %v", err)
 	}
