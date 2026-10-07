@@ -37,6 +37,10 @@
   <p>{$t('info.moon_text')}</p>
   <h3>{$t('info.admin')}</h3>
   <p>{$t('info.admin_text')}</p>
+  <h3>{$t('info.backup')}</h3>
+  <p>{$t('info.backup_text')}</p>
+  <h3>{$t('info.import')}</h3>
+  <p>{$t('info.import_text')}</p>
 </div>
 
 <div class="card">

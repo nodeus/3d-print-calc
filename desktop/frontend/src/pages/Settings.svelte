@@ -70,6 +70,24 @@
     }
   }
 
+  // Свой пароль.
+  let oldPw = $state('');
+  let newPw = $state('');
+  let pwMsg = $state('');
+
+  async function changePw() {
+    error = '';
+    pwMsg = '';
+    try {
+      await wails.changeMyPassword(oldPw, newPw);
+      oldPw = '';
+      newPw = '';
+      pwMsg = $t('set.pw_done');
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   function colLabel(key: string): string {
     const map: Record<string, string> = {
       filename: $t('hist.filename'),
@@ -178,6 +196,14 @@
 </div>
 
 {#if error}<p class="err">{error}</p>{/if}
+
+<div class="card">
+  <h3>{$t('set.pw')}</h3>
+  <label>{$t('auth.password')} ({$t('set.pw_old')})<input type="password" bind:value={oldPw} /></label>
+  <label>{$t('set.pw_new')}<input type="password" bind:value={newPw} /></label>
+  <div class="row"><button onclick={changePw}>{$t('common.save')}</button></div>
+  {#if pwMsg}<p class="ok">{pwMsg}</p>{/if}
+</div>
 
 <div class="card">
   <h3>{$t('set.columns')}</h3>

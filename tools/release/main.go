@@ -6,11 +6,12 @@
 //
 // Версия — из desktop/version.go (const Version), дата — сегодня или -date.
 // Сборка — через wails (обязан быть на PATH), ldflags прошивает BuildDate.
+// Windows-exe пакуются UPX (utils/upx.exe, флаг -upx=false отключает).
 //
 // Запуск из корня репо:
 //
 //	go run ./tools/release -platforms windows/amd64
-//	go run ./tools/release -platforms windows/amd64,linux/amd64 -version 0.2.0 -date 2026-10-08
+//	go run ./tools/release -platforms windows/amd64,linux/amd64 -version 1.0.0 -date 2026-10-08 -upx=false
 package main
 
 import (
@@ -33,14 +34,15 @@ func main() {
 	version := flag.String("version", "", "версия (по умолчанию — Version из desktop/version.go)")
 	date := flag.String("date", "", "дата сборки ГГГГ-ММ-ДД (по умолчанию — сегодня)")
 	out := flag.String("out", "release", "корень релизных папок")
+	upx := flag.Bool("upx", true, "паковать exe через UPX (utils/upx.exe)")
 	flag.Parse()
-	if err := run(*platforms, *version, *date, *out); err != nil {
+	if err := run(*platforms, *version, *date, *out, *upx); err != nil {
 		fmt.Fprintln(os.Stderr, "release:", err)
 		os.Exit(1)
 	}
 }
 
-func run(platforms, version, date, out string) error {
+func run(platforms, version, date, out string, upx bool) error {
 	if version == "" {
 		var err error
 		version, err = readVersion("desktop/version.go")
@@ -60,7 +62,7 @@ func run(platforms, version, date, out string) error {
 		if p == "" {
 			continue
 		}
-		if err := buildOne(p, version, date, root); err != nil {
+		if err := buildOne(p, version, date, root, upx); err != nil {
 			return err
 		}
 	}
@@ -80,7 +82,7 @@ func readVersion(path string) (string, error) {
 	return string(m[1]), nil
 }
 
-func buildOne(platform, version, date, root string) error {
+func buildOne(platform, version, date, root string, upx bool) error {
 	dir := filepath.Join(root, version, date, platform)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -111,6 +113,11 @@ func buildOne(platform, version, date, root string) error {
 		dst := filepath.Join(dir, name)
 		if err := copyFile(exe, dst); err != nil {
 			return err
+		}
+		if upx && strings.HasSuffix(strings.ToLower(name), ".exe") {
+			if err := packUPX(dst); err != nil {
+				return err
+			}
 		}
 		sum, err := sha256File(dst)
 		if err != nil {
@@ -148,6 +155,38 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// packUPX сжимает exe через utils/upx.exe (лежит в корне репо, в git не идёт).
+// UPX может давать ложные срабатывания антивирусов и чуть более медленный
+// холодный старт — см. docs/release.md.
+func packUPX(path string) error {
+	upx := filepath.Join("utils", "upx.exe")
+	if _, err := os.Stat(upx); err != nil {
+		return fmt.Errorf("UPX не найден (%s) — соберите с -upx=false: %w", upx, err)
+	}
+	before, _ := fileSize(path)
+	cmd := exec.Command(upx, "--lzma", path)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("upx: %w", err)
+	}
+	after, _ := fileSize(path)
+	fmt.Printf("   upx: %s -> %s\n", humanSize(before), humanSize(after))
+	return nil
+}
+
+func fileSize(path string) (int64, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return st.Size(), nil
+}
+
+func humanSize(n int64) string {
+	return fmt.Sprintf("%.1f МБ", float64(n)/1048576)
 }
 
 func sha256File(path string) (string, error) {
