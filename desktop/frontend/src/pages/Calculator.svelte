@@ -46,7 +46,7 @@
   let orderQty = $state(1);
   let orderMsg = $state(false);
 
-  let result: CalcResult | null = $state(null);
+  let result = $state<CalcResult | null>(null);
   let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
   let density = $derived(materials.find((m) => m.code === matCode)?.density ?? 1.27);
   let historyJobs: JobDTO[] = $state([]);
@@ -216,7 +216,7 @@
     }
   }
 
-  const rows = $derived(
+  const rows: [string, number][] = $derived(
     result
       ? [
           ['calc.row_mat', result.MatCost],

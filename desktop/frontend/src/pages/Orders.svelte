@@ -48,16 +48,15 @@
     }
   }
 
-  onMount(async () => {
-    await load();
+  onMount(() => {
+    load();
     // Переход из долгов: открыть заказ.
-    const unsub = openOrderId.subscribe((id) => {
+    return openOrderId.subscribe((id) => {
       if (id) {
         openOrderId.set(null);
         openDetail(id);
       }
     });
-    return unsub;
   });
 
   function custName(id: number): string {
