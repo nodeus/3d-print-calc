@@ -1,7 +1,7 @@
 // Desktop — Wails v2: тонкие Go-биндинги поверх core/ + store-sqlite.
 //
 // Логики расчёта здесь нет — только вызовы core/calc и репозиториев.
-// БД: app.db рядом с exe (или APP_DB), миграции и CSV-сид встроены.
+// БД: app.db рядом с exe (или APP_DB), миграции встроены.
 package main
 
 import (

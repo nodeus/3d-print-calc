@@ -234,6 +234,8 @@
 
 <div class="grid">
   <section class="card">
+    {#if !materials.length}<p class="warn">{$t('calc.no_materials')}</p>{/if}
+    {#if !printers.length}<p class="warn">{$t('calc.no_printers')}</p>{/if}
     <div class="row">
       <label>{$t('calc.job')}
         <select value={historyId} onchange={(e) => applyHistorySelect(Number(e.currentTarget.value))}>
