@@ -115,6 +115,7 @@ type Order struct {
 	ID           int64
 	CustomerID   int64
 	Number       string // номер по шаблону (ordnum); пусто у старых — фолбэк #id
+	Title        string // название («Клиент — ДД.ММ.ГГГГ» по умолчанию)
 	Currency     string
 	FxRate       float64
 	MarginProfit float64

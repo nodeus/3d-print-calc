@@ -50,3 +50,6 @@ Thumbs.db
 *.pem
 secrets/
 desktop/frontend/wailsjs/
+
+# Harness session transcripts
+session-*.md

@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildPDF(t *testing.T) {
-	data, err := BuildPDF("Тест: выручка", []Section{
+	data, err := BuildPDF("3D print Cost Calculator v0.4.2 (dev)", "Тест: выручка", []Section{
 		{Title: "Месяцы", Headers: []string{"Месяц", "Итого", "Заказы"},
 			Rows: [][]string{{"2026-10", "1000,00 ₽", "3"}}},
 		{Title: "Пустая", Headers: []string{"A"}, Rows: nil},

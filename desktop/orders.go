@@ -46,7 +46,7 @@ type OrderDetail struct {
 }
 
 // CreateOrder — новый заказ (manager+). CreatedAt проставляется сегодня.
-func (a *App) CreateOrder(customerID int64, currency string) (int64, error) {
+func (a *App) CreateOrder(customerID int64, currency, title string) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
 		return 0, err
 	}
@@ -58,7 +58,7 @@ func (a *App) CreateOrder(customerID int64, currency string) (int64, error) {
 		return 0, err
 	}
 	return a.db.Orders().Create(models.Order{
-		CustomerID: customerID, Number: number, Currency: currency,
+		CustomerID: customerID, Number: number, Title: title, Currency: currency,
 		CreatedAt: time.Now().Format("2006-01-02"),
 	})
 }

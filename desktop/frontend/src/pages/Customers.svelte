@@ -3,7 +3,7 @@
   import { wails, type Customer } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
-  import { downloadPDF } from '../lib/pdf';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let list: Customer[] = $state([]);
   let error = $state('');
@@ -20,7 +20,11 @@
       error = String(e);
     }
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    registerPdfExporter(toPDF);
+    return () => registerPdfExporter(null);
+  });
 
   async function add() {
     error = '';
@@ -83,7 +87,6 @@
   </div>
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
-<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 
 <table>
   <thead><tr><th>{$t('cust.name')}</th><th>{$t('cust.contact')}</th><th>{$t('cust.note')}</th><th class="no-print"></th></tr></thead>

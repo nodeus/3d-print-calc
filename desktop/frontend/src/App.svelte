@@ -9,9 +9,10 @@
   import Orders from './pages/Orders.svelte';
   import Reports from './pages/Reports.svelte';
   import Info from './pages/Info.svelte';
-  import { t, locale, initLocale, switchLocale } from './lib/i18n';
+  import { t, initLocale } from './lib/i18n';
   import { user, refreshUser } from './lib/session';
   import { goTab } from './lib/nav';
+  import { exportCurrentTab, hasPdfExporter } from './lib/pdf';
   import { wails } from './lib/wails';
   import { onMount, onDestroy } from 'svelte';
 
@@ -66,9 +67,8 @@
     <div class="lang">
       <span>{$user.login} ({$user.role})</span>
       <button onclick={printPage}>{$t('common.print')}</button>
+      {#if $hasPdfExporter}<button onclick={exportCurrentTab}>{$t('common.pdf')}</button>{/if}
       <button onclick={logout}>{$t('auth.exit')}</button>
-      <button class:active={$locale === 'ru'} onclick={() => switchLocale('ru')}>RU</button>
-      <button class:active={$locale === 'en'} onclick={() => switchLocale('en')}>EN</button>
     </div>
   </header>
   <div class="print-only"><h1>{$t('app.title')}</h1><p class="print-date">{new Date().toLocaleString()}</p></div>

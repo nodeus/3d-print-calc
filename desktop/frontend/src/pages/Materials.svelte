@@ -3,7 +3,7 @@
   import { wails, type MaterialDTO, type Material } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
-  import { downloadPDF } from '../lib/pdf';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
 
   let materials: MaterialDTO[] = $state([]);
@@ -25,7 +25,11 @@
       error = String(e);
     }
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    registerPdfExporter(toPDF);
+    return () => registerPdfExporter(null);
+  });
 
   async function add() {
     error = '';
@@ -92,7 +96,6 @@
   </div>
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
-<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 
 <table>
   <thead><tr><th>{$t('mat.code')}</th><th>{$t('mat.type')}</th><th>{$t('mat.price')}</th><th>{$t('mat.density')}</th><th>{$t('mat.vendor')}</th><th class="no-print"></th></tr></thead>

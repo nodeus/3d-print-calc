@@ -183,6 +183,7 @@ export interface Order {
   ID: number;
   CustomerID: number;
   Number: string;
+  Title: string;
   Currency: string;
   FxRate: number;
   MarginProfit: number;
@@ -241,6 +242,7 @@ export interface PrinterStat {
 export interface Debt {
   orderId: number;
   customer: string;
+  title: string;
   total: number;
   paid: number;
   balance: number;
@@ -288,7 +290,7 @@ declare global {
           ChangeMyPassword(oldPw: string, pw: string): Promise<void>;
           ListCustomers(): Promise<Customer[]>;
           SaveCustomer(c: Customer): Promise<number>;
-          CreateOrder(customerId: number, currency: string): Promise<number>;
+          CreateOrder(customerId: number, currency: string, title: string): Promise<number>;
           ListOrders(): Promise<Order[]>;
           GetOrderDetail(id: number): Promise<OrderDetail>;
           SetOrderStatus(id: number, status: string): Promise<void>;
@@ -320,7 +322,9 @@ declare global {
           DeleteCustomer(id: number): Promise<void>;
           DeleteUser(id: number): Promise<void>;
           AppVersion(): Promise<Record<string, string>>;
-          ExportPDF(title: string, sections: PDFSection[]): Promise<string>;
+          GetHistoryColumns(): Promise<string[]>;
+          SetHistoryColumns(cols: string[]): Promise<void>;
+          ExportPDF(title: string, filename: string, sections: PDFSection[]): Promise<string>;
         };
       };
     }
@@ -357,7 +361,8 @@ export const wails = {
   changeMyPassword: (oldPw: string, pw: string) => api().ChangeMyPassword(oldPw, pw),
   listCustomers: () => api().ListCustomers(),
   saveCustomer: (c: Customer) => api().SaveCustomer(c),
-  createOrder: (customerId: number, currency: string) => api().CreateOrder(customerId, currency),
+  createOrder: (customerId: number, currency: string, title: string) =>
+    api().CreateOrder(customerId, currency, title),
   listOrders: () => api().ListOrders(),
   orderDetail: (id: number) => api().GetOrderDetail(id),
   setOrderStatus: (id: number, status: string) => api().SetOrderStatus(id, status),
@@ -392,7 +397,10 @@ export const wails = {
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),
-  exportPDF: (title: string, sections: PDFSection[]) => api().ExportPDF(title, sections),
+  historyColumns: () => api().GetHistoryColumns(),
+  setHistoryColumns: (cols: string[]) => api().SetHistoryColumns(cols),
+  exportPDF: (title: string, filename: string, sections: PDFSection[]) =>
+    api().ExportPDF(title, filename, sections),
   onImportProgress: (cb: (done: number, total: number) => void): void => {
     try {
       window.runtime.EventsOn('import-progress', (d: unknown) => {
