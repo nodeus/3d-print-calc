@@ -84,11 +84,13 @@
 
   // Применить работу из истории: материал, принтер/тарифы/ставки из снапшота v2
   // (v1 — только материал, тарифы остаются текущими), вес, время, имя.
+  // Селект «Работа из истории» синхронизируется (иначе там висит прочерк).
   function applyJob(j: JobDTO) {
     if (!calcReady) {
       pendingJob = j; // loadAll ещё идёт — применим по готовности
       return;
     }
+    historyId = historyJobs.some((x) => x.ID === j.ID) ? j.ID : 0;
     const code = snapMaterial(j);
     const inp = snapInput(j);
     stubWarn = '';

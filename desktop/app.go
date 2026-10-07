@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"3dprint-calc/core/calc"
@@ -135,6 +137,47 @@ func (a *App) SetMaterialPrice(materialID, priceMinor int64, currency string) er
 		return err
 	}
 	return a.db.Materials().SetMaterialPrice(materialID, priceMinor, currency)
+}
+
+// colorRe — hex-цвет #rrggbb для фаворитов.
+var colorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// GetMaterialColorFavs возвращает цвета-фавориты (settings.material_color_favs).
+func (a *App) GetMaterialColorFavs() []string {
+	v, ok, _ := a.db.GetSetting("material_color_favs")
+	if !ok || v == "" {
+		return []string{}
+	}
+	var cols []string
+	if err := json.Unmarshal([]byte(v), &cols); err != nil {
+		return []string{}
+	}
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if colorRe.MatchString(c) {
+			out = append(out, strings.ToLower(c))
+		}
+	}
+	return out
+}
+
+// SetMaterialColorFavs сохраняет фавориты (manager+, валидация hex).
+func (a *App) SetMaterialColorFavs(cols []string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		c = strings.ToLower(strings.TrimSpace(c))
+		if !colorRe.MatchString(c) || seen[c] {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	raw, _ := json.Marshal(out)
+	return a.db.SetSetting("material_color_favs", string(raw))
 }
 
 // AddPrinter создаёт принтер со всеми характеристиками (manager+).

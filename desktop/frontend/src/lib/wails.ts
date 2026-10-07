@@ -340,6 +340,8 @@ declare global {
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
           SetMaterialPrice(materialId: number, priceMinor: number, currency: string): Promise<void>;
+          GetMaterialColorFavs(): Promise<string[]>;
+          SetMaterialColorFavs(cols: string[]): Promise<void>;
           AddPrinter(p: Printer): Promise<number>;
           UpdatePrinter(p: Printer): Promise<void>;
           DeletePrinter(id: number): Promise<void>;
@@ -416,6 +418,8 @@ export const wails = {
   updateSpool: (s: Spool) => api().UpdateSpool(s),
   setMaterialPrice: (materialId: number, priceMinor: number, currency: string) =>
     api().SetMaterialPrice(materialId, priceMinor, currency),
+  getMaterialColorFavs: () => api().GetMaterialColorFavs(),
+  setMaterialColorFavs: (cols: string[]) => api().SetMaterialColorFavs(cols),
   addPrinter: (p: Printer) => api().AddPrinter(p),
   updatePrinter: (p: Printer) => api().UpdatePrinter(p),
   deletePrinter: (id: number) => api().DeletePrinter(id),

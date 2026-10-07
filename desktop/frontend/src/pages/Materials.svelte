@@ -18,10 +18,36 @@
   let editId = $state(0);
   let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, Note: '' });
   let editPrice = $state(0);
+  // Цвета: пресеты + фавориты (settings).
+  const presets = [
+    '#000000', '#ffffff', '#808080', '#ff0000', '#ff8000', '#ffff00',
+    '#00c000', '#00c0ff', '#0000ff', '#8000ff', '#ff40c0', '#804000',
+  ];
+  let favs: string[] = $state([]);
+
+  function validHex(s: string): boolean {
+    return /^#[0-9a-fA-F]{6}$/.test(s.trim());
+  }
+
+  function pickColor(hex: string) {
+    if (validHex(hex)) edit.ColorHex = hex.toLowerCase();
+  }
+
+  async function toggleFav(hex: string) {
+    hex = hex.toLowerCase();
+    const next = favs.includes(hex) ? favs.filter((c) => c !== hex) : [...favs, hex];
+    try {
+      await wails.setMaterialColorFavs(next);
+      favs = next;
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   async function load() {
     try {
       materials = (await wails.materials()) ?? [];
+      favs = (await wails.getMaterialColorFavs()) ?? [];
     } catch (e) {
       error = String(e);
     }
@@ -50,9 +76,17 @@
     editPrice = m.pricePerKg;
   }
 
+  function swatch(hex: string): string {
+    return validHex(hex || '') ? hex : 'transparent';
+  }
+
   async function saveEdit() {
     error = '';
     try {
+      if (edit.ColorHex && !validHex(edit.ColorHex)) {
+        error = $t('mat.bad_color');
+        return;
+      }
       await wails.updateMaterial(edit);
       // Цена — отдельным вызовом: создаст катушку, если её нет, остальное не трогает.
       await wails.setMaterialPrice(editId, Math.round(editPrice * 100), 'RUB');
@@ -78,8 +112,8 @@
     await downloadPDF($t('nav.materials'), [
       {
         Title: '',
-        Headers: [$t('mat.code'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.vendor')],
-        Rows: materials.map((m) => [m.code, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), m.vendor]),
+        Headers: [$t('mat.code'), $t('mat.color'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.vendor')],
+        Rows: materials.map((m) => [m.code, m.colorHex, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), m.vendor]),
       },
     ]);
   }
@@ -99,12 +133,27 @@
 {#if error}<p class="err">{error}</p>{/if}
 
 <table>
-  <thead><tr><th>{$t('mat.code')}</th><th>{$t('mat.type')}</th><th>{$t('mat.price')}</th><th>{$t('mat.density')}</th><th>{$t('mat.vendor')}</th><th class="no-print"></th></tr></thead>
+  <thead><tr><th>{$t('mat.code')}</th><th>{$t('mat.color')}</th><th>{$t('mat.type')}</th><th>{$t('mat.price')}</th><th>{$t('mat.density')}</th><th>{$t('mat.vendor')}</th><th class="no-print"></th></tr></thead>
   <tbody>
     {#each materials as m}
       {#if editId === m.id}
         <tr>
           <td>{m.code}</td>
+          <td>
+            <div class="colorrow">
+              <input type="color" value={validHex(edit.ColorHex) ? edit.ColorHex : '#000000'} oninput={(e) => (edit.ColorHex = e.currentTarget.value)} title={$t('mat.color')} />
+              <input class="hex" bind:value={edit.ColorHex} placeholder="#rrggbb" />
+            </div>
+            <div class="colorrow">
+              {#each favs as f}<button class="sw" style="background:{f}" title={f} onclick={() => pickColor(f)}></button>{/each}
+              {#each presets as p}<button class="sw preset" style="background:{p}" title={p} onclick={() => pickColor(p)}></button>{/each}
+            </div>
+            {#if canWrite($user)}
+              <div class="colorrow">
+                <button onclick={() => edit.ColorHex && toggleFav(edit.ColorHex)}>{favs.includes(edit.ColorHex.toLowerCase()) ? '★' : '☆'} {$t('mat.fav')}</button>
+              </div>
+            {/if}
+          </td>
           <td><select bind:value={edit.Type}>{#each ['PETG', 'PLA', 'ABS', 'ASA', 'TPU', 'NYLON'] as tp}<option value={tp}>{tp}</option>{/each}</select></td>
           <td><input type="number" min="0" bind:value={editPrice} /></td>
           <td><input type="number" step="0.01" bind:value={edit.Density} /></td>
@@ -112,7 +161,7 @@
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr><td>{m.code}</td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td>{m.vendor}</td>
+        <tr><td>{m.code}</td><td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td>{m.vendor}</td>
           <td class="no-print">
             {#if canWrite($user)}<button onclick={() => startEdit(m)}>✎</button> <button onclick={() => remove(m)}>✕</button>{/if}
           </td>
@@ -127,4 +176,9 @@
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
   .err { color: #b00; }
+  .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid #999; border-radius: 3px; padding: 0; vertical-align: middle; }
+  button.sw { cursor: pointer; margin: 1px; }
+  .colorrow { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+  input[type='color'] { width: 40px; height: 30px; padding: 2px; }
+  input.hex { width: 90px; font-family: monospace; }
 </style>
