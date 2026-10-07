@@ -3,6 +3,7 @@
   import { wails, type MaterialDTO, type Material } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { askConfirm } from '../lib/confirm';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
 
@@ -64,7 +65,7 @@
 
   async function remove(m: MaterialDTO) {
     error = '';
-    if (!confirm(`${m.code}?`)) return;
+    if (!(await askConfirm(`${$t("common.delete_q")} «${m.code}»?`))) return;
     try {
       await wails.deleteMaterial(m.id);
       await load();

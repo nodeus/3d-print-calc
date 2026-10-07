@@ -213,6 +213,9 @@
   select { padding: 6px; font-size: 14px; }
   .note { color: #666; font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
+  label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; line-height: 1.4; white-space: nowrap; }
+  label.check input { margin: 0; width: 16px; height: 16px; flex: none; }
   button { padding: 8px 14px; }
   button.warn { border-color: #b00; color: #b00; }
   .ok { color: green; word-break: break-all; }

@@ -3,6 +3,7 @@
   import { wails, type PrinterDTO, type Printer, type ImportReport } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { askConfirm } from '../lib/confirm';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num } from '../lib/format';
 
@@ -80,7 +81,7 @@
 
   async function remove(p: PrinterDTO) {
     error = '';
-    if (!confirm(`${p.Name}?`)) return;
+    if (!(await askConfirm(`${$t("common.delete_q")} «${p.Name}»?`))) return;
     try {
       await wails.deletePrinter(p.ID);
       await load();

@@ -62,17 +62,55 @@
     }
   }
 
-  // Применить работу из истории: материал (если есть в справочнике), вес, время, имя.
+  interface SnapInput {
+    tariff?: number;
+    powerKW?: number;
+    amortPerHour?: number;
+    opRate?: number;
+    prepH?: number;
+    postH?: number;
+  }
+
+  function snapInput(j: JobDTO): SnapInput {
+    try {
+      return JSON.parse(j.CostSnapshot)?.input ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  let calcReady = $state(false);
+  let pendingJob: JobDTO | null = $state(null);
+
+  // Применить работу из истории: материал, принтер/тарифы/ставки из снапшота v2
+  // (v1 — только материал, тарифы остаются текущими), вес, время, имя.
   function applyJob(j: JobDTO) {
+    if (!calcReady) {
+      pendingJob = j; // loadAll ещё идёт — применим по готовности
+      return;
+    }
     const code = snapMaterial(j);
+    const inp = snapInput(j);
     stubWarn = '';
     if (code && materials.some((m) => m.code === code)) {
       matCode = code;
     } else if (code) {
       stubWarn = `${code}: ${$t('calc.stub_warn')}`;
     }
+    // Принтер — только привязка (ставки берём из снапшота, они точнее текущих).
+    if (j.PrinterID && printers.some((p) => p.ID === j.PrinterID)) {
+      printerId = j.PrinterID;
+    } else if (printers.length && !printerId) {
+      selectPrinter(printers[0].ID);
+    }
+    if (inp.tariff != null) tariff = inp.tariff;
+    if (inp.powerKW != null) powerKW = inp.powerKW;
+    if (inp.amortPerHour != null) amortPerHour = inp.amortPerHour;
+    if (inp.opRate != null) opRate = inp.opRate;
+    if (inp.prepH != null) prepH = inp.prepH;
+    if (inp.postH != null) postH = inp.postH;
     weightG = Math.round(j.WeightG * 100) / 100;
-    filamentMM = null;
+    filamentMM = Math.round(j.LengthM * 1000 * 100) / 100 || null;
     timeH = Math.floor(j.TotalSec / 3600);
     timeM = Math.round((j.TotalSec % 3600) / 60);
     filename = j.Filename;
@@ -111,8 +149,10 @@
       historyJobs = (await wails.jobs(0)) ?? [];
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
       if (printers.length) selectPrinter(printers[0].ID);
-      // Переход из истории: применить висящий prefill (разовый).
-      const pre = get(prefillJob);
+      calcReady = true;
+      // Висящий prefill: разовый из монтирования или ранний из подписки.
+      const pre = pendingJob ?? get(prefillJob);
+      pendingJob = null;
       if (pre) {
         prefillJob.set(null);
         applyJob(pre);
@@ -208,7 +248,7 @@
       await wails.saveJob({
         filename,
         printerId,
-        spoolId: 0,
+        spoolId: 0, // резолвится бэкендом по материалу
         status: 'completed',
         totalSec: Math.round(timeH * 3600 + timeM * 60),
         weightG: weightG ?? 0,
@@ -216,6 +256,13 @@
         cost: result.Cost,
         price: result.PriceVAT,
         currency,
+        material: matCode,
+        tariff,
+        powerKW,
+        amortPerHour,
+        opRate,
+        prepH,
+        postH,
       });
       savedMsg = true;
       setTimeout(() => (savedMsg = false), 2500);

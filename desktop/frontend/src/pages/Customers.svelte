@@ -3,6 +3,7 @@
   import { wails, type Customer } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { askConfirm } from '../lib/confirm';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let list: Customer[] = $state([]);
@@ -58,7 +59,7 @@
 
   async function remove(c: Customer) {
     error = '';
-    if (!confirm(`${c.Name}?`)) return;
+    if (!(await askConfirm(`${$t("common.delete_q")} «${c.Name}»?`))) return;
     try {
       await wails.deleteCustomer(c.ID);
       await load();

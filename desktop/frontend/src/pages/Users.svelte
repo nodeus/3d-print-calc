@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { wails, type UserDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
+  import { askConfirm } from '../lib/confirm';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let list: UserDTO[] = $state([]);
@@ -46,7 +47,7 @@
 
   async function remove(u: UserDTO) {
     error = '';
-    if (!confirm(`${u.login}?`)) return;
+    if (!(await askConfirm(`${$t("common.delete_q")} «${u.login}»?`))) return;
     try {
       await wails.deleteUser(u.id);
       await load();
