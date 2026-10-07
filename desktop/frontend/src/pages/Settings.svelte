@@ -120,7 +120,7 @@
 
 <div class="card">
   <h3>{$t('set.ordnum')}</h3>
-  <label>{$t('set.ordnum_tpl')}<input bind:value={numTemplate} oninput={previewNumbers} placeholder="{YYYY}-{nnnn}" /></label>
+  <label>{$t('set.ordnum_tpl')}<input bind:value={numTemplate} oninput={previewNumbers} placeholder={'{YYYY}-{nnnn}'} /></label>
   <label>{$t('set.ordnum_seq')}<input type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
   <p>{$t('set.ordnum_preview')}: <b>{numPreview}</b></p>
   <p class="note">{$t('set.ordnum_help')}</p>

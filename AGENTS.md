@@ -127,7 +127,9 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 - Первый запуск чистый: только `admin/admin123` (пароль сменить сразу).
   Работы/материалы/принтеры пользователь заводит сам: CSV-импорт, Moonraker, вручную.
   Полный сид legacy-данных — только dev-инструмент `go run ./tools/seed -db ...`.
-- Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто).
+- Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто),
+  `npm run check` в `desktop/frontend` (svelte-check: ловит ошибки шаблонов,
+  которые `vite build` пропускает — напр. `{YYYY}` в атрибутах).
 - Бэкап/восстановление: `backup.zip (app.db + csv/json)` в 1 клик, импорт с dry-run.
 
 ## 7. Что НЕ делать

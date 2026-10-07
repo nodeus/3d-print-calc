@@ -27,4 +27,9 @@ td.n {
   table {
     font-size: 11px;
   }
+  .card {
+    border: none;
+    padding: 0;
+    max-width: none;
+  }
 }

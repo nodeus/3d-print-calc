@@ -76,21 +76,23 @@
     {#each tabs as tb}<button class:active={tab === tb.id} onclick={() => (tab = tb.id)}>{$t(tb.key)}</button>{/each}
   </nav>
   <main>
-    <svelte:boundary>
-      {#if tab === 'calc'}<Calculator />
-      {:else if tab === 'history'}<History />
-      {:else if tab === 'materials'}<Materials />
-      {:else if tab === 'printers'}<Printers />
-      {:else if tab === 'settings'}<Settings />
-      {:else if tab === 'orders'}<Orders />
-      {:else if tab === 'customers'}<Customers />
-      {:else if tab === 'info'}<Info />
-      {:else}<Reports />{/if}
-      {#snippet failed(err, reset)}
-        <p class="err">{$t('app.tab_error')}: {String((err as Error)?.message ?? err)}</p>
-        <button onclick={reset}>{$t('common.retry')}</button>
-      {/snippet}
-    </svelte:boundary>
+    {#key tab}
+      <svelte:boundary>
+        {#if tab === 'calc'}<Calculator />
+        {:else if tab === 'history'}<History />
+        {:else if tab === 'materials'}<Materials />
+        {:else if tab === 'printers'}<Printers />
+        {:else if tab === 'settings'}<Settings />
+        {:else if tab === 'orders'}<Orders />
+        {:else if tab === 'customers'}<Customers />
+        {:else if tab === 'info'}<Info />
+        {:else}<Reports />{/if}
+        {#snippet failed(err, reset)}
+          <p class="err">{$t('app.tab_error')}: {String((err as Error)?.message ?? err)}</p>
+          <button onclick={reset}>{$t('common.retry')}</button>
+        {/snippet}
+      </svelte:boundary>
+    {/key}
   </main>
 {/if}
 
@@ -112,7 +114,5 @@
     main { padding: 0; }
     :global(body) { background: white; }
     @page { size: A4; margin: 12mm; }
-    table { font-size: 11px; }
-    .card { border: none; padding: 0; max-width: none; }
   }
 </style>

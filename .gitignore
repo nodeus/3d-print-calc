@@ -41,6 +41,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+~$*
 
 # Secrets / env
 .env
