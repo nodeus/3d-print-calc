@@ -7,6 +7,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"3dprint-calc/core/models"
 	sqlite "3dprint-calc/store-sqlite"
 )
 
@@ -59,9 +60,12 @@ func (a *App) PreviewBackup() (sqlite.Manifest, error) {
 }
 
 // ApplyBackup применяет запомненный PreviewBackup бэкап: закрывает БД,
-// заменяет файл, открывает заново. Перезапуск приложения не нужен.
+// заменяет файл, открывает заново. Перезапуск приложения не нужен (manager+).
 func (a *App) ApplyBackup() (sqlite.Manifest, error) {
 	var m sqlite.Manifest
+	if err := a.need(models.RoleManager); err != nil {
+		return m, err
+	}
 	if len(a.pendingFile) == 0 {
 		return m, errNoPending()
 	}
@@ -143,9 +147,12 @@ func (a *App) PreviewHistoryCSV() (sqlite.ImportReport, error) {
 	return rep, nil
 }
 
-// ApplyHistoryCSV применяет запомненный PreviewHistoryCSV импорт.
+// ApplyHistoryCSV применяет запомненный PreviewHistoryCSV импорт (manager+).
 func (a *App) ApplyHistoryCSV() (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
+	if err := a.need(models.RoleManager); err != nil {
+		return rep, err
+	}
 	if len(a.pendingFile) == 0 {
 		return rep, errNoPending()
 	}

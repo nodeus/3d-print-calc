@@ -30,6 +30,9 @@ func TestAppInit(t *testing.T) {
 		t.Fatalf("jobs = %d, хочу 490", st.Jobs)
 	}
 	app := &App{db: db}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatalf("Login seeded admin: %v", err)
+	}
 	mats, err := app.GetMaterials()
 	if err != nil || len(mats) < 15 {
 		t.Fatalf("materials: %d, %v", len(mats), err)
@@ -65,6 +68,9 @@ func TestBackupReopen(t *testing.T) {
 		t.Fatalf("openDB: %v", err)
 	}
 	app := &App{ctx: context.Background(), db: db, dbPath: path}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
 
 	var buf bytes.Buffer
 	if err := db.CreateBackup(&buf); err != nil {
@@ -87,4 +93,50 @@ func TestBackupReopen(t *testing.T) {
 		t.Fatalf("GetJobs после reopen: %v", len(jobs))
 	}
 	app.db.Close()
+}
+
+// TestRoles проверяет gate ролей: гость/вьювер не пишут, менеджер пишет,
+// неверный пароль не пускает.
+func TestRoles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{db: db, dbPath: path}
+
+	if _, err := app.Login("admin", "bad"); err == nil {
+		t.Fatal("неверный пароль пустил")
+	}
+	if _, err := app.SaveJob(JobInput{Filename: "x.gcode"}); err == nil {
+		t.Fatal("гость пишет без логина")
+	}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if _, err := app.CreateUser("viewer1", "pass1234", "viewer"); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	app.Logout()
+	if _, err := app.Login("viewer1", "pass1234"); err != nil {
+		t.Fatalf("Login viewer: %v", err)
+	}
+	if _, err := app.SaveJob(JobInput{Filename: "x.gcode"}); err == nil {
+		t.Fatal("viewer пишет")
+	}
+	if _, err := app.CreateUser("z", "pass1234", "viewer"); err == nil {
+		t.Fatal("viewer создаёт пользователей")
+	}
+	// Чтение вьюверу разрешено.
+	if _, err := app.GetJobs(1); err != nil {
+		t.Fatalf("viewer чтение: %v", err)
+	}
+	if err := app.ChangeMyPassword("pass1234", "newpass1"); err != nil {
+		t.Fatalf("ChangeMyPassword: %v", err)
+	}
+	app.Logout()
+	if _, err := app.Login("viewer1", "newpass1"); err != nil {
+		t.Fatalf("Login новым паролем: %v", err)
+	}
 }

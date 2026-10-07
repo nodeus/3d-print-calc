@@ -117,6 +117,27 @@ type Order struct {
 	MarginProfit float64
 	MarginDev    float64
 	VAT          float64
-	Status       string
+	Status       string // draft | quoted | in_work | done | paid | cancelled
 	TotalBase    int64
+	CreatedAt    string // ISO-дата
+}
+
+// OrderItem — позиция заказа (qty может быть дробным).
+type OrderItem struct {
+	ID      int64
+	OrderID int64
+	JobID   int64
+	Title   string
+	Qty     float64
+	Cost    int64 // минорные единицы
+	Price   int64 // минорные единицы
+}
+
+// Payment — оплата по заказу.
+type Payment struct {
+	ID      int64
+	OrderID int64
+	Amount  int64 // минорные единицы
+	PaidAt  string
+	Note    string
 }

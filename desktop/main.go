@@ -16,6 +16,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 
+	"3dprint-calc/core/models"
 	sqlite "3dprint-calc/store-sqlite"
 	"3dprint-calc/store-sqlite/seed"
 )
@@ -23,11 +24,12 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// App — корень биндингов. Методы — в app.go, backup.go.
+// App — корень биндингов. Методы — в app.go, backup.go, users.go, orders.go.
 type App struct {
 	ctx         context.Context
 	db          *sqlite.DB
 	dbPath      string
+	currentUser *models.User
 	pendingFile []byte // файл после preview, до apply
 	pendingPath string
 }
