@@ -25,16 +25,29 @@ func (r *materialsRepo) Update(m models.Material) error {
 	return nil
 }
 
-// Delete удаляет материал. Блок: есть катушки (включая привязанные работы).
+// Delete удаляет материал. Пустые катушки (без привязанных работ) удаляются
+// каскадом в той же транзакции. Блок: есть работы, ссылающиеся на катушки.
 func (r *materialsRepo) Delete(id int64) error {
 	var n int
-	if err := r.db.QueryRow(`SELECT COUNT(*) FROM spools WHERE material_id=?`, id).Scan(&n); err != nil {
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM jobs j
+		JOIN spools s ON s.id = j.spool_id WHERE s.material_id=?`, id).Scan(&n); err != nil {
 		return fmt.Errorf("ERR_MATERIAL_DELETE: %w", err)
 	}
 	if n > 0 {
-		return fmt.Errorf("ERR_MATERIAL_USED: %d катушек ссылаются на материал", n)
+		return fmt.Errorf("ERR_MATERIAL_USED: %d работ ссылаются на катушки материала", n)
 	}
-	if _, err := r.db.Exec(`DELETE FROM materials WHERE id=?`, id); err != nil {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("ERR_MATERIAL_DELETE: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM spools WHERE material_id=?`, id); err != nil {
+		return fmt.Errorf("ERR_MATERIAL_DELETE: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM materials WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_MATERIAL_DELETE: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("ERR_MATERIAL_DELETE: %w", err)
 	}
 	return nil

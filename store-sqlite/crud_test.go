@@ -25,24 +25,36 @@ func TestMaterialCRUDGuards(t *testing.T) {
 	if got.Type != "PLA" || got.Density != 1.24 || got.Vendor != "V" {
 		t.Fatalf("update не применился: %+v", got)
 	}
-	// Катушка блокирует удаление.
+	// Катушка без работ: удаляется каскадом вместе с материалом.
 	if _, err := repo.AddSpool(models.Spool{MaterialID: id, Price: 100, Currency: "RUB"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Delete(id); err == nil {
-		t.Fatal("удаление с катушками обязано блокироваться")
+	if err := repo.Delete(id); err != nil {
+		t.Fatalf("Delete с пустой катушкой: %v", err)
+	}
+	if _, err := repo.GetByCode("PETG-T1"); err == nil {
+		t.Fatal("материал остался после Delete")
+	}
+	// Катушка с работой: блок.
+	id3, _ := repo.UpsertByCode(models.Material{Code: "PETG-T3", Density: 1.27})
+	sp3, _ := repo.AddSpool(models.Spool{MaterialID: id3, Price: 100, Currency: "RUB"})
+	if _, err := db.Jobs().Upsert(models.Job{Filename: "x.gcode", StartAt: "2026-01-01 10:00", SpoolID: sp3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Delete(id3); err == nil {
+		t.Fatal("удаление с привязанными работами обязано блокироваться")
 	}
 	// Чистый материал удаляется.
 	id2, _ := repo.UpsertByCode(models.Material{Code: "PETG-T2", Density: 1.27})
 	if err := repo.Delete(id2); err != nil {
 		t.Fatalf("Delete чистого: %v", err)
 	}
-	// Цена партии правится.
-	spools, _ := repo.ListSpools(id)
-	if err := repo.UpdateSpool(models.Spool{ID: spools[0].ID, MaterialID: id, Price: 99900, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 500}); err != nil {
+	// Цена партии правится (на живом материале id3).
+	spools, _ := repo.ListSpools(id3)
+	if err := repo.UpdateSpool(models.Spool{ID: spools[0].ID, MaterialID: id3, Price: 99900, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 500}); err != nil {
 		t.Fatalf("UpdateSpool: %v", err)
 	}
-	spools, _ = repo.ListSpools(id)
+	spools, _ = repo.ListSpools(id3)
 	if spools[0].Price != 99900 || spools[0].WeightLeftG != 500 {
 		t.Fatalf("spool не обновился: %+v", spools[0])
 	}
