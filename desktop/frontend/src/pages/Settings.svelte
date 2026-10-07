@@ -19,6 +19,12 @@
   let numTemplate = $state('');
   let numSeq = $state('');
   let numPreview = $state('');
+  // Колонки истории
+  const allColumns = [
+    'filename', 'start', 'end', 'status', 'duration', 'weight', 'length',
+    'size', 'filament', 'slicer', 'cost', 'price', 'origin',
+  ];
+  let visibleColumns: string[] = $state([]);
 
   async function loadNumbers() {
     try {
@@ -49,10 +55,45 @@
     }
   }
 
+  function toggleColumn(key: string) {
+    visibleColumns = visibleColumns.includes(key)
+      ? visibleColumns.filter((c) => c !== key)
+      : [...visibleColumns, key];
+  }
+
+  async function saveColumns() {
+    error = '';
+    try {
+      await wails.setHistoryColumns(visibleColumns);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function colLabel(key: string): string {
+    const map: Record<string, string> = {
+      filename: $t('hist.filename'),
+      start: $t('hist.start'),
+      end: $t('hist.end'),
+      status: $t('hist.status'),
+      duration: $t('hist.duration'),
+      weight: $t('hist.weight'),
+      length: $t('hist.length'),
+      size: $t('hist.size'),
+      filament: $t('hist.filament'),
+      slicer: $t('hist.slicer'),
+      cost: $t('hist.cost'),
+      price: $t('calc.price'),
+      origin: $t('hist.origin'),
+    };
+    return map[key] ?? key;
+  }
+
   onMount(async () => {
     try {
       currency = await wails.getBaseCurrency();
       await loadNumbers();
+      visibleColumns = await wails.historyColumns();
     } catch (e) {
       console.error(e);
     }
@@ -137,6 +178,16 @@
 </div>
 
 {#if error}<p class="err">{error}</p>{/if}
+
+<div class="card">
+  <h3>{$t('set.columns')}</h3>
+  <div class="checks">
+    {#each allColumns as c}
+      <label class="check"><input type="checkbox" checked={visibleColumns.includes(c)} onchange={() => toggleColumn(c)} /> {colLabel(c)}</label>
+    {/each}
+  </div>
+  <div class="row"><button onclick={saveColumns}>{$t('common.save')}</button></div>
+</div>
 
 <div class="card">
   <h3>{$t('set.ordnum')}</h3>

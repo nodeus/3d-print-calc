@@ -3,7 +3,7 @@
   import { wails, type PrinterDTO, type Printer, type ImportReport } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
-  import { downloadPDF } from '../lib/pdf';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num } from '../lib/format';
 
   let printers: PrinterDTO[] = $state([]);
@@ -37,7 +37,11 @@
       error = String(e);
     }
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    registerPdfExporter(toPDF);
+    return () => registerPdfExporter(null);
+  });
 
   function startAdd() {
     form = blank();
@@ -143,8 +147,6 @@
     ]);
   }
 </script>
-
-<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 
 {#if canWrite($user) && !editId && !isNew}
   <div class="row no-print"><button onclick={startAdd}>{$t('printer.add')}</button></div>

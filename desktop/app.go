@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"3dprint-calc/core/calc"
@@ -293,6 +294,62 @@ func (a *App) SetBaseCurrency(code string) error {
 		code = "RUB"
 	}
 	return a.db.SetSetting("base_currency", code)
+}
+
+// HistoryColumns — все колонки истории печати (порядок фиксирован).
+var HistoryColumns = []string{
+	"filename", "start", "end", "status", "duration", "weight", "length",
+	"size", "filament", "slicer", "cost", "price", "origin",
+}
+
+// DefaultHistoryColumns — видимые по умолчанию.
+var DefaultHistoryColumns = []string{
+	"filename", "start", "status", "duration", "weight", "cost", "price", "origin",
+}
+
+// GetHistoryColumns возвращает видимые колонки истории.
+func (a *App) GetHistoryColumns() []string {
+	v, ok, _ := a.db.GetSetting("history_columns")
+	if !ok || v == "" {
+		return DefaultHistoryColumns
+	}
+	var cols []string
+	if err := json.Unmarshal([]byte(v), &cols); err != nil || len(cols) == 0 {
+		return DefaultHistoryColumns
+	}
+	// Фильтруем неизвестные ключи, сохраняя порядок.
+	known := map[string]bool{}
+	for _, c := range HistoryColumns {
+		known[c] = true
+	}
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if known[c] {
+			out = append(out, c)
+		}
+	}
+	if len(out) == 0 {
+		return DefaultHistoryColumns
+	}
+	return out
+}
+
+// SetHistoryColumns сохраняет видимые колонки (manager+).
+func (a *App) SetHistoryColumns(cols []string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	known := map[string]bool{}
+	for _, c := range HistoryColumns {
+		known[c] = true
+	}
+	for _, c := range cols {
+		if !known[c] {
+			return fmt.Errorf("ERR_COLUMNS: неизвестная колонка %q", c)
+		}
+	}
+	raw, _ := json.Marshal(cols)
+	return a.db.SetSetting("history_columns", string(raw))
 }
 
 var errEmptyCode = errors.New("ERR_MATERIAL_CODE: пустой код")

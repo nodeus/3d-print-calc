@@ -6,7 +6,7 @@
   import { num, hms } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
   import { goTab } from '../lib/nav';
-  import { downloadPDF } from '../lib/pdf';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let jobs: JobDTO[] = $state([]);
   let error = $state('');
@@ -16,15 +16,86 @@
   let sortDir: 1 | -1 = $state(-1);
   let page = $state(0);
   const perPage = 50;
+  // Видимые колонки (Настройки → Колонки истории).
+  let columns: string[] = $state(['filename', 'start', 'status', 'duration', 'weight', 'cost', 'price', 'origin']);
+
+  const sortable: Record<string, 'filename' | 'start' | 'status' | 'weight' | 'cost'> = {
+    filename: 'filename',
+    start: 'start',
+    status: 'status',
+    weight: 'weight',
+    cost: 'cost',
+  };
+
+  function colLabel(key: string): string {
+    const map: Record<string, string> = {
+      filename: $t('hist.filename'),
+      start: $t('hist.start'),
+      end: $t('hist.end'),
+      status: $t('hist.status'),
+      duration: $t('hist.duration'),
+      weight: $t('hist.weight'),
+      length: $t('hist.length'),
+      size: $t('hist.size'),
+      filament: $t('hist.filament'),
+      slicer: $t('hist.slicer'),
+      cost: $t('hist.cost'),
+      price: $t('calc.price'),
+      origin: $t('hist.origin'),
+    };
+    return map[key] ?? key;
+  }
+
+  function cell(j: JobDTO, key: string): string {
+    switch (key) {
+      case 'filename':
+        return j.Filename;
+      case 'start':
+        return j.StartAt;
+      case 'end':
+        return j.EndAt;
+      case 'status':
+        return j.Status;
+      case 'duration':
+        return hms(j.TotalSec);
+      case 'weight':
+        return num(j.WeightG);
+      case 'length':
+        return num(j.LengthM);
+      case 'size':
+        return j.SizeBytes ? String(j.SizeBytes) : '—';
+      case 'filament':
+        return num(j.FilamentTotalMm);
+      case 'slicer':
+        return j.Slicer || '—';
+      case 'cost':
+        return num(snap(j).cost);
+      case 'price':
+        return num(snap(j).price);
+      case 'origin':
+        return originBadge(j);
+      default:
+        return '';
+    }
+  }
+
+  function isNum(key: string): boolean {
+    return ['duration', 'weight', 'length', 'size', 'filament', 'cost', 'price'].includes(key);
+  }
 
   async function load() {
     try {
       jobs = (await wails.jobs(0)) ?? []; // всё: раньше лимит 200 обрезал историю
+      columns = await wails.historyColumns();
     } catch (e) {
       error = String(e);
     }
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    registerPdfExporter(toPDF);
+    return () => registerPdfExporter(null);
+  });
 
   function snap(j: JobDTO): { cost: number; price: number } {
     try {
@@ -93,11 +164,8 @@
     await downloadPDF($t('nav.history'), [
       {
         Title: '',
-        Headers: [$t('hist.filename'), $t('hist.start'), $t('hist.status'), $t('hist.duration'), $t('hist.weight'), $t('hist.cost'), $t('calc.price'), $t('hist.origin')],
-        Rows: filtered.map((j) => [
-          j.Filename, j.StartAt, j.Status, hms(j.TotalSec),
-          num(j.WeightG), num(snap(j).cost), num(snap(j).price), originBadge(j),
-        ]),
+        Headers: columns.map(colLabel),
+        Rows: filtered.map((j) => columns.map((c) => cell(j, c))),
       },
     ]);
   }
@@ -135,33 +203,26 @@
     <button disabled={page === 0} onclick={() => page--}>‹</button>
     {page + 1} / {pages}
     <button disabled={page >= pages - 1} onclick={() => page++}>›</button>
-    <button onclick={toPDF}>{$t('common.pdf')}</button>
   </span>
 </div>
 
 <table>
   <thead><tr>
-    <th><button class="th" onclick={() => toggleSort('filename')}>{$t('hist.filename')}{arrow('filename')}</button></th>
-    <th><button class="th" onclick={() => toggleSort('start')}>{$t('hist.start')}{arrow('start')}</button></th>
-    <th><button class="th" onclick={() => toggleSort('status')}>{$t('hist.status')}{arrow('status')}</button></th>
-    <th>{$t('hist.duration')}</th>
-    <th><button class="th" onclick={() => toggleSort('weight')}>{$t('hist.weight')}{arrow('weight')}</button></th>
-    <th><button class="th" onclick={() => toggleSort('cost')}>{$t('hist.cost')}{arrow('cost')}</button></th>
-    <th>{$t('calc.price')}</th>
-    <th>{$t('hist.origin')}</th>
+    {#each columns as c}
+      <th class:n={isNum(c)}>
+        {#if sortable[c]}
+          <button class="th" onclick={() => toggleSort(sortable[c])}>{colLabel(c)}{arrow(sortable[c])}</button>
+        {:else}{colLabel(c)}{/if}
+      </th>
+    {/each}
     <th class="no-print"></th>
   </tr></thead>
   <tbody>
     {#each visible as j}
       <tr>
-        <td class="file" title={j.Filename}>{j.Filename}</td>
-        <td>{j.StartAt}</td>
-        <td>{j.Status}</td>
-        <td class="n">{hms(j.TotalSec)}</td>
-        <td class="n">{num(j.WeightG)}</td>
-        <td class="n">{num(snap(j).cost)}</td>
-        <td class="n">{num(snap(j).price)}</td>
-        <td>{originBadge(j)}</td>
+        {#each columns as c}
+          <td class:file={c === 'filename'} class:n={isNum(c)} title={c === 'filename' ? j.Filename : undefined}>{cell(j, c)}</td>
+        {/each}
         <td class="no-print">
           <button onclick={() => toCalc(j)}>{$t('hist.to_calc')}</button>
           {#if canWrite($user) && j.Origin === 'manual'}<button onclick={() => remove(j)}>✕</button>{/if}

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { wails, type UserDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
-  import { downloadPDF } from '../lib/pdf';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let list: UserDTO[] = $state([]);
   let login = $state('');
@@ -17,7 +17,11 @@
       error = String(e);
     }
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    registerPdfExporter(toPDF);
+    return () => registerPdfExporter(null);
+  });
 
   async function create() {
     error = '';
@@ -73,7 +77,6 @@
   <button onclick={create}>{$t('users.add')}</button>
 </div>
 {#if error}<p class="err">{error}</p>{/if}
-<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 <table>
   <thead><tr><th>{$t('auth.login')}</th><th>{$t('users.role')}</th><th class="no-print"></th></tr></thead>
   <tbody>

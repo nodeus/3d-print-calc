@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -159,17 +160,24 @@ func (a *App) emitProgress(done, total int) {
 }
 
 // ExportPDF строит A4-отчёт из секций (заголовки+строки уже отформатированы
-// фронтом) и сохраняет через диалог. Футер каждой страницы — nodeus.ru.
-func (a *App) ExportPDF(title string, sections []export.Section) (string, error) {
+// фронтом) и сохраняет через диалог. Шапка — имя и версия приложения,
+// футер каждой страницы — nodeus.ru. filename — желаемое имя файла
+// (санитизируется).
+func (a *App) ExportPDF(title, filename string, sections []export.Section) (string, error) {
+	if filename == "" {
+		filename = "report.pdf"
+	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		DefaultFilename: "report.pdf",
+		DefaultFilename: filename,
 		Title:           title,
 		Filters:         []runtime.FileFilter{{DisplayName: "PDF (*.pdf)", Pattern: "*.pdf"}},
 	})
 	if err != nil || path == "" {
 		return "", err
 	}
-	data, err := export.BuildPDF(title, sections)
+	data, err := export.BuildPDF(
+		fmt.Sprintf("3D print Cost Calculator v%s (%s)", Version, BuildDate),
+		title, sections)
 	if err != nil {
 		return "", err
 	}

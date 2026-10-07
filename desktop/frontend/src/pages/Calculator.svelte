@@ -4,7 +4,7 @@
   import { t, locale } from '../lib/i18n';
   import { money } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
-  import { downloadPDF } from '../lib/pdf';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { get } from 'svelte/store';
 
   let materials: MaterialDTO[] = $state([]);
@@ -86,13 +86,18 @@
 
   onMount(() => {
     loadAll();
+    registerPdfExporter(toPDF);
     // Подписка: prefill, пришедший при смонтированном калькуляторе.
-    return prefillJob.subscribe((j) => {
+    const unsub = prefillJob.subscribe((j) => {
       if (j) {
         prefillJob.set(null);
         applyJob(j);
       }
     });
+    return () => {
+      unsub();
+      registerPdfExporter(null);
+    };
   });
 
   async function loadAll() {
@@ -180,6 +185,11 @@
     return o.Number || `#${o.ID}`;
   }
 
+  function orderLabel(o: Order): string {
+    const suffix = o.Title ? ` · ${o.Title}` : '';
+    return `${orderNo(o)}${suffix} · ${custName(o.CustomerID)} · ${get(t)('st.' + o.Status)}`;
+  }
+
   function custName(id: number): string {
     return customers.find((c) => c.ID === id)?.Name ?? '';
   }
@@ -233,8 +243,8 @@
     const m = (v: number) => money(v, currency, $locale);
     await downloadPDF($t('nav.calculator'), [
       {
-        Title: `${matCode} · ${filename || '—'}`,
-        Headers: [$t('calc.breakdown'), $t('calc.cost')],
+        Title: '',
+        Headers: [$t('calc.breakdown'), $t('calc.amount')],
         Rows: [
           ...rows.map(([k, v]) => [$t(k), m(v)]),
           [$t('calc.cost'), m(result.Cost)],
@@ -336,7 +346,6 @@
   <section class="card">
       <h3>{$t('calc.breakdown')}</h3>
       {#if result}
-      <div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
       <table>
         <tbody>{#each rows as [key, v]}<tr><td>{$t(key)}</td><td class="n">{money(v, currency, $locale)}</td></tr>{/each}</tbody>
       </table>
@@ -361,7 +370,7 @@
           </label>
           <label>{$t('ord.number')}
             <select bind:value={orderId}>
-              {#each visibleOrders as o}<option value={o.ID}>{orderNo(o)} · {custName(o.CustomerID)} · {$t('st.' + o.Status)}</option>{/each}
+              {#each visibleOrders as o}<option value={o.ID}>{orderLabel(o)}</option>{/each}
             </select>
           </label>
           <label>{$t('ord.item')}<input bind:value={orderTitle} /></label>

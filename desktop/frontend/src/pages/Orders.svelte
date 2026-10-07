@@ -4,13 +4,14 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { openOrderId } from '../lib/nav';
-  import { downloadPDF } from '../lib/pdf';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
 
   let orders: Order[] = $state([]);
   let customers: Customer[] = $state([]);
   let detail: OrderDetail | null = $state(null);
   let newCustomerId = $state(0);
+  let newTitle = $state('');
   let itemTitle = $state('');
   let itemQty = $state(1);
   let itemCost = $state(0);
@@ -21,6 +22,7 @@
   // Правка шапки
   let editOpen = $state(false);
   let editCustomerId = $state(0);
+  let editTitle = $state('');
   let editMarginProfit = $state(0);
   let editMarginDev = $state(0);
   let editVat = $state(0);
@@ -29,6 +31,10 @@
 
   function orderNo(o: { Number: string; ID: number }): string {
     return o.Number || `#${o.ID}`;
+  }
+
+  function orderTitle(o: { Title: string; Number: string; ID: number }): string {
+    return o.Title || orderNo(o);
   }
 
   async function load() {
@@ -51,13 +57,18 @@
 
   onMount(() => {
     load();
+    registerPdfExporter(toPDF);
     // Переход из долгов: открыть заказ.
-    return openOrderId.subscribe((id) => {
+    const unsub = openOrderId.subscribe((id) => {
       if (id) {
         openOrderId.set(null);
         openDetail(id);
       }
     });
+    return () => {
+      unsub();
+      registerPdfExporter(null);
+    };
   });
 
   function custName(id: number): string {
@@ -67,7 +78,12 @@
   async function create() {
     error = '';
     try {
-      const id = await wails.createOrder(newCustomerId, 'RUB');
+      // Дефолт названия: «Клиент — ДД.ММ.ГГГГ».
+      const now = new Date();
+      const today = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
+      const title = newTitle.trim() || (newCustomerId ? `${custName(newCustomerId)} — ${today}` : today);
+      const id = await wails.createOrder(newCustomerId, 'RUB', title);
+      newTitle = '';
       await load();
       detail = await wails.orderDetail(id);
     } catch (e) {
@@ -79,6 +95,7 @@
     if (!detail) return;
     editOpen = true;
     editCustomerId = detail.order.CustomerID;
+    editTitle = detail.order.Title;
     editMarginProfit = detail.order.MarginProfit;
     editMarginDev = detail.order.MarginDev;
     editVat = detail.order.VAT;
@@ -91,6 +108,7 @@
       await wails.updateOrder({
         ...detail.order,
         CustomerID: editCustomerId,
+        Title: editTitle,
         MarginProfit: editMarginProfit,
         MarginDev: editMarginDev,
         VAT: editVat,
@@ -165,8 +183,8 @@
       await downloadPDF($t('nav.orders'), [
         {
           Title: '',
-          Headers: [$t('ord.number'), $t('cust.name'), $t('ord.status'), $t('ord.total')],
-          Rows: orders.map((o) => [orderNo(o), custName(o.CustomerID), $t('st.' + o.Status), money(o.TotalBase / 100, o.Currency, 'ru')]),
+          Headers: [$t('ord.number'), $t('ord.title'), $t('cust.name'), $t('ord.status'), $t('ord.total')],
+          Rows: orders.map((o) => [orderNo(o), orderTitle(o), custName(o.CustomerID), $t('st.' + o.Status), money(o.TotalBase / 100, o.Currency, 'ru')]),
         },
       ]);
     }
@@ -182,16 +200,16 @@
           <option value={0}>—</option>
           {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
         </select>
+        <input placeholder={$t('ord.title')} bind:value={newTitle} />
         <button onclick={create}>{$t('ord.new')}</button>
       </div>
     {/if}
-    <div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
     <table>
-      <thead><tr><th>{$t('ord.number')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th></tr></thead>
+      <thead><tr><th>{$t('ord.number')}</th><th>{$t('ord.title')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th></tr></thead>
       <tbody>
         {#each orders as o}
           <tr class:sel={detail?.order.ID === o.ID} onclick={() => openDetail(o.ID)}>
-            <td>{orderNo(o)}</td><td>{custName(o.CustomerID)}</td><td>{$t('st.' + o.Status)}</td><td class="n">{money(o.TotalBase / 100, o.Currency, 'ru')}</td>
+            <td>{orderNo(o)}</td><td>{orderTitle(o)}</td><td>{custName(o.CustomerID)}</td><td>{$t('st.' + o.Status)}</td><td class="n">{money(o.TotalBase / 100, o.Currency, 'ru')}</td>
           </tr>
         {/each}
       </tbody>
@@ -200,7 +218,7 @@
 
   {#if detail}
     <section class="card">
-      <h3>{$t('ord.number')}: {orderNo(detail.order)} · {custName(detail.order.CustomerID)}</h3>
+      <h3>{$t('ord.number')}: {orderNo(detail.order)} · {orderTitle(detail.order)}</h3>
       {#if canWrite($user)}
         <div class="row no-print">
           <select value={detail.order.Status} onchange={(e) => setStatus(e.currentTarget.value)}>
@@ -217,6 +235,7 @@
                 {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
               </select>
             </label>
+            <label>{$t('ord.title')}<input bind:value={editTitle} /></label>
             <label>{$t('calc.margin_profit')}<input type="number" min="0" step="0.01" bind:value={editMarginProfit} /></label>
             <label>{$t('calc.margin_dev')}<input type="number" min="0" step="0.01" bind:value={editMarginDev} /></label>
             <label>{$t('calc.vat')}<input type="number" min="0" step="0.01" bind:value={editVat} /></label>

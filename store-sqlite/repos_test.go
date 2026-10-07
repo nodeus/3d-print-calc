@@ -132,12 +132,13 @@ func TestOrdersFlow(t *testing.T) {
 	// Правка шапки.
 	got.CustomerID = cid
 	got.VAT = 0.2
+	got.Title = "Полка в гараж"
 	if err := repo.Update(got); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	got2, _ := repo.Get(oid)
-	if got2.VAT != 0.2 {
-		t.Fatalf("VAT не сохранился: %+v", got2)
+	if got2.VAT != 0.2 || got2.Title != "Полка в гараж" {
+		t.Fatalf("шапка не сохранилась: %+v", got2)
 	}
 	// Каскадное удаление: заказ + позиции + оплаты исчезают.
 	if err := repo.Delete(oid); err != nil {

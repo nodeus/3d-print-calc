@@ -23,9 +23,9 @@ type Section struct {
 	Rows    [][]string
 }
 
-// BuildPDF собирает A4-альбомный отчёт: титул, секции-таблицы,
-// футер nodeus.ru + номера страниц. Кириллица — DejaVu.
-func BuildPDF(docTitle string, sections []Section) ([]byte, error) {
+// BuildPDF собирает A4-альбомный отчёт: шапка приложения, титул,
+// секции-таблицы, футер nodeus.ru + номера страниц. Кириллица — DejaVu.
+func BuildPDF(appHeader, docTitle string, sections []Section) ([]byte, error) {
 	pdf := gofpdf.New("L", "mm", "A4", "")
 	registerFonts(pdf)
 	pdf.SetAuthor("3dprint-calc", true)
@@ -39,6 +39,11 @@ func BuildPDF(docTitle string, sections []Section) ([]byte, error) {
 		pdf.CellFormat(0, 10, fmt.Sprintf("стр. %d/{nb}", pdf.PageNo()), "", 0, "R", false, 0, "")
 	})
 	pdf.AddPage()
+	pdf.SetFont("DejaVu", "", 10)
+	pdf.SetTextColor(100, 100, 100)
+	pdf.Cell(0, 7, appHeader)
+	pdf.Ln(8)
+	pdf.SetTextColor(0, 0, 0)
 	pdf.SetFont("DejaVu", "B", 16)
 	pdf.Cell(0, 10, docTitle)
 	pdf.Ln(12)

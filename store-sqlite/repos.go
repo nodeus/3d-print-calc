@@ -175,10 +175,10 @@ func (r *ordersRepo) Create(o models.Order) (int64, error) {
 	if o.Currency == "" {
 		o.Currency = "RUB"
 	}
-	res, err := r.db.Exec(`INSERT INTO orders (customer_id, number, currency, fx_rate, margin_profit,
+	res, err := r.db.Exec(`INSERT INTO orders (customer_id, number, title, currency, fx_rate, margin_profit,
 		margin_dev, vat, status, total_base, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-		nullInt(o.CustomerID), o.Number, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+		nullInt(o.CustomerID), o.Number, o.Title, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev,
 		o.VAT, o.Status, o.CreatedAt)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_ORDER_CREATE: %w", err)
@@ -191,9 +191,9 @@ func (r *ordersRepo) Create(o models.Order) (int64, error) {
 func (r *ordersRepo) Get(id int64) (models.Order, error) {
 	var o models.Order
 	var custID sql.NullInt64
-	err := r.db.QueryRow(`SELECT id, customer_id, number, currency, fx_rate, margin_profit,
+	err := r.db.QueryRow(`SELECT id, customer_id, number, title, currency, fx_rate, margin_profit,
 		margin_dev, vat, status, total_base, created_at FROM orders WHERE id=?`, id).
-		Scan(&o.ID, &custID, &o.Number, &o.Currency, &o.FxRate, &o.MarginProfit,
+		Scan(&o.ID, &custID, &o.Number, &o.Title, &o.Currency, &o.FxRate, &o.MarginProfit,
 			&o.MarginDev, &o.VAT, &o.Status, &o.TotalBase, &o.CreatedAt)
 	if err != nil {
 		return o, fmt.Errorf("ERR_ORDER_GET: %w", err)
@@ -204,7 +204,7 @@ func (r *ordersRepo) Get(id int64) (models.Order, error) {
 
 // List возвращает все заказы (новые первыми).
 func (r *ordersRepo) List() ([]models.Order, error) {
-	rows, err := r.db.Query(`SELECT id, customer_id, number, currency, fx_rate, margin_profit,
+	rows, err := r.db.Query(`SELECT id, customer_id, number, title, currency, fx_rate, margin_profit,
 		margin_dev, vat, status, total_base, created_at FROM orders ORDER BY id DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_ORDER_LIST: %w", err)
@@ -214,7 +214,7 @@ func (r *ordersRepo) List() ([]models.Order, error) {
 	for rows.Next() {
 		var o models.Order
 		var custID sql.NullInt64
-		if err := rows.Scan(&o.ID, &custID, &o.Number, &o.Currency, &o.FxRate, &o.MarginProfit,
+		if err := rows.Scan(&o.ID, &custID, &o.Number, &o.Title, &o.Currency, &o.FxRate, &o.MarginProfit,
 			&o.MarginDev, &o.VAT, &o.Status, &o.TotalBase, &o.CreatedAt); err != nil {
 			return nil, fmt.Errorf("ERR_ORDER_LIST: %w", err)
 		}
@@ -229,9 +229,9 @@ func (r *ordersRepo) Update(o models.Order) error {
 	if o.ID == 0 {
 		return fmt.Errorf("ERR_ORDER_SAVE: пустой id")
 	}
-	if _, err := r.db.Exec(`UPDATE orders SET customer_id=?, currency=?, fx_rate=?,
+	if _, err := r.db.Exec(`UPDATE orders SET customer_id=?, title=?, currency=?, fx_rate=?,
 		margin_profit=?, margin_dev=?, vat=? WHERE id=?`,
-		nullInt(o.CustomerID), o.Currency, o.FxRate, o.MarginProfit, o.MarginDev, o.VAT, o.ID); err != nil {
+		nullInt(o.CustomerID), o.Title, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev, o.VAT, o.ID); err != nil {
 		return fmt.Errorf("ERR_ORDER_SAVE: %w", err)
 	}
 	return nil
