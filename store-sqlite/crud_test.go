@@ -47,6 +47,43 @@ func TestMaterialCRUDGuards(t *testing.T) {
 	}
 }
 
+func TestSetMaterialPrice(t *testing.T) {
+	db := openTestDB(t)
+	repo := db.Materials()
+	// Материал без катушки (стаб): цена обязана сохраниться через создание катушки.
+	id, err := repo.UpsertByCode(models.Material{Code: "PETG-STUB", Density: 1.27})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetMaterialPrice(id, 75000, "RUB"); err != nil {
+		t.Fatalf("SetMaterialPrice на стабе: %v", err)
+	}
+	spools, err := repo.ListSpools(id)
+	if err != nil || len(spools) != 1 || spools[0].Price != 75000 {
+		t.Fatalf("катушка не создалась: %+v, %v", spools, err)
+	}
+	// Повторный вызов обновляет, а не плодит катушки; остаток не трогает.
+	if _, err := db.Materials().AddSpool(models.Spool{MaterialID: id, Price: 1, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 321}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetMaterialPrice(id, 80000, "RUB"); err != nil {
+		t.Fatal(err)
+	}
+	spools, _ = repo.ListSpools(id)
+	if len(spools) != 2 || spools[0].Price != 80000 {
+		t.Fatalf("цена первой катушки: %+v", spools)
+	}
+	if spools[1].WeightLeftG != 321 {
+		t.Fatalf("вторая катушка тронута: %+v", spools[1])
+	}
+	if err := repo.SetMaterialPrice(0, 100, "RUB"); err == nil {
+		t.Fatal("пустой material_id принят")
+	}
+	if err := repo.SetMaterialPrice(id, -5, "RUB"); err == nil {
+		t.Fatal("отрицательная цена принята")
+	}
+}
+
 func TestPrinterCRUDGuards(t *testing.T) {
 	db := openTestDB(t)
 	repo := db.Printers()

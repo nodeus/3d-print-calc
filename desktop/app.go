@@ -130,6 +130,15 @@ func (a *App) UpdateSpool(s models.Spool) error {
 	return a.db.Materials().UpdateSpool(s)
 }
 
+// SetMaterialPrice ставит цену материала: обновляет первую катушку
+// или создаёт её (manager+). Остальное не трогает.
+func (a *App) SetMaterialPrice(materialID, priceMinor int64, currency string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().SetMaterialPrice(materialID, priceMinor, currency)
+}
+
 // AddPrinter создаёт принтер со всеми характеристиками (manager+).
 func (a *App) AddPrinter(p models.Printer) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {

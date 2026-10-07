@@ -294,6 +294,7 @@ declare global {
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
+          SetMaterialPrice(materialId: number, priceMinor: number, currency: string): Promise<void>;
           AddPrinter(p: Printer): Promise<number>;
           UpdatePrinter(p: Printer): Promise<void>;
           DeletePrinter(id: number): Promise<void>;
@@ -356,6 +357,8 @@ export const wails = {
   updateMaterial: (m: Material) => api().UpdateMaterial(m),
   deleteMaterial: (id: number) => api().DeleteMaterial(id),
   updateSpool: (s: Spool) => api().UpdateSpool(s),
+  setMaterialPrice: (materialId: number, priceMinor: number, currency: string) =>
+    api().SetMaterialPrice(materialId, priceMinor, currency),
   addPrinter: (p: Printer) => api().AddPrinter(p),
   updatePrinter: (p: Printer) => api().UpdatePrinter(p),
   deletePrinter: (id: number) => api().DeletePrinter(id),

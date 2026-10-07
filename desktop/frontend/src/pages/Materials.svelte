@@ -48,16 +48,8 @@
     error = '';
     try {
       await wails.updateMaterial(edit);
-      if (editPrice >= 0) {
-        const m = materials.find((x) => x.id === editId);
-        if (m && m.spoolId) {
-          await wails.updateSpool({
-            ID: m.spoolId, MaterialID: m.id, Price: Math.round(editPrice * 100),
-            Currency: m.currency, FxRate: 1, BoughtAt: '', WeightInitG: 1000,
-            WeightLeftG: m.spoolLeftG || 1000, Archived: false,
-          });
-        }
-      }
+      // Цена — отдельным вызовом: создаст катушку, если её нет, остальное не трогает.
+      await wails.setMaterialPrice(editId, Math.round(editPrice * 100), 'RUB');
       editId = 0;
       await load();
     } catch (e) {

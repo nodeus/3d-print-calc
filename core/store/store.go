@@ -16,6 +16,7 @@ type Materials interface {
 	AddSpool(s models.Spool) (int64, error)
 	ListSpools(materialID int64) ([]models.Spool, error)
 	UpdateSpool(s models.Spool) error // цена/валюта/остаток партии
+	SetMaterialPrice(materialID, priceMinor int64, currency string) error // цена первой катушки (создаст при отсутствии)
 }
 
 // Printers — парк принтеров.
