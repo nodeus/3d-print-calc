@@ -167,3 +167,30 @@ func TestRolesDeleteGuards(t *testing.T) {
 		t.Fatal("самоудаление последнего админа обязано блокироваться")
 	}
 }
+
+// TestMaterialColorFavs: фавориты цветов round-trip, мусор отфильтровывается.
+func TestMaterialColorFavs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{db: db, dbPath: path}
+	if got := app.GetMaterialColorFavs(); len(got) != 0 {
+		t.Fatalf("пусто: %v", got)
+	}
+	if err := app.SetMaterialColorFavs([]string{"#FF0000"}); err == nil {
+		t.Fatal("гость пишет фавориты")
+	}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.SetMaterialColorFavs([]string{"#FF0000", "мусор", "#00c000", "#FF0000"}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got := app.GetMaterialColorFavs()
+	if len(got) != 2 || got[0] != "#ff0000" || got[1] != "#00c000" {
+		t.Fatalf("favs = %v", got)
+	}
+}
