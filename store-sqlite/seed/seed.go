@@ -101,7 +101,7 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
-	imp, err := ImportRows(db, printerID, rows)
+	imp, err := ImportRows(db, printerID, rows, "import")
 	if err != nil {
 		return st, err
 	}
@@ -112,7 +112,11 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 
 // ImportRows импортирует разобранные строки истории (upsert по filename+start_at).
 // Справочник подтягивается из БД: неизвестные коды → стабы. Возвращает статистику.
-func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error) {
+// origin — происхождение работ: import (CSV/сид) или moonraker.
+func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string) (Stats, error) {
+	if origin == "" {
+		origin = "import"
+	}
 	var st Stats
 	mats := db.Materials()
 	list, err := mats.List()
@@ -164,7 +168,7 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error
 		if _, err := jobs.Upsert(models.Job{
 			Filename: r.Filename, StartAt: r.StartTime.Format("2006-01-02 15:04"),
 			EndAt:     r.EndTime.Format("2006-01-02 15:04"),
-			PrinterID: printerID, SpoolID: spoolID, Status: r.Status,
+			PrinterID: printerID, SpoolID: spoolID, Status: r.Status, Origin: origin,
 			PrintSec: r.PrintDuration, TotalSec: r.TotalDuration,
 			EstimatedSec: r.EstimatedTime, SizeBytes: r.Size, FilamentTotalMm: r.FilamentTotal,
 			WeightG: weightG, LengthM: r.FilamentUsed / 1000, Slicer: r.Slicer,

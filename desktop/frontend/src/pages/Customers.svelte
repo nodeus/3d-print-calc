@@ -96,7 +96,6 @@
 <style>
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   input, button { padding: 6px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
+  table { font-size: 14px; }
   .err { color: #b00; }
 </style>

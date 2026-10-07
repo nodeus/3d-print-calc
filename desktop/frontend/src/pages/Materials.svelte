@@ -48,16 +48,8 @@
     error = '';
     try {
       await wails.updateMaterial(edit);
-      if (editPrice >= 0) {
-        const m = materials.find((x) => x.id === editId);
-        if (m && m.spoolId) {
-          await wails.updateSpool({
-            ID: m.spoolId, MaterialID: m.id, Price: Math.round(editPrice * 100),
-            Currency: m.currency, FxRate: 1, BoughtAt: '', WeightInitG: 1000,
-            WeightLeftG: m.spoolLeftG || 1000, Archived: false,
-          });
-        }
-      }
+      // Цена — отдельным вызовом: создаст катушку, если её нет, остальное не трогает.
+      await wails.setMaterialPrice(editId, Math.round(editPrice * 100), 'RUB');
       editId = 0;
       await load();
     } catch (e) {
@@ -117,8 +109,6 @@
 <style>
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   input, select, button { padding: 6px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
-  td.n { text-align: right; }
+  table { font-size: 14px; }
   .err { color: #b00; }
 </style>

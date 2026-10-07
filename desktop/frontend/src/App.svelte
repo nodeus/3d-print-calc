@@ -11,6 +11,7 @@
   import Info from './pages/Info.svelte';
   import { t, locale, initLocale, switchLocale } from './lib/i18n';
   import { user, refreshUser } from './lib/session';
+  import { goTab } from './lib/nav';
   import { wails } from './lib/wails';
   import { onMount } from 'svelte';
 
@@ -20,6 +21,13 @@
   onMount(async () => {
     await initLocale();
     await refreshUser();
+    const unsub = goTab.subscribe((v) => {
+      if (v) {
+        goTab.set(null);
+        tab = v as Tab;
+      }
+    });
+    return unsub;
   });
 
   const tabs: { id: Tab; key: string }[] = [

@@ -13,10 +13,44 @@
   let csvReport: ImportReport | null = $state(null);
   let csvApplied: ImportReport | null = $state(null);
   let error = $state('');
+  // Нумерация заказов
+  let numTemplate = $state('');
+  let numSeq = $state('');
+  let numPreview = $state('');
+
+  async function loadNumbers() {
+    try {
+      const s = await wails.orderNumberSettings();
+      numTemplate = s.template ?? '';
+      numSeq = s.seq ?? '';
+      numPreview = s.preview ?? '';
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function previewNumbers() {
+    try {
+      numPreview = await wails.previewOrderNumber(numTemplate);
+    } catch (e) {
+      numPreview = String(e);
+    }
+  }
+
+  async function saveNumbers() {
+    error = '';
+    try {
+      await wails.setOrderNumberSettings(numTemplate, numSeq);
+      await loadNumbers();
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   onMount(async () => {
     try {
       currency = await wails.getBaseCurrency();
+      await loadNumbers();
     } catch (e) {
       console.error(e);
     }
@@ -83,6 +117,15 @@
 </div>
 
 {#if error}<p class="err">{error}</p>{/if}
+
+<div class="card">
+  <h3>{$t('set.ordnum')}</h3>
+  <label>{$t('set.ordnum_tpl')}<input bind:value={numTemplate} oninput={previewNumbers} placeholder="{YYYY}-{nnnn}" /></label>
+  <label>{$t('set.ordnum_seq')}<input type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
+  <p>{$t('set.ordnum_preview')}: <b>{numPreview}</b></p>
+  <p class="note">{$t('set.ordnum_help')}</p>
+  <div class="row"><button onclick={saveNumbers}>{$t('common.save')}</button></div>
+</div>
 
 {#if isAdmin($user)}
   <div class="card wide">

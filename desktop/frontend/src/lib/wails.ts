@@ -124,6 +124,7 @@ export interface JobDTO {
   PrinterID: number;
   SpoolID: number;
   Status: string;
+  Origin: string;
   PrintSec: number;
   TotalSec: number;
   EstimatedSec: number;
@@ -181,6 +182,7 @@ export interface Customer {
 export interface Order {
   ID: number;
   CustomerID: number;
+  Number: string;
   Currency: string;
   FxRate: number;
   MarginProfit: number;
@@ -280,6 +282,13 @@ declare global {
           ListOrders(): Promise<Order[]>;
           GetOrderDetail(id: number): Promise<OrderDetail>;
           SetOrderStatus(id: number, status: string): Promise<void>;
+          UpdateOrder(o: Order): Promise<void>;
+          DeleteOrder(id: number): Promise<void>;
+          DeleteJob(id: number): Promise<void>;
+          OrderNumberSettings(): Promise<Record<string, string>>;
+          SetOrderNumberSettings(template: string, seq: string): Promise<void>;
+          PreviewOrderNumber(template: string): Promise<string>;
+          OpenURL(url: string): Promise<void>;
           AddOrderItem(item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }): Promise<number>;
           AddPayment(orderId: number, amount: number, note: string): Promise<number>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
@@ -294,6 +303,7 @@ declare global {
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
+          SetMaterialPrice(materialId: number, priceMinor: number, currency: string): Promise<void>;
           AddPrinter(p: Printer): Promise<number>;
           UpdatePrinter(p: Printer): Promise<void>;
           DeletePrinter(id: number): Promise<void>;
@@ -340,6 +350,13 @@ export const wails = {
   listOrders: () => api().ListOrders(),
   orderDetail: (id: number) => api().GetOrderDetail(id),
   setOrderStatus: (id: number, status: string) => api().SetOrderStatus(id, status),
+  updateOrder: (o: Order) => api().UpdateOrder(o),
+  deleteOrder: (id: number) => api().DeleteOrder(id),
+  deleteJob: (id: number) => api().DeleteJob(id),
+  orderNumberSettings: () => api().OrderNumberSettings(),
+  setOrderNumberSettings: (template: string, seq: string) => api().SetOrderNumberSettings(template, seq),
+  previewOrderNumber: (template: string) => api().PreviewOrderNumber(template),
+  openURL: (url: string) => api().OpenURL(url),
   addOrderItem: (item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }) =>
     api().AddOrderItem(item),
   addPayment: (orderId: number, amount: number, note: string) => api().AddPayment(orderId, amount, note),
@@ -356,6 +373,8 @@ export const wails = {
   updateMaterial: (m: Material) => api().UpdateMaterial(m),
   deleteMaterial: (id: number) => api().DeleteMaterial(id),
   updateSpool: (s: Spool) => api().UpdateSpool(s),
+  setMaterialPrice: (materialId: number, priceMinor: number, currency: string) =>
+    api().SetMaterialPrice(materialId, priceMinor, currency),
   addPrinter: (p: Printer) => api().AddPrinter(p),
   updatePrinter: (p: Printer) => api().UpdatePrinter(p),
   deletePrinter: (id: number) => api().DeletePrinter(id),

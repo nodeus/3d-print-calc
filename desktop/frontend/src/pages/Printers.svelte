@@ -194,9 +194,7 @@
   .row { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 120px; }
   input, select, button { padding: 6px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 12px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
-  td.n { text-align: right; }
+  table { font-size: 14px; margin-bottom: 12px; }
   button.warn { border-color: #b00; color: #b00; }
   .ok { color: green; }
   .err { color: #b00; }

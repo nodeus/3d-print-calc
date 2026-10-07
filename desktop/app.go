@@ -130,6 +130,15 @@ func (a *App) UpdateSpool(s models.Spool) error {
 	return a.db.Materials().UpdateSpool(s)
 }
 
+// SetMaterialPrice ставит цену материала: обновляет первую катушку
+// или создаёт её (manager+). Остальное не трогает.
+func (a *App) SetMaterialPrice(materialID, priceMinor int64, currency string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().SetMaterialPrice(materialID, priceMinor, currency)
+}
+
 // AddPrinter создаёт принтер со всеми характеристиками (manager+).
 func (a *App) AddPrinter(p models.Printer) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
@@ -232,10 +241,18 @@ func (a *App) SaveJob(in JobInput) (int64, error) {
 	})
 	return a.db.Jobs().Upsert(models.Job{
 		Filename: in.Filename, StartAt: time.Now().Format("2006-01-02 15:04"),
-		PrinterID: in.PrinterID, SpoolID: in.SpoolID, Status: in.Status,
+		PrinterID: in.PrinterID, SpoolID: in.SpoolID, Status: in.Status, Origin: "manual",
 		PrintSec: in.TotalSec, TotalSec: in.TotalSec,
 		WeightG: in.WeightG, LengthM: in.LengthM, CostSnapshot: string(snap),
 	})
+}
+
+// DeleteJob удаляет работу из истории (manager+, только manual).
+func (a *App) DeleteJob(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Jobs().DeleteJob(id)
 }
 
 // GetJobs возвращает историю (limit<=0 — всё).

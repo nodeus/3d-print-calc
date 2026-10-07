@@ -15,7 +15,8 @@ type Materials interface {
 	Delete(id int64) error          // блок, если есть катушки
 	AddSpool(s models.Spool) (int64, error)
 	ListSpools(materialID int64) ([]models.Spool, error)
-	UpdateSpool(s models.Spool) error // цена/валюта/остаток партии
+	UpdateSpool(s models.Spool) error                                     // цена/валюта/остаток партии
+	SetMaterialPrice(materialID, priceMinor int64, currency string) error // цена первой катушки (создаст при отсутствии)
 }
 
 // Printers — парк принтеров.
@@ -31,6 +32,7 @@ type Printers interface {
 type Jobs interface {
 	Upsert(j models.Job) (int64, error)
 	List(limit int) ([]models.Job, error)
+	DeleteJob(id int64) error // только origin=manual
 }
 
 // Users — локальные пользователи и роли.
@@ -56,6 +58,8 @@ type Orders interface {
 	Create(o models.Order) (int64, error)
 	Get(id int64) (models.Order, error)
 	List() ([]models.Order, error)
+	Update(o models.Order) error // клиент/валюта/маржи/НДС (статус — через SetStatus)
+	Delete(id int64) error       // каскад: позиции + оплаты
 	SetStatus(id int64, status string) error
 	AddItem(it models.OrderItem) (int64, error)
 	Items(orderID int64) ([]models.OrderItem, error)

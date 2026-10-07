@@ -129,6 +129,96 @@ func TestOrdersFlow(t *testing.T) {
 	if len(debts) != 0 {
 		t.Fatalf("долг обязан закрыться: %+v", debts)
 	}
+	// Правка шапки.
+	got.CustomerID = cid
+	got.VAT = 0.2
+	if err := repo.Update(got); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	got2, _ := repo.Get(oid)
+	if got2.VAT != 0.2 {
+		t.Fatalf("VAT не сохранился: %+v", got2)
+	}
+	// Каскадное удаление: заказ + позиции + оплаты исчезают.
+	if err := repo.Delete(oid); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if items, _ := repo.Items(oid); len(items) != 0 {
+		t.Fatalf("позиции остались: %d", len(items))
+	}
+	if pays, _ := repo.Payments(oid); len(pays) != 0 {
+		t.Fatalf("оплаты остались: %d", len(pays))
+	}
+	if _, err := repo.Get(oid); err == nil {
+		t.Fatal("заказ остался после Delete")
+	}
+}
+
+func TestNextOrderNumber(t *testing.T) {
+	db := openTestDB(t)
+	// Дефолты: {YYYY}-{nnnn} с 1.
+	n1, err := db.NextOrderNumber()
+	if err != nil {
+		t.Fatalf("NextOrderNumber: %v", err)
+	}
+	n2, err := db.NextOrderNumber()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n1 == n2 {
+		t.Fatalf("счётчик не движется: %q", n1)
+	}
+	// Свой шаблон + свой счётчик.
+	if err := db.SetSetting("order_number_template", `{"Заказ №"}{n}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetSetting("order_number_seq", "99"); err != nil {
+		t.Fatal(err)
+	}
+	n3, err := db.NextOrderNumber()
+	if err != nil || n3 != "Заказ №99" {
+		t.Fatalf("custom = %q, %v", n3, err)
+	}
+	// Битый шаблон — ошибка без сдвига счётчика.
+	if err := db.SetSetting("order_number_template", "{yyyy}"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.NextOrderNumber(); err == nil {
+		t.Fatal("битый шаблон принят")
+	}
+	n4, err := db.NextOrderNumber()
+	if err == nil {
+		t.Fatalf("после битого шаблона всё ещё ок: %q", n4)
+	}
+	// Починили — счётчик продолжил со 100.
+	if err := db.SetSetting("order_number_template", "{n}"); err != nil {
+		t.Fatal(err)
+	}
+	n5, err := db.NextOrderNumber()
+	if err != nil || n5 != "100" {
+		t.Fatalf("после починки = %q, %v", n5, err)
+	}
+}
+
+func TestDeleteJobOriginGuard(t *testing.T) {
+	db := openTestDB(t)
+	manual, err := db.Jobs().Upsert(models.Job{Filename: "m.gcode", StartAt: "2026-01-01 10:00", Origin: "manual"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	imp, err := db.Jobs().Upsert(models.Job{Filename: "i.gcode", StartAt: "2026-01-01 10:00", Origin: "import"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Jobs().DeleteJob(imp); err == nil {
+		t.Fatal("удаление import обязано блокироваться")
+	}
+	if err := db.Jobs().DeleteJob(manual); err != nil {
+		t.Fatalf("DeleteJob manual: %v", err)
+	}
+	if err := db.Jobs().DeleteJob(999999); err == nil {
+		t.Fatal("удаление несуществующей обязано вернуть ошибку")
+	}
 }
 
 func TestReports(t *testing.T) {

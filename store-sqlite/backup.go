@@ -281,7 +281,7 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool) (ImportReport, error) {
 	if len(printers) == 0 {
 		return rep, fmt.Errorf("ERR_IMPORT: нет принтеров — создайте принтер перед импортом")
 	}
-	st, err := seed.ImportRows(d, printers[0].ID, rows)
+	st, err := seed.ImportRows(d, printers[0].ID, rows, "import")
 	if err != nil {
 		return rep, err
 	}

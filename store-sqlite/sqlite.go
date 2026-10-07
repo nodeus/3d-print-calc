@@ -280,9 +280,9 @@ func (r *printersRepo) SetMoonrakerURL(id int64, url string) error {
 // Upsert вставляет печать или обновляет её по паре (filename, start_at).
 func (r *jobsRepo) Upsert(j models.Job) (int64, error) {
 	res, err := r.db.Exec(`INSERT INTO jobs (filename, start_at, end_at, printer_id, spool_id, status,
-		print_sec, total_sec, estimated_sec, size_bytes, filament_total_mm,
+		origin, print_sec, total_sec, estimated_sec, size_bytes, filament_total_mm,
 		weight_g, length_m, slicer, cost_snapshot)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(filename, start_at) DO UPDATE SET end_at=excluded.end_at,
 		printer_id=excluded.printer_id, spool_id=excluded.spool_id, status=excluded.status,
 		print_sec=excluded.print_sec, total_sec=excluded.total_sec,
@@ -291,7 +291,7 @@ func (r *jobsRepo) Upsert(j models.Job) (int64, error) {
 		length_m=excluded.length_m, slicer=excluded.slicer,
 		cost_snapshot=excluded.cost_snapshot`,
 		j.Filename, j.StartAt, j.EndAt, nullInt(j.PrinterID), nullInt(j.SpoolID), j.Status,
-		j.PrintSec, j.TotalSec, j.EstimatedSec, j.SizeBytes, j.FilamentTotalMm,
+		j.Origin, j.PrintSec, j.TotalSec, j.EstimatedSec, j.SizeBytes, j.FilamentTotalMm,
 		j.WeightG, j.LengthM, j.Slicer, j.CostSnapshot)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_JOB_SAVE: %w", err)
@@ -307,9 +307,28 @@ func (r *jobsRepo) Upsert(j models.Job) (int64, error) {
 	return id, nil
 }
 
+// DeleteJob удаляет работу. Разрешено только manual (ручные из калькулятора);
+// импортированные и moonraker удаляются только через CSV/бэкап-перезалив.
+func (r *jobsRepo) DeleteJob(id int64) error {
+	var origin string
+	if err := r.db.QueryRow(`SELECT origin FROM jobs WHERE id=?`, id).Scan(&origin); err != nil {
+		return fmt.Errorf("ERR_JOB_DELETE: %w", err)
+	}
+	if origin == "" {
+		origin = "import"
+	}
+	if origin != "manual" {
+		return fmt.Errorf("ERR_JOB_DELETE: можно удалять только работы, добавленные вручную")
+	}
+	if _, err := r.db.Exec(`DELETE FROM jobs WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_JOB_DELETE: %w", err)
+	}
+	return nil
+}
+
 // List возвращает последние печати (limit <= 0 — все).
 func (r *jobsRepo) List(limit int) ([]models.Job, error) {
-	q := `SELECT id, filename, start_at, end_at, printer_id, spool_id, status,
+	q := `SELECT id, filename, start_at, end_at, printer_id, spool_id, status, origin,
 		print_sec, total_sec, estimated_sec, size_bytes, filament_total_mm,
 		weight_g, length_m, slicer, cost_snapshot
 		FROM jobs ORDER BY start_at DESC`
@@ -329,7 +348,7 @@ func (r *jobsRepo) List(limit int) ([]models.Job, error) {
 		var j models.Job
 		var printerID, spoolID sql.NullInt64
 		if err := rows.Scan(&j.ID, &j.Filename, &j.StartAt, &j.EndAt, &printerID, &spoolID,
-			&j.Status, &j.PrintSec, &j.TotalSec, &j.EstimatedSec, &j.SizeBytes,
+			&j.Status, &j.Origin, &j.PrintSec, &j.TotalSec, &j.EstimatedSec, &j.SizeBytes,
 			&j.FilamentTotalMm, &j.WeightG, &j.LengthM, &j.Slicer, &j.CostSnapshot); err != nil {
 			return nil, fmt.Errorf("ERR_JOB_LIST: %w", err)
 		}
