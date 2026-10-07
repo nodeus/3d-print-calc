@@ -86,6 +86,7 @@ type Printer struct {
 	PowerKW           float64
 	MaintPerHour      int64
 	ResourceHours     float64
+	MoonrakerURL      string // http://host:7125, пусто = не настроен
 }
 
 // Job — печать/работа со снапшотом расчёта.

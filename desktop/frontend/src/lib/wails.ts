@@ -67,6 +67,7 @@ export interface PrinterDTO {
   PowerKW: number;
   MaintPerHour: number;
   ResourceHours: number;
+  MoonrakerURL: string;
   amortPerHour: number;
 }
 
@@ -235,6 +236,10 @@ declare global {
           TopMaterials(): Promise<MaterialStat[]>;
           PrinterLoad(): Promise<PrinterStat[]>;
           Debts(): Promise<Debt[]>;
+          SetMoonrakerURL(printerId: number, url: string): Promise<void>;
+          MoonrakerStatus(printerId: number): Promise<string>;
+          MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
+          MoonrakerApply(): Promise<ImportReport>;
         };
       };
     }
@@ -282,4 +287,8 @@ export const wails = {
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
   debts: () => api().Debts(),
+  setMoonrakerURL: (printerId: number, url: string) => api().SetMoonrakerURL(printerId, url),
+  moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
+  moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
+  moonrakerApply: () => api().MoonrakerApply(),
 };

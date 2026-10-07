@@ -19,6 +19,7 @@ type Materials interface {
 type Printers interface {
 	Save(p models.Printer) (int64, error)
 	List() ([]models.Printer, error)
+	SetMoonrakerURL(id int64, url string) error
 }
 
 // Jobs — история печати. Импорт идемпотентен по filename+start_at.

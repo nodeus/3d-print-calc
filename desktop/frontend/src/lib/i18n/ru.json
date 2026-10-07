@@ -112,5 +112,8 @@
   "rep.debts": "Долги",
   "rep.topmats": "Топ материалов",
   "rep.jobs": "Печати",
-  "rep.load": "Загрузка принтеров"
+  "rep.load": "Загрузка принтеров",
+  "moon.title": "Moonraker (K1C)",
+  "moon.check": "Проверить связь",
+  "moon.import": "Импорт истории (dry-run)"
 }

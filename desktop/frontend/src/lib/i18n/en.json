@@ -112,5 +112,8 @@
   "rep.debts": "Debts",
   "rep.topmats": "Top materials",
   "rep.jobs": "Jobs",
-  "rep.load": "Printer load"
+  "rep.load": "Printer load",
+  "moon.title": "Moonraker (K1C)",
+  "moon.check": "Check connection",
+  "moon.import": "Import history (dry-run)"
 }
