@@ -24,7 +24,7 @@ func ToBase(amount, fxRate float64) float64 {
 //
 // Заменяет захардкоженную 1.23 из Excel: density берётся из справочника
 // materials (обычно 1.27, вариативно 1.24). diameterMM — диаметр прутка
-// (1.75), lengthMM — длина в миллиметрах (filament_used из истории ×1000).
+// (1.75), lengthMM — длина в миллиметрах (filament_used из истории).
 func WeightFromLength(density, diameterMM, lengthMM float64) float64 {
 	r := diameterMM / 2
 	return density * math.Pi * r * r * lengthMM / 1000
