@@ -5,8 +5,15 @@
 
 ```
 go run ./tools/release -platforms windows/amd64
-go run ./tools/release -platforms windows/amd64,linux/amd64 -version 0.2.0 -date 2026-10-08
+go run ./tools/release -platforms windows/amd64,linux/amd64 -version 1.0.0 -date 2026-10-08 -upx=false
 ```
+
+Windows-exe пакуются UPX (`utils/upx.exe` в корне репо, в git не идёт):
+обычно −40…−60% размера. Минусы UPX, о которых надо знать:
+
+- некоторые антивирусы ругаются на UPX-упакованные файлы (ложные срабатывания);
+- чуть более медленный холодный старт (распаковка в память);
+- отладка по такому бинарнику затруднена — для диагностики собирайте с `-upx=false`.
 
 Раскладка артефактов (в git не коммитится):
 
