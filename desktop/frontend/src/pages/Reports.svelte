@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt } from '../lib/wails';
   import { t } from '../lib/i18n';
+  import { gotoOrder } from '../lib/nav';
   import { money, num, hms } from '../lib/format';
 
   let revenue: MonthRevenue[] = $state([]);
@@ -34,8 +35,8 @@
   <section class="card">
     <h3>{$t('rep.debts')}</h3>
     <table>
-      <thead><tr><th>#</th><th>{$t('cust.name')}</th><th>{$t('ord.balance')}</th><th>{$t('ord.status')}</th></tr></thead>
-      <tbody>{#each debts as d}<tr><td>{d.orderId}</td><td>{d.customer}</td><td class="n">{money(d.balance / 100, 'RUB', 'ru')}</td><td>{d.status}</td></tr>{/each}</tbody>
+      <thead><tr><th>#</th><th>{$t('cust.name')}</th><th class="n">{$t('ord.balance')}</th><th>{$t('ord.status')}</th></tr></thead>
+      <tbody>{#each debts as d}<tr class="link" onclick={() => gotoOrder(d.orderId)}><td>{d.orderId}</td><td>{d.customer}</td><td class="n">{money(d.balance / 100, 'RUB', 'ru')}</td><td>{$t('st.' + d.status)}</td></tr>{/each}</tbody>
     </table>
   </section>
   <section class="card">
@@ -58,7 +59,6 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
   h3 { margin: 0 0 8px; font-size: 15px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table { font-size: 13px; }
+  tr.link { cursor: pointer; }
 </style>

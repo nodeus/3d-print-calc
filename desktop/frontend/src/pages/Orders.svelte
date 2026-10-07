@@ -3,6 +3,7 @@
   import { wails, type Order, type OrderDetail, type Customer } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { openOrderId } from '../lib/nav';
   import { money } from '../lib/format';
 
   let orders: Order[] = $state([]);
@@ -15,8 +16,19 @@
   let itemPrice = $state(0);
   let payAmount = $state(0);
   let payNote = $state('');
+  let error = $state('');
+  // Правка шапки
+  let editOpen = $state(false);
+  let editCustomerId = $state(0);
+  let editMarginProfit = $state(0);
+  let editMarginDev = $state(0);
+  let editVat = $state(0);
 
   const statuses = ['draft', 'quoted', 'in_work', 'done', 'paid', 'cancelled'];
+
+  function orderNo(o: { Number: string; ID: number }): string {
+    return o.Number || `#${o.ID}`;
+  }
 
   async function load() {
     try {
@@ -24,22 +36,82 @@
       customers = await wails.listCustomers();
       if (detail) detail = await wails.orderDetail(detail.order.ID);
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
-  onMount(load);
+
+  async function openDetail(id: number) {
+    try {
+      detail = await wails.orderDetail(id);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  onMount(async () => {
+    await load();
+    // Переход из долгов: открыть заказ.
+    const unsub = openOrderId.subscribe((id) => {
+      if (id) {
+        openOrderId.set(null);
+        openDetail(id);
+      }
+    });
+    return unsub;
+  });
 
   function custName(id: number): string {
     return customers.find((c) => c.ID === id)?.Name ?? `#${id}`;
   }
 
   async function create() {
+    error = '';
     try {
       const id = await wails.createOrder(newCustomerId, 'RUB');
       await load();
       detail = await wails.orderDetail(id);
     } catch (e) {
-      console.error(e);
+      error = String(e);
+    }
+  }
+
+  function startEditHead() {
+    if (!detail) return;
+    editOpen = true;
+    editCustomerId = detail.order.CustomerID;
+    editMarginProfit = detail.order.MarginProfit;
+    editMarginDev = detail.order.MarginDev;
+    editVat = detail.order.VAT;
+  }
+
+  async function saveHead() {
+    if (!detail) return;
+    error = '';
+    try {
+      await wails.updateOrder({
+        ...detail.order,
+        CustomerID: editCustomerId,
+        MarginProfit: editMarginProfit,
+        MarginDev: editMarginDev,
+        VAT: editVat,
+      });
+      editOpen = false;
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function removeOrder() {
+    if (!detail) return;
+    error = '';
+    if (!confirm(`${orderNo(detail.order)}?`)) return;
+    try {
+      await wails.deleteOrder(detail.order.ID);
+      detail = null;
+      await load();
+    } catch (e) {
+      error = String(e);
     }
   }
 
@@ -53,7 +125,7 @@
       itemTitle = '';
       await load();
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 
@@ -65,7 +137,7 @@
       payNote = '';
       await load();
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 
@@ -75,15 +147,16 @@
       await wails.setOrderStatus(detail.order.ID, s);
       await load();
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 </script>
 
+{#if error}<p class="err">{error}</p>{/if}
 <div class="cols">
   <section>
     {#if canWrite($user)}
-      <div class="row">
+      <div class="row no-print">
         <select bind:value={newCustomerId}>
           <option value={0}>—</option>
           {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
@@ -92,11 +165,11 @@
       </div>
     {/if}
     <table>
-      <thead><tr><th>ID</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th>{$t('ord.total')}</th></tr></thead>
+      <thead><tr><th>{$t('ord.number')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th></tr></thead>
       <tbody>
         {#each orders as o}
-          <tr class:sel={detail?.order.ID === o.ID} onclick={() => wails.orderDetail(o.ID).then((d) => (detail = d))}>
-            <td>{o.ID}</td><td>{custName(o.CustomerID)}</td><td>{o.Status}</td><td class="n">{money(o.TotalBase / 100, o.Currency, 'ru')}</td>
+          <tr class:sel={detail?.order.ID === o.ID} onclick={() => openDetail(o.ID)}>
+            <td>{orderNo(o)}</td><td>{custName(o.CustomerID)}</td><td>{$t('st.' + o.Status)}</td><td class="n">{money(o.TotalBase / 100, o.Currency, 'ru')}</td>
           </tr>
         {/each}
       </tbody>
@@ -105,22 +178,39 @@
 
   {#if detail}
     <section class="card">
-      <h3>{$t('ord.order')} #{detail.order.ID} · {custName(detail.order.CustomerID)}</h3>
+      <h3>{$t('ord.number')}: {orderNo(detail.order)} · {custName(detail.order.CustomerID)}</h3>
       {#if canWrite($user)}
-        <div class="row">
+        <div class="row no-print">
           <select value={detail.order.Status} onchange={(e) => setStatus(e.currentTarget.value)}>
-            {#each statuses as s}<option value={s}>{s}</option>{/each}
+            {#each statuses as s}<option value={s}>{$t('st.' + s)}</option>{/each}
           </select>
+          <button onclick={startEditHead}>✎</button>
+          <button onclick={removeOrder}>✕</button>
         </div>
+        {#if editOpen}
+          <div class="row no-print">
+            <label>{$t('cust.name')}
+              <select bind:value={editCustomerId}>
+                <option value={0}>—</option>
+                {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
+              </select>
+            </label>
+            <label>{$t('calc.margin_profit')}<input type="number" min="0" step="0.01" bind:value={editMarginProfit} /></label>
+            <label>{$t('calc.margin_dev')}<input type="number" min="0" step="0.01" bind:value={editMarginDev} /></label>
+            <label>{$t('calc.vat')}<input type="number" min="0" step="0.01" bind:value={editVat} /></label>
+            <button onclick={saveHead}>{$t('common.save')}</button>
+            <button onclick={() => (editOpen = false)}>{$t('common.cancel')}</button>
+          </div>
+        {/if}
       {/if}
       <table>
-        <thead><tr><th>{$t('ord.item')}</th><th>{$t('ord.qty')}</th><th>{$t('calc.cost')}</th><th>{$t('calc.price')}</th></tr></thead>
+        <thead><tr><th>{$t('ord.item')}</th><th class="n">{$t('ord.qty')}</th><th class="n">{$t('calc.cost')}</th><th class="n">{$t('calc.price')}</th></tr></thead>
         <tbody>
           {#each detail.items as it}<tr><td>{it.Title}</td><td class="n">{it.Qty}</td><td class="n">{money(it.Cost / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(it.Price / 100, detail.order.Currency, 'ru')}</td></tr>{/each}
         </tbody>
       </table>
       {#if canWrite($user)}
-        <div class="row">
+        <div class="row no-print">
           <input placeholder={$t('ord.item')} bind:value={itemTitle} />
           <input type="number" min="0" step="0.5" bind:value={itemQty} />
           <input type="number" min="0" placeholder={$t('calc.cost')} bind:value={itemCost} />
@@ -131,7 +221,7 @@
       <p>{$t('ord.paid')}: {money(detail.paid / 100, detail.order.Currency, 'ru')} · {$t('ord.balance')}: <b>{money(detail.balance / 100, detail.order.Currency, 'ru')}</b></p>
       {#each detail.payments as p}<p class="pay">+{money(p.Amount / 100, detail.order.Currency, 'ru')} · {p.PaidAt} {p.Note}</p>{/each}
       {#if canWrite($user)}
-        <div class="row">
+        <div class="row no-print">
           <input type="number" min="0" placeholder={$t('ord.pay')} bind:value={payAmount} />
           <input placeholder={$t('ord.note')} bind:value={payNote} />
           <button onclick={addPay}>{$t('ord.pay_add')}</button>
@@ -145,11 +235,11 @@
   .cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; }
   .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
   .row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  label { display: flex; flex-direction: column; font-size: 12px; }
   input, select, button { padding: 6px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table { font-size: 13px; }
   tr.sel td { background: #eef; }
   tbody tr { cursor: pointer; }
   .pay { color: #666; font-size: 13px; margin: 2px 0; }
+  .err { color: #b00; }
 </style>

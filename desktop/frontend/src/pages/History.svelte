@@ -2,10 +2,13 @@
   import { onMount } from 'svelte';
   import { wails, type JobDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
+  import { user, canWrite } from '../lib/session';
   import { num, hms } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
+  import { goTab } from '../lib/nav';
 
   let jobs: JobDTO[] = $state([]);
+  let error = $state('');
   let query = $state('');
   let statusFilter = $state('');
   let sortKey: 'filename' | 'start' | 'status' | 'weight' | 'cost' = $state('start');
@@ -13,13 +16,14 @@
   let page = $state(0);
   const perPage = 50;
 
-  onMount(async () => {
+  async function load() {
     try {
       jobs = await wails.jobs(0); // всё: раньше лимит 200 обрезал историю
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
-  });
+  }
+  onMount(load);
 
   function snap(j: JobDTO): { cost: number; price: number } {
     try {
@@ -81,9 +85,28 @@
 
   function toCalc(j: JobDTO) {
     prefillJob.set(j);
+    goTab.set('calc');
+  }
+
+  function originBadge(j: JobDTO): string {
+    if (j.Origin === 'manual') return $t('hist.manual');
+    if (j.Origin === 'moonraker') return 'Moonraker';
+    return '';
+  }
+
+  async function remove(j: JobDTO) {
+    error = '';
+    if (!confirm(`${j.Filename}?`)) return;
+    try {
+      await wails.deleteJob(j.ID);
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
   }
 </script>
 
+{#if error}<p class="err">{error}</p>{/if}
 <div class="toolbar no-print">
   <input placeholder={$t('hist.search')} bind:value={query} oninput={() => (page = 0)} />
   <select bind:value={statusFilter} onchange={() => (page = 0)}>
@@ -107,6 +130,7 @@
     <th><button class="th" onclick={() => toggleSort('weight')}>{$t('hist.weight')}{arrow('weight')}</button></th>
     <th><button class="th" onclick={() => toggleSort('cost')}>{$t('hist.cost')}{arrow('cost')}</button></th>
     <th>{$t('calc.price')}</th>
+    <th>{$t('hist.origin')}</th>
     <th class="no-print"></th>
   </tr></thead>
   <tbody>
@@ -119,7 +143,11 @@
         <td class="n">{num(j.WeightG)}</td>
         <td class="n">{num(snap(j).cost)}</td>
         <td class="n">{num(snap(j).price)}</td>
-        <td class="no-print"><button onclick={() => toCalc(j)}>{$t('hist.to_calc')}</button></td>
+        <td>{originBadge(j)}</td>
+        <td class="no-print">
+          <button onclick={() => toCalc(j)}>{$t('hist.to_calc')}</button>
+          {#if canWrite($user) && j.Origin === 'manual'}<button onclick={() => remove(j)}>✕</button>{/if}
+        </td>
       </tr>
     {/each}
   </tbody>
@@ -130,9 +158,8 @@
   input, select, button { padding: 6px; font-size: 14px; }
   .count { color: #666; font-size: 13px; }
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table { font-size: 13px; }
   td.file { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
+  .err { color: #b00; }
 </style>

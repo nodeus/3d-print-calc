@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order, type JobDTO } from '../lib/wails';
+  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order, type JobDTO, type Customer } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
   import { money } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
@@ -39,6 +39,8 @@
   let filename = $state('');
   let savedMsg = $state(false);
   let orders: Order[] = $state([]);
+  let customers: Customer[] = $state([]);
+  let customerId = $state(0);
   let orderId = $state(0);
   let orderTitle = $state('');
   let orderQty = $state(1);
@@ -87,6 +89,7 @@
       printers = await wails.printers();
       currency = await wails.getBaseCurrency();
       orders = (await wails.listOrders()).filter((o) => ['draft', 'quoted', 'in_work'].includes(o.Status));
+      customers = await wails.listCustomers();
       if (orders.length) orderId = orders[0].ID;
       historyJobs = await wails.jobs(0);
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
@@ -159,6 +162,22 @@
         console.error(e);
       }
     }, 120);
+  }
+
+  function orderNo(o: Order): string {
+    return o.Number || `#${o.ID}`;
+  }
+
+  function custName(id: number): string {
+    return customers.find((c) => c.ID === id)?.Name ?? '';
+  }
+
+  let visibleOrders = $derived(orders.filter((o) => !customerId || o.CustomerID === customerId));
+
+  function pickCustomer(id: number) {
+    customerId = id;
+    const first = orders.filter((o) => !id || o.CustomerID === id)[0];
+    orderId = first ? first.ID : 0;
   }
 
   async function save() {
@@ -302,9 +321,15 @@
       {#if savedMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
       {#if orders.length}
         <div class="row">
-          <label>{$t('ord.order')}
+          <label>{$t('cust.name')}
+            <select value={customerId} onchange={(e) => pickCustomer(Number(e.currentTarget.value))}>
+              <option value={0}>—</option>
+              {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
+            </select>
+          </label>
+          <label>{$t('ord.number')}
             <select bind:value={orderId}>
-              {#each orders as o}<option value={o.ID}>#{o.ID} · {o.Status}</option>{/each}
+              {#each visibleOrders as o}<option value={o.ID}>{orderNo(o)} · {custName(o.CustomerID)} · {$t('st.' + o.Status)}</option>{/each}
             </select>
           </label>
           <label>{$t('ord.item')}<input bind:value={orderTitle} /></label>
@@ -323,9 +348,7 @@
   .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 110px; }
   input, select { padding: 6px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  td { padding: 3px 4px; border-bottom: 1px solid #eee; }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table { font-size: 14px; }
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
   .final { font-size: 18px; border-top: 2px solid #333; margin-top: 4px; padding-top: 8px; }
   .percopy { color: #666; font-size: 13px; }
