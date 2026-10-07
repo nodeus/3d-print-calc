@@ -32,7 +32,8 @@ type Printers interface {
 type Jobs interface {
 	Upsert(j models.Job) (int64, error)
 	List(limit int) ([]models.Job, error)
-	DeleteJob(id int64) error // только origin=manual
+	DeleteJob(id int64) error                         // только origin=manual
+	UpdateManual(j models.Job, material string) error // правка + автопересчёт, только manual
 }
 
 // Users — локальные пользователи и роли.
