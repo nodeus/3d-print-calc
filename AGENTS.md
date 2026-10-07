@@ -119,8 +119,8 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 
 - Desktop: из `desktop/` — `wails build [-platform windows/amd64,linux/amd64,darwin/universal]`
   (сам ставит npm-пакеты и строит frontend). Один бинарник ~15МБ, `app.db` рядом,
-  работа без установки Python/Node. Релизная сборка — с датой:
-  `wails build -ldflags "-X main.BuildDate=ГГГГ-ММ-ДД"` (см. `docs/release.md`). Напрямую `go build ./...` требует собранного
+  работа без установки Python/Node. Релизы — только через `go run ./tools/release`
+  (папки `release/<version>/<дата>/`, в git не идут, см. `docs/release.md`). Напрямую `go build ./...` требует собранного
   `desktop/frontend/dist` (`npm run build`); `frontend/dist`, `node_modules`,
   `package.json.md5` — не в git. Копия `desktop/assets/{seed.csv,migrations}` обязана
   совпадать с каноном (`csv/`, `migrations/`) — следит `desktop/assets_sync_test.go`.
@@ -133,6 +133,6 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 - Не добавлять зависимости с CGO (ломает кросс-билд) без согласования.
 - Не выносить инструменты/скрипты/временные файлы за пределы репо (`C:\Temp` запрещён —
   только `tools/`, `docs/` внутри проекта).
-- Не коммитить `app.db`, `*.exe`, `node_modules/`, секреты, реальные персональные данные.
+- Не коммитить `app.db`, `*.exe`, `release/`, `node_modules/`, секреты, реальные персональные данные.
 - Не менять схему БД без новой миграции. Не менять формулы `core/calc` без обновления
   `docs/excel-reverse-engineering.md` и тестов.
