@@ -68,6 +68,17 @@
   "set.language": "Language",
   "set.currency": "Base currency",
   "set.rates_note": "Rates are manual (Phase 5). Money is stored with currency code and rate snapshot.",
+  "set.backup": "Backup",
+  "set.backup_save": "Save backup.zip",
+  "set.backup_open": "Open backup (inspect)",
+  "set.backup_apply": "Restore from backup",
+  "set.csv": "CSV import/export",
+  "set.csv_jobs_out": "Export history",
+  "set.csv_mats_out": "Export materials",
+  "set.csv_in": "Import history (dry-run)",
+  "set.csv_apply": "Apply import",
+  "set.csv_preview": "Preview",
+  "set.csv_done": "Imported",
   "orders.soon": "Orders — Phase 5. Use the calculator and save to history for now.",
   "reports.soon": "Reports — Phase 5."
 }

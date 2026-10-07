@@ -267,15 +267,20 @@ func (r *printersRepo) List() ([]models.Printer, error) {
 
 // Upsert вставляет печать или обновляет её по паре (filename, start_at).
 func (r *jobsRepo) Upsert(j models.Job) (int64, error) {
-	res, err := r.db.Exec(`INSERT INTO jobs (filename, start_at, printer_id, spool_id, status,
-		print_sec, total_sec, weight_g, length_m, cost_snapshot)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(filename, start_at) DO UPDATE SET printer_id=excluded.printer_id,
-		spool_id=excluded.spool_id, status=excluded.status, print_sec=excluded.print_sec,
-		total_sec=excluded.total_sec, weight_g=excluded.weight_g, length_m=excluded.length_m,
+	res, err := r.db.Exec(`INSERT INTO jobs (filename, start_at, end_at, printer_id, spool_id, status,
+		print_sec, total_sec, estimated_sec, size_bytes, filament_total_mm,
+		weight_g, length_m, slicer, cost_snapshot)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(filename, start_at) DO UPDATE SET end_at=excluded.end_at,
+		printer_id=excluded.printer_id, spool_id=excluded.spool_id, status=excluded.status,
+		print_sec=excluded.print_sec, total_sec=excluded.total_sec,
+		estimated_sec=excluded.estimated_sec, size_bytes=excluded.size_bytes,
+		filament_total_mm=excluded.filament_total_mm, weight_g=excluded.weight_g,
+		length_m=excluded.length_m, slicer=excluded.slicer,
 		cost_snapshot=excluded.cost_snapshot`,
-		j.Filename, j.StartAt, nullInt(j.PrinterID), nullInt(j.SpoolID), j.Status,
-		j.PrintSec, j.TotalSec, j.WeightG, j.LengthM, j.CostSnapshot)
+		j.Filename, j.StartAt, j.EndAt, nullInt(j.PrinterID), nullInt(j.SpoolID), j.Status,
+		j.PrintSec, j.TotalSec, j.EstimatedSec, j.SizeBytes, j.FilamentTotalMm,
+		j.WeightG, j.LengthM, j.Slicer, j.CostSnapshot)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_JOB_SAVE: %w", err)
 	}
@@ -292,8 +297,9 @@ func (r *jobsRepo) Upsert(j models.Job) (int64, error) {
 
 // List возвращает последние печати (limit <= 0 — все).
 func (r *jobsRepo) List(limit int) ([]models.Job, error) {
-	q := `SELECT id, filename, start_at, printer_id, spool_id, status,
-		print_sec, total_sec, weight_g, length_m, cost_snapshot
+	q := `SELECT id, filename, start_at, end_at, printer_id, spool_id, status,
+		print_sec, total_sec, estimated_sec, size_bytes, filament_total_mm,
+		weight_g, length_m, slicer, cost_snapshot
 		FROM jobs ORDER BY start_at DESC`
 	var rows *sql.Rows
 	var err error
@@ -310,8 +316,9 @@ func (r *jobsRepo) List(limit int) ([]models.Job, error) {
 	for rows.Next() {
 		var j models.Job
 		var printerID, spoolID sql.NullInt64
-		if err := rows.Scan(&j.ID, &j.Filename, &j.StartAt, &printerID, &spoolID,
-			&j.Status, &j.PrintSec, &j.TotalSec, &j.WeightG, &j.LengthM, &j.CostSnapshot); err != nil {
+		if err := rows.Scan(&j.ID, &j.Filename, &j.StartAt, &j.EndAt, &printerID, &spoolID,
+			&j.Status, &j.PrintSec, &j.TotalSec, &j.EstimatedSec, &j.SizeBytes,
+			&j.FilamentTotalMm, &j.WeightG, &j.LengthM, &j.Slicer, &j.CostSnapshot); err != nil {
 			return nil, fmt.Errorf("ERR_JOB_LIST: %w", err)
 		}
 		j.PrinterID, j.SpoolID = printerID.Int64, spoolID.Int64

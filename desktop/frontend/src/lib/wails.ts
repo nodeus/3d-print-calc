@@ -97,6 +97,21 @@ export interface JobInput {
   currency: string;
 }
 
+export interface BackupManifest {
+  version: number;
+  created_at: string;
+  counts: Record<string, number>;
+  files?: string[];
+}
+
+export interface ImportReport {
+  total: number;
+  new: number;
+  existing: number;
+  stubs: number;
+  dryRun: boolean;
+}
+
 declare global {
   interface Window {
     go: {
@@ -112,6 +127,13 @@ declare global {
           SetLocale(locale: string): Promise<void>;
           GetBaseCurrency(): Promise<string>;
           SetBaseCurrency(code: string): Promise<void>;
+          ExportBackup(): Promise<string>;
+          PreviewBackup(): Promise<BackupManifest>;
+          ApplyBackup(): Promise<BackupManifest>;
+          ExportJobsCSV(): Promise<string>;
+          ExportMaterialsCSV(): Promise<string>;
+          PreviewHistoryCSV(): Promise<ImportReport>;
+          ApplyHistoryCSV(): Promise<ImportReport>;
         };
       };
     }
@@ -132,4 +154,11 @@ export const wails = {
   setLocale: (locale: string) => api().SetLocale(locale),
   getBaseCurrency: () => api().GetBaseCurrency(),
   setBaseCurrency: (code: string) => api().SetBaseCurrency(code),
+  exportBackup: () => api().ExportBackup(),
+  previewBackup: () => api().PreviewBackup(),
+  applyBackup: () => api().ApplyBackup(),
+  exportJobsCSV: () => api().ExportJobsCSV(),
+  exportMaterialsCSV: () => api().ExportMaterialsCSV(),
+  previewHistoryCSV: () => api().PreviewHistoryCSV(),
+  applyHistoryCSV: () => api().ApplyHistoryCSV(),
 };

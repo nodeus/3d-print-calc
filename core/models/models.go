@@ -90,17 +90,22 @@ type Printer struct {
 
 // Job — печать/работа со снапшотом расчёта.
 type Job struct {
-	ID           int64
-	Filename     string
-	StartAt      string
-	PrinterID    int64
-	SpoolID      int64
-	Status       string
-	PrintSec     int64
-	TotalSec     int64
-	WeightG      float64
-	LengthM      float64
-	CostSnapshot string // JSON
+	ID              int64
+	Filename        string
+	StartAt         string
+	EndAt           string
+	PrinterID       int64
+	SpoolID         int64
+	Status          string
+	PrintSec        int64
+	TotalSec        int64
+	EstimatedSec    int64
+	SizeBytes       int64
+	FilamentTotalMm float64
+	WeightG         float64
+	LengthM         float64
+	Slicer          string
+	CostSnapshot    string // JSON
 }
 
 // Order — заказ клиента.

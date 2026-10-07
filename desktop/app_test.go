@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -54,4 +55,36 @@ func TestAppInit(t *testing.T) {
 	if err := app.SetLocale("en"); err != nil || app.GetLocale() != "en" {
 		t.Fatalf("locale switch: %v", err)
 	}
+}
+
+// TestBackupReopen проверяет ApplyBackup: закрытие, замена файла, переоткрытие.
+func TestBackupReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	app := &App{ctx: context.Background(), db: db, dbPath: path}
+
+	var buf bytes.Buffer
+	if err := db.CreateBackup(&buf); err != nil {
+		t.Fatalf("CreateBackup: %v", err)
+	}
+	if _, err := app.ApplyBackup(); err == nil {
+		t.Fatal("ApplyBackup без preview обязан вернуть ERR_NO_PENDING")
+	}
+	app.pendingFile = buf.Bytes()
+	m, err := app.ApplyBackup()
+	if err != nil {
+		t.Fatalf("ApplyBackup: %v", err)
+	}
+	if m.Counts["jobs"] != 490 {
+		t.Fatalf("после restore jobs = %v", m.Counts["jobs"])
+	}
+	// Соединение живое после переоткрытия.
+	jobs, err := app.GetJobs(1)
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("GetJobs после reopen: %v", len(jobs))
+	}
+	app.db.Close()
 }

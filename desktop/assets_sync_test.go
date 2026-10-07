@@ -8,10 +8,23 @@ import (
 
 // TestAssetsInSync гарантирует: копии в desktop/assets побайтово равны канону.
 // Канон: migrations/*.sql, csv/print_history.csv (см. AGENTS.md).
+// Новые миграции подхватываются автоматически — копируй файл в assets.
 func TestAssetsInSync(t *testing.T) {
-	pairs := map[string]string{
-		"assets/seed.csv":                 "../csv/print_history.csv",
-		"assets/migrations/0001_init.sql": "../migrations/0001_init.sql",
+	canonMig, err := filepath.Glob("../migrations/*.sql")
+	if err != nil || len(canonMig) == 0 {
+		t.Fatalf("нет канонических миграций: %v", err)
+	}
+	pairs := map[string]string{"assets/seed.csv": "../csv/print_history.csv"}
+	for _, f := range canonMig {
+		pairs["assets/migrations/"+filepath.Base(f)] = f
+	}
+	// Лишних копий без канона тоже быть не должно.
+	assetMig, err := filepath.Glob("assets/migrations/*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assetMig) != len(canonMig) {
+		t.Fatalf("assets/migrations: %d файлов, канон: %d", len(assetMig), len(canonMig))
 	}
 	for got, want := range pairs {
 		a, err := os.ReadFile(filepath.Join(".", got))
