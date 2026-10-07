@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+
+	"3dprint-calc/core/models"
 )
 
 const moonrakerHistoryJSON = `{"result": {"count": 1, "jobs": [
@@ -39,11 +41,14 @@ func TestMoonrakerPreviewApply(t *testing.T) {
 	if _, err := app.Login("admin", "admin123"); err != nil {
 		t.Fatal(err)
 	}
-	printers, err := app.GetPrinters()
-	if err != nil || len(printers) != 1 {
-		t.Fatalf("printers: %+v, %v", printers, err)
+	// Чистый старт принтеров не даёт — создаём свой.
+	pid, err := app.AddPrinter(models.Printer{
+		Name: "K1C-test", LifeYears: 3, HoursPerDay: 8,
+		CalendarMode: "calendar", AmortMethod: "calendar", PowerKW: 0.35,
+	})
+	if err != nil {
+		t.Fatalf("AddPrinter: %v", err)
 	}
-	pid := printers[0].ID
 	if _, err := app.MoonrakerStatus(pid); err == nil {
 		t.Fatal("статус без URL обязан вернуть ошибку")
 	}
