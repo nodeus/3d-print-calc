@@ -7,10 +7,14 @@ build/
 bin/
 desktop/build/
 
-# Wails / frontend
+# Wails / frontend (dist и package.json.md5 — артефакты `wails build`, в git не идут;
+# package-lock.json — коммитим. Каноническая сборка десктопа — `wails build`,
+# он сам ставит npm-зависимости и строит frontend перед go build.)
 desktop/frontend/node_modules/
 desktop/frontend/dist/
 desktop/frontend/.svelte-kit/
+desktop/frontend/package.json.md5
+node_modules/
 node_modules/
 
 # Go

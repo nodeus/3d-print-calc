@@ -8,6 +8,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,39 +64,68 @@ func (d *DB) Jobs() store.Jobs { return &jobsRepo{d.sql} }
 
 // Migrate применяет все *.sql из dir по алфавиту, пропуская уже применённые.
 func (d *DB) Migrate(dir string) error {
-	if _, err := d.sql.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT '')`); err != nil {
-		return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
-	}
 	files, err := filepath.Glob(filepath.Join(dir, "*.sql"))
 	if err != nil {
 		return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
 	}
+	names := make([]string, len(files))
+	contents := make([]string, len(files))
+	for i, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
+		}
+		names[i], contents[i] = filepath.Base(f), string(raw)
+	}
+	return d.applyMigrations(names, contents)
+}
+
+// MigrateFS — то же для встроенных миграций (go:embed в desktop).
+func (d *DB) MigrateFS(fsys fs.FS, dir string) error {
+	files, err := fs.Glob(fsys, filepath.ToSlash(filepath.Join(dir, "*.sql")))
+	if err != nil {
+		return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
+	}
 	sort.Strings(files)
-	for _, f := range files {
-		name := filepath.Base(f)
+	names := make([]string, len(files))
+	contents := make([]string, len(files))
+	for i, f := range files {
+		raw, err := fs.ReadFile(fsys, f)
+		if err != nil {
+			return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
+		}
+		names[i], contents[i] = filepath.Base(f), string(raw)
+	}
+	return d.applyMigrations(names, contents)
+}
+
+// applyMigrations накатывает скрипты по порядку имён, пропуская применённые.
+func (d *DB) applyMigrations(names, contents []string) error {
+	if _, err := d.sql.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT '')`); err != nil {
+		return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
+	}
+	order := make([]int, len(names))
+	for i := range order {
+		order[i] = i
+	}
+	sort.Slice(order, func(a, b int) bool { return names[order[a]] < names[order[b]] })
+	for _, i := range order {
 		var n int
-		if err := d.sql.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name=?`, name).Scan(&n); err != nil {
+		if err := d.sql.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name=?`, names[i]).Scan(&n); err != nil {
 			return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
 		}
 		if n > 0 {
 			continue
 		}
-		raw, err := os.ReadFile(f)
-		if err != nil {
-			return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
+		if err := execScript(d.sql, contents[i]); err != nil {
+			return fmt.Errorf("ERR_DB_MIGRATE %s: %w", names[i], err)
 		}
-		if err := execScript(d.sql, string(raw)); err != nil {
-			return fmt.Errorf("ERR_DB_MIGRATE %s: %w", name, err)
-		}
-		if _, err := d.sql.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, name); err != nil {
+		if _, err := d.sql.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, names[i]); err != nil {
 			return fmt.Errorf("ERR_DB_MIGRATE: %w", err)
 		}
 	}
 	return nil
 }
-
-// execScript выполняет SQL-скрипт по операторам (в миграциях нет
-// триггеров с внутренними ';').
 func execScript(sqldb *sql.DB, script string) error {
 	for _, stmt := range strings.Split(script, ";") {
 		stmt = strings.TrimSpace(stmt)
@@ -174,6 +204,29 @@ func (r *materialsRepo) AddSpool(s models.Spool) (int64, error) {
 	}
 	id, _ := res.LastInsertId()
 	return id, nil
+}
+
+// ListSpools возвращает партии материала (неархивные первыми).
+func (r *materialsRepo) ListSpools(materialID int64) ([]models.Spool, error) {
+	rows, err := r.db.Query(`SELECT id, material_id, price, currency, fx_rate, bought_at,
+		weight_init_g, weight_left_g, archived FROM spools
+		WHERE material_id=? ORDER BY archived, id`, materialID)
+	if err != nil {
+		return nil, fmt.Errorf("ERR_SPOOL_LIST: %w", err)
+	}
+	defer rows.Close()
+	var out []models.Spool
+	for rows.Next() {
+		var s models.Spool
+		var archived int
+		if err := rows.Scan(&s.ID, &s.MaterialID, &s.Price, &s.Currency, &s.FxRate,
+			&s.BoughtAt, &s.WeightInitG, &s.WeightLeftG, &archived); err != nil {
+			return nil, fmt.Errorf("ERR_SPOOL_LIST: %w", err)
+		}
+		s.Archived = archived != 0
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }
 
 // Save сохраняет принтер.
@@ -273,4 +326,25 @@ func nullInt(v int64) any {
 		return nil
 	}
 	return v
+}
+
+// GetSetting читает настройку (value — JSON-строка). ok=false — нет ключа.
+func (d *DB) GetSetting(key string) (value string, ok bool, err error) {
+	err = d.sql.QueryRow(`SELECT value FROM settings WHERE key=?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("ERR_SETTING_GET: %w", err)
+	}
+	return value, true, nil
+}
+
+// SetSetting записывает настройку (upsert).
+func (d *DB) SetSetting(key, value string) error {
+	if _, err := d.sql.Exec(`INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value); err != nil {
+		return fmt.Errorf("ERR_SETTING_SET: %w", err)
+	}
+	return nil
 }
