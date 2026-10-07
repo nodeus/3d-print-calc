@@ -113,6 +113,34 @@ func (a *App) SetUserRole(id int64, role string) error {
 	return a.db.Users().SetRole(id, models.Role(role))
 }
 
+// DeleteUser — удалить пользователя (admin). Нельзя себя и последнего админа.
+func (a *App) DeleteUser(id int64) error {
+	if err := a.need(models.RoleAdmin); err != nil {
+		return err
+	}
+	if a.currentUser != nil && a.currentUser.ID == id {
+		return errors.New("ERR_USER_DELETE: нельзя удалить себя")
+	}
+	list, err := a.db.Users().List()
+	if err != nil {
+		return err
+	}
+	admins := 0
+	targetIsAdmin := false
+	for _, u := range list {
+		if u.Role == models.RoleAdmin {
+			admins++
+			if u.ID == id {
+				targetIsAdmin = true
+			}
+		}
+	}
+	if targetIsAdmin && admins <= 1 {
+		return errors.New("ERR_USER_DELETE: нельзя удалить последнего админа")
+	}
+	return a.db.Users().Delete(id)
+}
+
 // ChangeMyPassword — смена своего пароля по старому.
 func (a *App) ChangeMyPassword(old, pw string) error {
 	if a.currentUser == nil {

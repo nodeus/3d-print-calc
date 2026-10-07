@@ -66,6 +66,69 @@ func (a *App) GetPrinters() ([]PrinterDTO, error) {
 	return out, nil
 }
 
+// UpdateMaterial правит материал (manager+). Код неизменен.
+func (a *App) UpdateMaterial(m models.Material) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().Update(m)
+}
+
+// DeleteMaterial удаляет материал (manager+). Блок при катушках — в store.
+func (a *App) DeleteMaterial(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().Delete(id)
+}
+
+// UpdateSpool правит партию: цена/валюта/остаток (manager+).
+func (a *App) UpdateSpool(s models.Spool) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().UpdateSpool(s)
+}
+
+// AddPrinter создаёт принтер со всеми характеристиками (manager+).
+func (a *App) AddPrinter(p models.Printer) (int64, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return 0, err
+	}
+	if p.HoursPerDay <= 0 {
+		p.HoursPerDay = 8
+	}
+	if p.LifeYears <= 0 {
+		p.LifeYears = 3
+	}
+	if p.CalendarMode == "" {
+		p.CalendarMode = "calendar"
+	}
+	if p.AmortMethod == "" {
+		p.AmortMethod = "calendar"
+	}
+	if p.Currency == "" {
+		p.Currency = "RUB"
+	}
+	return a.db.Printers().Save(p)
+}
+
+// UpdatePrinter правит принтер целиком (manager+).
+func (a *App) UpdatePrinter(p models.Printer) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Printers().Update(p)
+}
+
+// DeletePrinter удаляет принтер (manager+). Блок при работах — в store.
+func (a *App) DeletePrinter(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Printers().Delete(id)
+}
+
 // AmortRate считает ₽/час по методу принтера.
 // calendar (дефолт): цена / (календарные дни СПИ × часов/день).
 // workdays: будни ≈ calendar × 5/7. resource: цена / ресурс_часов.

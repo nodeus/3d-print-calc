@@ -99,6 +99,14 @@ func (r *usersRepo) Count() (int, error) {
 	return n, nil
 }
 
+// Delete удаляет пользователя. Guards (не себя, не последнего админа) — в App.
+func (r *usersRepo) Delete(id int64) error {
+	if _, err := r.db.Exec(`DELETE FROM users WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_USER_DELETE: %w", err)
+	}
+	return nil
+}
+
 // Save создаёт (ID=0) или обновляет заказчика.
 func (r *customersRepo) Save(c models.Customer) (int64, error) {
 	if c.ID > 0 {
@@ -133,6 +141,21 @@ func (r *customersRepo) List() ([]models.Customer, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// Delete удаляет заказчика. Блок: есть заказы.
+func (r *customersRepo) Delete(id int64) error {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM orders WHERE customer_id=?`, id).Scan(&n); err != nil {
+		return fmt.Errorf("ERR_CUSTOMER_DELETE: %w", err)
+	}
+	if n > 0 {
+		return fmt.Errorf("ERR_CUSTOMER_USED: %d заказов ссылаются на заказчика", n)
+	}
+	if _, err := r.db.Exec(`DELETE FROM customers WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_CUSTOMER_DELETE: %w", err)
+	}
+	return nil
 }
 
 // orderStatuses — допустимые статусы заказа.
