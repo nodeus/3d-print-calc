@@ -1,14 +1,15 @@
 # AGENTS.md — Калькулятор стоимости 3D-печати
 
 > Источник истины для AI-агентов и разработчиков. Читать перед любыми изменениями.
+> Текущий релиз: **v1.0.0** на `main`. Фиксы — инкрементом `1.0.x`, мажорный релиз — только по команде заказчика.
 
 ## 1. Продукт и решения (зафиксировано с заказчиком)
 
-- **Стек:** Wails v2 (Go-бэкенд) + Svelte + TypeScript (фронтенд) + SQLite. Подтверждено.
+- **Стек:** Wails v2 (Go-бэкенд) + Svelte 5 + TypeScript (фронтенд) + SQLite. Подтверждено.
 - **Амортизация по умолчанию:** календарная (`calendar`), не `NETWORKDAYS`.
   `hours_total = календарных_дней(СПИ) × часов_в_день`, `amort_hour = цена / hours_total`.
   Режим `workdays` — опциональный переключатель на принтер. Третий метод — `resource` (цена/ресурс_часов).
-- **i18n v1:** RU + EN. Все строки UI — через ключи (`desktop/frontend/src/lib/i18n/{ru,en}.json`),
+- **i18n:** RU + EN. Все строки UI — через ключи (`desktop/frontend/src/lib/i18n/{ru,en}.json`),
   ошибки ядра — кодами (`ERR_*`), текст — на стороне UI.
 - **Мультивалютность v1:** `settings.base_currency = RUB`, курсы — ручной ввод (`fx_rates`).
   Заказы/катушки хранят `currency + fx_rate_snapshot + total_base`. Формат — через `Intl`.
@@ -16,9 +17,12 @@
   расчёта во frontend и в SQL** — только `core/calc`. Будущий Android-клиент (отдельный
   проект, Flutter) пойдёт через `server/` REST (OpenAPI) поверх того же `core`
   либо через `backup.zip`. Офлайн-first сохраняется.
-- **Принтер в парке:** Creality K1C + Moonraker. CSV-импорт — MVP, Moonraker `history/list` — Фаза 6.
+- **Принтер в парке:** Creality K1C + Moonraker. CSV-импорт и Moonraker `history/list`
+  работают (dry-run + прогресс). Адрес Moonraker вводится **со схемой** (`http://IP:7125`).
 - **Три режима:** (1) для себя — себестоимость, (2) заказ — клиент+позиции+статусы,
   (3) поток — очередь/отчёты/долги/НДС.
+- **Номера заказов** — по шаблону (`core/ordnum`): `{YYYY} {YY} {MM} {DD} {HH} {mm} {ss}`,
+  серия `{n…n}` (длина = мин. ширина), литерал `{"текст"}`. Дефолт `{YYYY}-{nnnn}`.
 
 ## 2. Исходные данные (legacy Excel)
 
@@ -46,22 +50,28 @@
 ## 3. Архитектура
 
 ```
-core/                 # чистый Go, ноль UI/ОС-зависимостей
-  calc/               # движок расчёта (единственное место формул)
-  models/             # User, Customer, Maker, Material, Spool, Printer, Job, Order, FxRate
-  store/              # Repository-ИНТЕРФЕЙСЫ (без SQL)
-  importers/          # csv_history, filename_parser (*_PETG-X_*_2h4m.gcode), gcode_meta
-  export/             # backup.zip, csv/json/xlsx
-  moonraker/          # клиент K1C
-  i18n/               # ru/en словари ядра (только коды ошибок)
-store-sqlite/         # реализация Repository (modernc.org/sqlite — pure Go, без CGO)
-desktop/              # Wails v2: тонкие Go-биндинги + frontend Svelte+TS
-  frontend/src/lib/i18n/{ru,en}.json
-server/               # Фаза 7: REST поверх core для Android/общей БД (пока каркас)
-mobile/               # задел: доки контракта API, кода пока нет
-tools/                # ВСЕ вспомогательные скрипты — только здесь, ничего вне репо
-docs/                 # спеки, контракты
-migrations/           # SQL-миграции (goose-стиль, пронумерованные)
+core/                       # чистый Go, ноль UI/ОС-зависимостей
+  calc/                     # движок расчёта (единственное место формул)
+  models/                   # User, Customer, Maker, Material, Spool, Printer, Job, Order(+Item), Payment, FxRate
+  store/                    # Repository-ИНТЕРФЕЙСЫ (без SQL)
+  importers/                # csv_history (толерантен к пустым/"null"), filename_parser, gcode_meta
+  export/                   # backup.zip, csv, pdf.go (gofpdf + DejaVu) + fonts/
+  moonraker/                # клиент K1C (NormalizeBase добавляет http://)
+  ordnum/                   # шаблон номеров заказов
+  auth/                     # argon2id (PHC без v=, 5 частей)
+  i18n/                     # ru/en словари ядра (только коды ошибок)
+store-sqlite/               # реализация Repository (modernc.org/sqlite — pure Go, без CGO)
+  seed/                     # EnsureAdmin (чистый старт) + SeedAll (только CLI tools/seed)
+desktop/                    # Wails v2: тонкие Go-биндинги + frontend Svelte+TS
+  frontend/src/{pages,lib/{i18n,confirm,pdf,nav,prefill},table.css}
+  frontend/src/assets/donate-qr.png
+  assets/migrations/        # копии канона для go:embed (go:embed запрещает ..)
+server/                     # Фаза 7: REST поверх core для Android/общей БД (пока каркас)
+mobile/                     # задел: доки контракта API, кода пока нет
+tools/                      # ВСЕ вспомогательные скрипты — только здесь: seed, release, qrcode, dbcheck
+docs/                       # HELP (руководство), release, updating, api-contract, excel-reverse-engineering
+migrations/                 # SQL-миграции (только ADD COLUMN / CREATE, пронумерованные)
+utils/                      # upx.exe для релизов (в git НЕ идёт, локальный инструмент)
 ```
 
 ### Движок расчёта (канон)
@@ -84,15 +94,23 @@ weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
 
 Нулевые `purge/maint/fail/VAT/round`, `copies<=1` — нейтральны (legacy-поведение).
 Деньги в `calc` — float основных единиц; хранение — `int64` минорных + `fx_rate`.
+Снапшот расчёта в `jobs.cost_snapshot` — **v2**: `{v, material, input:{tariff,powerKW,
+amortPerHour,opRate,prepH,postH}, cost, price, currency}` (v1 читается с фолбэком).
+Перенос «В калькулятор» и автопересчёт правок идут строго из снапшота + текущих
+цен катушек.
 
-Настройки амортизации/мощности/ТО — **на принтер**. Снапшот всех тарифов — в `jobs`/`order_items`.
+Настройки амортизации/мощности/ТО — **на принтер**.
 
 ### БД SQLite (WAL, один `app.db`)
 
 `users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
 spools(material_id, price, currency, bought_at, weight_left_g), printers(...,
-calendar_mode, amort_method), jobs(filename+start_at UNIQUE, cost_snapshot JSON),
-orders, order_items, fx_rates, settings`. Импорт идемпотентен по `filename+start_at`.
+calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
+cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),
+orders(+number, +title), order_items, payments, fx_rates, settings`. Импорт идемпотентен
+по `filename+start_at`. Удаление: ручные работы — свободно; материалы/принтеры/
+заказчики — блок при живых связях (пустые катушки — каскадом); заказы — каскадом
+с подтверждением.
 
 ## 4. GitFlow (обязательно)
 
@@ -100,7 +118,8 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
   только через PR/merge из `feature/*`, `release/*`, `hotfix/*`.
 - `feature/<name>` от `develop` → PR в `develop`. `release/<version>` от `develop` →
   PR в `main` + back-merge в `develop`. `hotfix/<name>` от `main` → в `main` + `develop`.
-- Тег релиза: `vX.Y.Z` на `main`.
+- Тег релиза: `vX.Y.Z` на `main`. Версионирование: фиксы — `1.0.x` от текущей,
+  **мажорный релиз — только по команде заказчика**.
 - Коммиты: Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`), RU или EN,
   императив. Один коммит — одна логическая единица.
 
@@ -108,21 +127,31 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 
 - Go 1.26+: `gofmt` чистый, `go vet ./...` без предупреждений. Пакеты — маленькие,
   экспортируемое — с doc-комментарием. Ошибки ядра — `ERR_CODE` + `%w`.
+- Списки из Go обязаны быть `[]`, не `null` (`out := []T{}`): пустой JSON-массив,
+  иначе фронт падает на `.length`. Тест `TestEmptyListsSerializeAsArray` — обязателен.
 - Frontend: TypeScript strict, Prettier, ключи i18n без хардкода строк.
+  **Запрещён нативный `confirm()`** (показывает `wails.localhost`) — только `lib/confirm.ts` +
+  `<Confirm/>` в `App.svelte`. Фигурные скобки в атрибутах — только как выражения
+  (`placeholder={'{YYYY}'}`), иначе Svelte парсит их как JS.
+- Вкладки — в `<svelte:boundary>` + `{#key tab}` (ошибка не залипает между вкладками).
+  `onMount` — не `async` с возвратом подписки (svelte-check это ловит).
 - SQL: миграции только добавлением файлов `migrations/NNNN_name.sql` (up-блоки, SQLite-совместимо).
 - Тесты: `core/calc` — table-driven, фикстуры из `csv/print_history.csv`;
   регресс `E16` (+24₽) и плотности — обязательные кейсы.
 - Валюты — коды ISO, деньги — `int64` минорных единиц + `fx_rate` снапшотом. Float — только для
   промежуточных kWh/часов, итог — округление по правилу.
+- PowerShell пишет редиректы в UTF-16 и не знает `&&`/`||`: инлайн-скрипты — только через
+  файлы (`Write` → `C:\Temp\*.py` → запуск → удалить), heredoc-синтаксиса нет.
 
 ## 6. Сборка и запуск (цели)
 
 - Desktop: из `desktop/` — `wails build [-platform windows/amd64,linux/amd64,darwin/universal]`
-  (сам ставит npm-пакеты и строит frontend). Один бинарник ~15МБ, `app.db` рядом,
+  (сам ставит npm-пакеты и строит frontend). Один бинарник, `app.db` рядом,
   работа без установки Python/Node. Релизы — только через `go run ./tools/release`
-  (папки `release/<version>/<дата>/`, в git не идут, см. `docs/release.md`). Напрямую `go build ./...` требует собранного
-  `desktop/frontend/dist` (`npm run build`); `frontend/dist`, `node_modules`,
-  `package.json.md5` — не в git. Копия `desktop/assets/migrations` обязана
+  (папки `release/<version>/<дата>/`, в git не идут, см. `docs/release.md`;
+  Windows-exe пакуются `utils/upx.exe`, флаг `-upx=false` отключает). Напрямую `go build ./...`
+  требует собранного `desktop/frontend/dist` (`npm run build`); `frontend/dist`,
+  `node_modules`, `package.json.md5` — не в git. Копия `desktop/assets/migrations` обязана
   совпадать с каноном (`migrations/`) — следит `desktop/assets_sync_test.go`.
 - Первый запуск чистый: только `admin/admin123` (пароль сменить сразу).
   Работы/материалы/принтеры пользователь заводит сам: CSV-импорт, Moonraker, вручную.
