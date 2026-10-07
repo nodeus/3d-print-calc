@@ -75,13 +75,18 @@ export interface JobDTO {
   ID: number;
   Filename: string;
   StartAt: string;
+  EndAt: string;
   PrinterID: number;
   SpoolID: number;
   Status: string;
   PrintSec: number;
   TotalSec: number;
+  EstimatedSec: number;
+  SizeBytes: number;
+  FilamentTotalMm: number;
   WeightG: number;
   LengthM: number;
+  Slicer: string;
   CostSnapshot: string;
 }
 
