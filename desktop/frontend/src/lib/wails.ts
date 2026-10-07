@@ -112,6 +112,88 @@ export interface ImportReport {
   dryRun: boolean;
 }
 
+export interface UserDTO {
+  id: number;
+  login: string;
+  role: string;
+  locale: string;
+}
+
+export interface Customer {
+  ID: number;
+  Name: string;
+  Contact: string;
+  Currency: string;
+  Note: string;
+}
+
+export interface Order {
+  ID: number;
+  CustomerID: number;
+  Currency: string;
+  FxRate: number;
+  MarginProfit: number;
+  MarginDev: number;
+  VAT: number;
+  Status: string;
+  TotalBase: number;
+  CreatedAt: string;
+}
+
+export interface OrderItem {
+  ID: number;
+  OrderID: number;
+  JobID: number;
+  Title: string;
+  Qty: number;
+  Cost: number;
+  Price: number;
+}
+
+export interface Payment {
+  ID: number;
+  OrderID: number;
+  Amount: number;
+  PaidAt: string;
+  Note: string;
+}
+
+export interface OrderDetail {
+  order: Order;
+  items: OrderItem[];
+  payments: Payment[];
+  paid: number;
+  balance: number;
+}
+
+export interface MonthRevenue {
+  month: string;
+  total: number;
+  orders: number;
+}
+
+export interface MaterialStat {
+  code: string;
+  jobs: number;
+  weight: number;
+  cost: number;
+}
+
+export interface PrinterStat {
+  name: string;
+  jobs: number;
+  totalSec: number;
+}
+
+export interface Debt {
+  orderId: number;
+  customer: string;
+  total: number;
+  paid: number;
+  balance: number;
+  status: string;
+}
+
 declare global {
   interface Window {
     go: {
@@ -134,6 +216,25 @@ declare global {
           ExportMaterialsCSV(): Promise<string>;
           PreviewHistoryCSV(): Promise<ImportReport>;
           ApplyHistoryCSV(): Promise<ImportReport>;
+          Login(login: string, password: string): Promise<UserDTO>;
+          Logout(): Promise<void>;
+          CurrentUser(): Promise<UserDTO | null>;
+          ListUsers(): Promise<UserDTO[]>;
+          CreateUser(login: string, password: string, role: string): Promise<number>;
+          SetUserRole(id: number, role: string): Promise<void>;
+          ChangeMyPassword(oldPw: string, pw: string): Promise<void>;
+          ListCustomers(): Promise<Customer[]>;
+          SaveCustomer(c: Customer): Promise<number>;
+          CreateOrder(customerId: number, currency: string): Promise<number>;
+          ListOrders(): Promise<Order[]>;
+          GetOrderDetail(id: number): Promise<OrderDetail>;
+          SetOrderStatus(id: number, status: string): Promise<void>;
+          AddOrderItem(item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }): Promise<number>;
+          AddPayment(orderId: number, amount: number, note: string): Promise<number>;
+          RevenueByMonth(): Promise<MonthRevenue[]>;
+          TopMaterials(): Promise<MaterialStat[]>;
+          PrinterLoad(): Promise<PrinterStat[]>;
+          Debts(): Promise<Debt[]>;
         };
       };
     }
@@ -161,4 +262,24 @@ export const wails = {
   exportMaterialsCSV: () => api().ExportMaterialsCSV(),
   previewHistoryCSV: () => api().PreviewHistoryCSV(),
   applyHistoryCSV: () => api().ApplyHistoryCSV(),
+  login: (login: string, password: string) => api().Login(login, password),
+  logout: () => api().Logout(),
+  currentUser: () => api().CurrentUser(),
+  listUsers: () => api().ListUsers(),
+  createUser: (login: string, password: string, role: string) => api().CreateUser(login, password, role),
+  setUserRole: (id: number, role: string) => api().SetUserRole(id, role),
+  changeMyPassword: (oldPw: string, pw: string) => api().ChangeMyPassword(oldPw, pw),
+  listCustomers: () => api().ListCustomers(),
+  saveCustomer: (c: Customer) => api().SaveCustomer(c),
+  createOrder: (customerId: number, currency: string) => api().CreateOrder(customerId, currency),
+  listOrders: () => api().ListOrders(),
+  orderDetail: (id: number) => api().GetOrderDetail(id),
+  setOrderStatus: (id: number, status: string) => api().SetOrderStatus(id, status),
+  addOrderItem: (item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }) =>
+    api().AddOrderItem(item),
+  addPayment: (orderId: number, amount: number, note: string) => api().AddPayment(orderId, amount, note),
+  revenueByMonth: () => api().RevenueByMonth(),
+  topMaterials: () => api().TopMaterials(),
+  printerLoad: () => api().PrinterLoad(),
+  debts: () => api().Debts(),
 };

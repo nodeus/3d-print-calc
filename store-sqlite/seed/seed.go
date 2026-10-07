@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"3dprint-calc/core/auth"
 	"3dprint-calc/core/calc"
 	"3dprint-calc/core/importers"
 	"3dprint-calc/core/models"
@@ -66,12 +67,16 @@ type DB interface {
 	Materials() store.Materials
 	Printers() store.Printers
 	Jobs() store.Jobs
+	Users() store.Users
 }
 
 // SeedAll сеет принтер, материалы и историю (csv — открытый CSV принтера).
 // Непустые таблицы пропускаются.
 func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	var st Stats
+	if err := ensureAdmin(db); err != nil {
+		return st, err
+	}
 	printerID, err := seedPrinter(db)
 	if err != nil {
 		return st, err
@@ -170,6 +175,24 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error
 	}
 	st.Jobs = len(rows)
 	return st, nil
+}
+
+// ensureAdmin создаёт admin/admin123 при пустой таблице пользователей.
+// Пароль обязан быть сменён — см. страницу пользователей в приложении.
+func ensureAdmin(db DB) error {
+	n, err := db.Users().Count()
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	phc, err := auth.Hash("admin123")
+	if err != nil {
+		return err
+	}
+	_, err = db.Users().Create(models.User{Login: "admin", PasswordHash: phc, Role: models.RoleAdmin, Locale: "ru"})
+	return err
 }
 
 // seedPrinter создаёт K1C из блока амортизации Excel либо возвращает

@@ -113,8 +113,11 @@ type JobInput struct {
 	Currency  string  `json:"currency"`
 }
 
-// SaveJob сохраняет расчёт. StartAt — сейчас (импорт истории — через CSV).
+// SaveJob сохраняет расчёт (manager+). StartAt — сейчас (импорт истории — через CSV).
 func (a *App) SaveJob(in JobInput) (int64, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return 0, err
+	}
 	if in.Filename == "" {
 		in.Filename = "manual-" + time.Now().Format("20060102-150405")
 	}
@@ -145,8 +148,11 @@ func (a *App) GetLocale() string {
 	return "ru"
 }
 
-// SetLocale сохраняет язык UI.
+// SetLocale сохраняет язык UI (manager+).
 func (a *App) SetLocale(locale string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
 	if locale != "ru" && locale != "en" {
 		locale = "ru"
 	}
@@ -161,8 +167,11 @@ func (a *App) GetBaseCurrency() string {
 	return "RUB"
 }
 
-// SetBaseCurrency сохраняет базовую валюту.
+// SetBaseCurrency сохраняет базовую валюту (manager+).
 func (a *App) SetBaseCurrency(code string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
 	if code == "" {
 		code = "RUB"
 	}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO } from '../lib/wails';
+  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
   import { money } from '../lib/format';
 
@@ -36,6 +36,11 @@
   let purgeG = $state(0);
   let filename = $state('');
   let savedMsg = $state(false);
+  let orders: Order[] = $state([]);
+  let orderId = $state(0);
+  let orderTitle = $state('');
+  let orderQty = $state(1);
+  let orderMsg = $state(false);
 
   let result: CalcResult | null = $state(null);
   let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
@@ -46,6 +51,8 @@
       materials = await wails.materials();
       printers = await wails.printers();
       currency = await wails.getBaseCurrency();
+      orders = (await wails.listOrders()).filter((o) => ['draft', 'quoted', 'in_work'].includes(o.Status));
+      if (orders.length) orderId = orders[0].ID;
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
       if (printers.length) selectPrinter(printers[0].ID);
       await recalc();
@@ -128,6 +135,20 @@
       });
       savedMsg = true;
       setTimeout(() => (savedMsg = false), 2500);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function addToOrder() {
+    if (!result || !orderId || !orderTitle.trim()) return;
+    try {
+      await wails.addOrderItem({
+        orderId, jobId: 0, title: orderTitle.trim(), qty: orderQty,
+        cost: Math.round(result.Cost * 100), price: Math.round(result.PriceVAT * 100),
+      });
+      orderMsg = true;
+      setTimeout(() => (orderMsg = false), 2500);
     } catch (e) {
       console.error(e);
     }
@@ -227,6 +248,19 @@
         <button onclick={save}>{$t('calc.save_calc')}</button>
       </div>
       {#if savedMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
+      {#if orders.length}
+        <div class="row">
+          <label>{$t('ord.order')}
+            <select bind:value={orderId}>
+              {#each orders as o}<option value={o.ID}>#{o.ID} · {o.Status}</option>{/each}
+            </select>
+          </label>
+          <label>{$t('ord.item')}<input bind:value={orderTitle} /></label>
+          <label>{$t('ord.qty')}<input type="number" min="0.5" step="0.5" bind:value={orderQty} /></label>
+          <button onclick={addToOrder}>{$t('ord.add')}</button>
+        </div>
+        {#if orderMsg}<p class="ok">{$t('ord.added')}</p>{/if}
+      {/if}
     {:else}<p>…</p>{/if}
   </section>
 </div>
