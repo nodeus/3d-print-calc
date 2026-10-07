@@ -13,9 +13,6 @@ import (
 //go:embed all:assets/migrations
 var migrationsFS embed.FS
 
-//go:embed assets/seed.csv
-var seedCSV []byte
-
 // MaterialDTO — материал с ценой первой катушки для калькулятора.
 type MaterialDTO struct {
 	ID         int64   `json:"id"`

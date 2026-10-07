@@ -122,8 +122,11 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
   работа без установки Python/Node. Релизы — только через `go run ./tools/release`
   (папки `release/<version>/<дата>/`, в git не идут, см. `docs/release.md`). Напрямую `go build ./...` требует собранного
   `desktop/frontend/dist` (`npm run build`); `frontend/dist`, `node_modules`,
-  `package.json.md5` — не в git. Копия `desktop/assets/{seed.csv,migrations}` обязана
-  совпадать с каноном (`csv/`, `migrations/`) — следит `desktop/assets_sync_test.go`.
+  `package.json.md5` — не в git. Копия `desktop/assets/migrations` обязана
+  совпадать с каноном (`migrations/`) — следит `desktop/assets_sync_test.go`.
+- Первый запуск чистый: только `admin/admin123` (пароль сменить сразу).
+  Работы/материалы/принтеры пользователь заводит сам: CSV-импорт, Moonraker, вручную.
+  Полный сид legacy-данных — только dev-инструмент `go run ./tools/seed -db ...`.
 - Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто).
 - Бэкап/восстановление: `backup.zip (app.db + csv/json)` в 1 клик, импорт с dry-run.
 

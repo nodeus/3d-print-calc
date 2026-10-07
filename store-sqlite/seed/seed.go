@@ -1,8 +1,8 @@
-// Package seed — первичный сид БД из legacy-данных.
+// Package seed — сид БД legacy-данными (dev/тесты) и EnsureAdmin для чистого
+// первого запуска десктопа.
 //
-// Материалы: таблица листа «Материалы» (docs/excel-reverse-engineering.md).
-// История: CSV принтера. Используется и CLI tools/seed, и десктопом
-// при первом запуске (пустая БД). Идемпотентно: повтор безопасен,
+// Материалы: таблица листа «Материалы». История: CSV принтера.
+// Полный сид — только через CLI tools/seed. Идемпотентно: повтор безопасен,
 // непустые таблицы не трогаются.
 package seed
 
@@ -74,7 +74,7 @@ type DB interface {
 // Непустые таблицы пропускаются.
 func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	var st Stats
-	if err := ensureAdmin(db); err != nil {
+	if err := EnsureAdmin(db); err != nil {
 		return st, err
 	}
 	printerID, err := seedPrinter(db)
@@ -181,9 +181,10 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 	return st, nil
 }
 
-// ensureAdmin создаёт admin/admin123 при пустой таблице пользователей.
+// EnsureAdmin создаёт admin/admin123 при пустой таблице пользователей.
 // Пароль обязан быть сменён — см. страницу пользователей в приложении.
-func ensureAdmin(db DB) error {
+// Вызывается и десктопом при первом запуске, и полным сидом.
+func EnsureAdmin(db DB) error {
 	n, err := db.Users().Count()
 	if err != nil {
 		return err

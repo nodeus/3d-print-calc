@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"log"
+	"time"
 
 	"3dprint-calc/core/auth"
 	"3dprint-calc/core/models"
@@ -24,15 +26,20 @@ func toUserDTO(u models.User) UserDTO {
 }
 
 // Login проверяет пароль и открывает сессию.
+// Попытки логируются (время/итог, без паролей) — для диагностики зависаний.
 func (a *App) Login(login, password string) (UserDTO, error) {
+	start := time.Now()
 	u, err := a.db.Users().GetByLogin(login)
 	if err != nil {
+		log.Printf("login %q: denied (%v)", login, time.Since(start).Round(time.Millisecond))
 		return UserDTO{}, err
 	}
 	if err := auth.Verify(u.PasswordHash, password); err != nil {
+		log.Printf("login %q: denied (%v)", login, time.Since(start).Round(time.Millisecond))
 		return UserDTO{}, err
 	}
 	a.currentUser = &u
+	log.Printf("login %q: ok (%v)", login, time.Since(start).Round(time.Millisecond))
 	return toUserDTO(u), nil
 }
 

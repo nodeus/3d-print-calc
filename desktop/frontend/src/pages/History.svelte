@@ -107,6 +107,9 @@
 </script>
 
 {#if error}<p class="err">{error}</p>{/if}
+{#if !jobs.length}
+  <p class="note">{$t('hist.empty')}</p>
+{/if}
 <div class="toolbar no-print">
   <input placeholder={$t('hist.search')} bind:value={query} oninput={() => (page = 0)} />
   <select bind:value={statusFilter} onchange={() => (page = 0)}>
@@ -155,6 +158,7 @@
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .note { color: #666; }
   input, select, button { padding: 6px; font-size: 14px; }
   .count { color: #666; font-size: 13px; }
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }

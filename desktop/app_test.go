@@ -7,42 +7,31 @@ import (
 	"testing"
 
 	"3dprint-calc/core/calc"
-	sqlite "3dprint-calc/store-sqlite"
-	"3dprint-calc/store-sqlite/seed"
 )
 
-// TestAppInit повторяет initDB на временной БД: миграции из embed,
-// сид из встроенного CSV, базовые биндинги.
-func TestAppInit(t *testing.T) {
-	db, err := sqlite.Open(filepath.Join(t.TempDir(), "app.db"))
+// TestAppCleanStart: первый запуск чистый — openDB даёт только admin,
+// справочники и работы пусты, базовые биндинги работают.
+func TestAppCleanStart(t *testing.T) {
+	db, err := openDB(filepath.Join(t.TempDir(), "app.db"))
 	if err != nil {
-		t.Fatalf("Open: %v", err)
+		t.Fatalf("openDB: %v", err)
 	}
 	defer db.Close()
-	if err := db.MigrateFS(migrationsFS, "assets/migrations"); err != nil {
-		t.Fatalf("MigrateFS: %v", err)
-	}
-	st, err := seed.SeedAll(db, bytes.NewReader(seedCSV))
-	if err != nil {
-		t.Fatalf("SeedAll: %v", err)
-	}
-	if st.Jobs != 490 {
-		t.Fatalf("jobs = %d, хочу 490", st.Jobs)
-	}
-	app := &App{db: db}
+	app := &App{db: db, dbPath: filepath.Join(t.TempDir(), "unused.db")}
 	if _, err := app.Login("admin", "admin123"); err != nil {
-		t.Fatalf("Login seeded admin: %v", err)
+		t.Fatalf("Login admin: %v", err)
 	}
 	mats, err := app.GetMaterials()
-	if err != nil || len(mats) < 15 {
-		t.Fatalf("materials: %d, %v", len(mats), err)
+	if err != nil || len(mats) != 0 {
+		t.Fatalf("materials обязаны быть пусты: %d, %v", len(mats), err)
 	}
 	printers, err := app.GetPrinters()
-	if err != nil || len(printers) != 1 {
-		t.Fatalf("printers: %+v, %v", printers, err)
+	if err != nil || len(printers) != 0 {
+		t.Fatalf("printers обязаны быть пусты: %d, %v", len(printers), err)
 	}
-	if printers[0].AmortPerHour < 5 || printers[0].AmortPerHour > 6 {
-		t.Fatalf("amort K1C = %v, хочу ~5.41", printers[0].AmortPerHour)
+	jobs, err := app.GetJobs(0)
+	if err != nil || len(jobs) != 0 {
+		t.Fatalf("jobs обязаны быть пусты: %d, %v", len(jobs), err)
 	}
 	got := app.Calc(calc.Input{TotalSec: 3600, WeightG: 100, PricePerKg: 1000})
 	if got.MatCost != 100 {
@@ -71,6 +60,10 @@ func TestBackupReopen(t *testing.T) {
 	if _, err := app.Login("admin", "admin123"); err != nil {
 		t.Fatalf("Login: %v", err)
 	}
+	// Одна ручная работа — проверять restore есть на чём.
+	if _, err := app.SaveJob(JobInput{Filename: "probe.gcode", TotalSec: 60, Cost: 1, Price: 2, Currency: "RUB"}); err != nil {
+		t.Fatalf("SaveJob: %v", err)
+	}
 
 	var buf bytes.Buffer
 	if err := db.CreateBackup(&buf); err != nil {
@@ -84,7 +77,7 @@ func TestBackupReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyBackup: %v", err)
 	}
-	if m.Counts["jobs"] != 490 {
+	if m.Counts["jobs"] != 1 {
 		t.Fatalf("после restore jobs = %v", m.Counts["jobs"])
 	}
 	// Соединение живое после переоткрытия.
