@@ -1,0 +1,223 @@
+// Package seed — первичный сид БД из legacy-данных.
+//
+// Материалы: таблица листа «Материалы» (docs/excel-reverse-engineering.md).
+// История: CSV принтера. Используется и CLI tools/seed, и десктопом
+// при первом запуске (пустая БД). Идемпотентно: повтор безопасен,
+// непустые таблицы не трогаются.
+package seed
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"3dprint-calc/core/calc"
+	"3dprint-calc/core/importers"
+	"3dprint-calc/core/models"
+	"3dprint-calc/core/store"
+)
+
+// material — строка листа «Материалы»: код, цена ₽/кг (минорные/кг),
+// дата покупки serial Excel, плотность.
+type material struct {
+	code    string
+	price   int64
+	serial  int
+	density float64
+}
+
+var materials = []material{
+	{"PETG-NIT-W3", 96500, 45741, 1.24},
+	{"PETG-StarPlast-G1", 91600, 45691, 1.27},
+	{"PETG-StarPlast-B1", 96900, 45691, 1.27},
+	{"PETG-NIT-W2", 79000, 45666, 1.27},
+	{"PETG-NIT-W1", 82600, 45641, 1.27},
+	{"PETG-NIT-B1", 79600, 45641, 1.27},
+	{"PETG-123D-B1", 54000, 45625, 1.27},
+	{"PLA-CR-W1", 0, 45611, 1.27},
+	{"PETG-NIT-B2", 86500, 45760, 1.27},
+	{"PLA-CR-W2", 100000, 0, 1.27},
+	{"PETG-NIT-W4", 86900, 45990, 1.27},
+	{"PETG-NIT-B3", 69400, 45990, 1.27},
+	{"PETG-NIT-BLUE1", 79400, 45990, 1.27},
+	{"PETG-NIT-B4", 86500, 45757, 1.27},
+	{"PETG-NIT-B5", 0, 0, 1.27},
+}
+
+// Тарифы/ставки по умолчанию для снапшота (лист «Калькулятор печати»).
+const (
+	DefaultTariff = 7.08
+	DefaultPower  = 0.35
+	DefaultOpRate = 100.0
+)
+
+// Stats — итог сида.
+type Stats struct {
+	Materials int
+	Jobs      int
+	Linked    int
+	Stubs     int
+}
+
+// DB — минимальный интерфейс БД, нужный сиду.
+type DB interface {
+	Materials() store.Materials
+	Printers() store.Printers
+	Jobs() store.Jobs
+}
+
+// SeedAll сеет принтер, материалы и историю (csv — открытый CSV принтера).
+// Непустые таблицы пропускаются.
+func SeedAll(db DB, csv io.Reader) (Stats, error) {
+	var st Stats
+	printerID, err := seedPrinter(db)
+	if err != nil {
+		return st, err
+	}
+	matIDs, spoolIDs, priceByCode, n, err := seedMaterials(db)
+	if err != nil {
+		return st, err
+	}
+	st.Materials = n
+	if csv == nil {
+		return st, nil
+	}
+	existing, err := db.Jobs().List(1)
+	if err != nil {
+		return st, fmt.Errorf("ERR_SEED_JOBS: %w", err)
+	}
+	if len(existing) > 0 {
+		st.Jobs = -1 // уже засеяно, пропуск
+		return st, nil
+	}
+	rows, err := importers.ParseHistory(csv)
+	if err != nil {
+		return st, err
+	}
+	amortHour := calc.AmortCalendarHour(47454, 1096, 8) // СПИ 3 года календарных
+	jobs := db.Jobs()
+	mats := db.Materials()
+	for _, r := range rows {
+		code := importers.ParseMaterial(r.Filename)
+		m, ok := matIDs[code]
+		if !ok && code != "" {
+			// Код из имени файла, которого нет в листе «Материалы»
+			// (более поздние закупки): стаб со стандартной плотностью.
+			if _, _, err := upsertMaterial(mats, code, 0, 1.27, ""); err != nil {
+				return st, err
+			}
+			m, _ = mats.GetByCode(code)
+			matIDs[code] = m
+			st.Stubs++
+			ok = true
+		}
+		pricePerKg, density := 0.0, 1.27
+		var spoolID int64
+		if ok {
+			pricePerKg, density = priceByCode[code], m.Density
+			spoolID = spoolIDs[code]
+			st.Linked++
+		}
+		weightG := calc.WeightFromLength(density, 1.75, r.FilamentUsed)
+		res := calc.Calculate(calc.Input{
+			TotalSec: float64(r.TotalDuration), WeightG: weightG,
+			PricePerKg: pricePerKg, Tariff: DefaultTariff, PowerKW: DefaultPower,
+			AmortPerHour: amortHour, OpRate: DefaultOpRate,
+		})
+		snap, _ := json.Marshal(map[string]any{
+			"material": code, "weight_g": weightG, "cost": res.Cost, "currency": "RUB",
+		})
+		if _, err := jobs.Upsert(models.Job{
+			Filename: r.Filename, StartAt: r.StartTime.Format("2006-01-02 15:04"),
+			PrinterID: printerID, SpoolID: spoolID, Status: r.Status,
+			PrintSec: r.PrintDuration, TotalSec: r.TotalDuration,
+			WeightG: weightG, LengthM: r.FilamentUsed / 1000, CostSnapshot: string(snap),
+		}); err != nil {
+			return st, err
+		}
+	}
+	st.Jobs = len(rows)
+	st.Materials += st.Stubs
+	return st, nil
+}
+
+// seedPrinter создаёт K1C из блока амортизации Excel либо возвращает
+// существующий первый принтер.
+func seedPrinter(db DB) (int64, error) {
+	list, err := db.Printers().List()
+	if err != nil {
+		return 0, fmt.Errorf("ERR_SEED_PRINTER: %w", err)
+	}
+	if len(list) > 0 {
+		return list[0].ID, nil
+	}
+	return db.Printers().Save(models.Printer{
+		Name: "K1C", Model: "Creality K1C", PurchasePrice: 4745400, Currency: "RUB",
+		CommissioningDate: ExcelDate(45611), LifeYears: 3, HoursPerDay: 8,
+		CalendarMode: "calendar", AmortMethod: "calendar", PowerKW: DefaultPower,
+	})
+}
+
+// seedMaterials сеет справочник (пропуск, если не пуст).
+// Возвращает карты код→материал/катушка/цена и число материалов.
+func seedMaterials(db DB) (map[string]models.Material, map[string]int64, map[string]float64, int, error) {
+	mats := db.Materials()
+	matIDs := map[string]models.Material{}
+	spoolIDs := map[string]int64{}
+	priceByCode := map[string]float64{}
+	existing, err := mats.List()
+	if err != nil {
+		return nil, nil, nil, 0, fmt.Errorf("ERR_SEED_MATERIALS: %w", err)
+	}
+	if len(existing) > 0 {
+		for _, m := range existing {
+			matIDs[m.Code] = m
+		}
+		return matIDs, spoolIDs, priceByCode, len(existing), nil
+	}
+	for _, sm := range materials {
+		_, spoolID, err := upsertMaterial(mats, sm.code, sm.price, sm.density, ExcelDate(sm.serial))
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		m, _ := mats.GetByCode(sm.code)
+		matIDs[sm.code] = m
+		priceByCode[sm.code] = float64(sm.price) / 100
+		if spoolID != 0 {
+			spoolIDs[sm.code] = spoolID
+		}
+	}
+	return matIDs, spoolIDs, priceByCode, len(materials), nil
+}
+
+// upsertMaterial вставляет материал и (при price>0) одну катушку.
+func upsertMaterial(mats store.Materials, code string, price int64, density float64, boughtAt string) (int64, int64, error) {
+	typ := code
+	if i := strings.IndexByte(typ, '-'); i >= 0 {
+		typ = typ[:i]
+	}
+	id, err := mats.UpsertByCode(models.Material{
+		Code: code, Type: typ, Density: density, Diameter: 1.75,
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	if price <= 0 {
+		return id, 0, nil
+	}
+	spoolID, err := mats.AddSpool(models.Spool{
+		MaterialID: id, Price: price, Currency: "RUB", FxRate: 1,
+		BoughtAt: boughtAt, WeightInitG: 1000, WeightLeftG: 1000,
+	})
+	return id, spoolID, err
+}
+
+// ExcelDate переводит serial Excel в ISO-дату (дни от 1899-12-30).
+func ExcelDate(serial int) string {
+	if serial <= 0 {
+		return ""
+	}
+	return time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC).AddDate(0, 0, serial).Format("2006-01-02")
+}

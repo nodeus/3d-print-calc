@@ -117,8 +117,12 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 
 ## 6. Сборка и запуск (цели)
 
-- Desktop: `wails build -platform windows/amd64,linux/amd64,darwin/universal` — один бинарник,
-  `app.db` рядом, работа без установки Python/Node.
+- Desktop: из `desktop/` — `wails build [-platform windows/amd64,linux/amd64,darwin/universal]`
+  (сам ставит npm-пакеты и строит frontend). Один бинарник ~15МБ, `app.db` рядом,
+  работа без установки Python/Node. Напрямую `go build ./...` требует собранного
+  `desktop/frontend/dist` (`npm run build`); `frontend/dist`, `node_modules`,
+  `package.json.md5` — не в git. Копия `desktop/assets/{seed.csv,migrations}` обязана
+  совпадать с каноном (`csv/`, `migrations/`) — следит `desktop/assets_sync_test.go`.
 - Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто).
 - Бэкап/восстановление: `backup.zip (app.db + csv/json)` в 1 клик, импорт с dry-run.
 

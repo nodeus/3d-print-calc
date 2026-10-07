@@ -12,6 +12,7 @@ type Materials interface {
 	GetByCode(code string) (models.Material, error)
 	List() ([]models.Material, error)
 	AddSpool(s models.Spool) (int64, error)
+	ListSpools(materialID int64) ([]models.Spool, error)
 }
 
 // Printers — парк принтеров.
