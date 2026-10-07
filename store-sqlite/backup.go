@@ -266,22 +266,11 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool) (ImportReport, error) {
 		return rep, err
 	}
 	rep.Total = len(rows)
-	existing, err := d.Jobs().List(0)
+	fresh, exist, err := d.ClassifyJobs(rows)
 	if err != nil {
-		return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+		return rep, err
 	}
-	keys := make(map[string]bool, len(existing))
-	for _, j := range existing {
-		keys[j.Filename+"\x00"+j.StartAt] = true
-	}
-	for _, row := range rows {
-		key := row.Filename + "\x00" + row.StartTime.Format("2006-01-02 15:04")
-		if keys[key] {
-			rep.Existing++
-		} else {
-			rep.New++
-		}
-	}
+	rep.New, rep.Existing = fresh, exist
 	if dryRun || rep.New == 0 {
 		return rep, nil
 	}
@@ -300,10 +289,31 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool) (ImportReport, error) {
 	return rep, nil
 }
 
+// ClassifyJobs делит строки на новые/существующие (по filename+start_at).
+// Записи нет — используется dry-run превью CSV и Moonraker.
+func (d *DB) ClassifyJobs(rows []importers.PrintJob) (fresh, exist int, err error) {
+	existing, err := d.Jobs().List(0)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ERR_IMPORT: %w", err)
+	}
+	keys := make(map[string]bool, len(existing))
+	for _, j := range existing {
+		keys[j.Filename+"\x00"+j.StartAt] = true
+	}
+	for _, row := range rows {
+		key := row.Filename + "\x00" + row.StartTime.Format("2006-01-02 15:04")
+		if keys[key] {
+			exist++
+		} else {
+			fresh++
+		}
+	}
+	return fresh, exist, nil
+}
+
 func itoa(v int64) string {
 	return strconv.FormatInt(v, 10)
 }
-
 func commaFloat(v float64) string {
 	return strings.Replace(strconv.FormatFloat(v, 'f', -1, 64), ".", ",", 1)
 }

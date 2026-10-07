@@ -232,10 +232,12 @@ func (r *materialsRepo) ListSpools(materialID int64) ([]models.Spool, error) {
 // Save сохраняет принтер.
 func (r *printersRepo) Save(p models.Printer) (int64, error) {
 	res, err := r.db.Exec(`INSERT INTO printers (name, model, purchase_price, currency, commissioning_date,
-		life_years, hours_per_day, calendar_mode, amort_method, power_kw, maint_per_hour, resource_hours)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		life_years, hours_per_day, calendar_mode, amort_method, power_kw, maint_per_hour, resource_hours,
+		moonraker_url)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.Name, p.Model, p.PurchasePrice, p.Currency, p.CommissioningDate, p.LifeYears,
-		p.HoursPerDay, p.CalendarMode, p.AmortMethod, p.PowerKW, p.MaintPerHour, p.ResourceHours)
+		p.HoursPerDay, p.CalendarMode, p.AmortMethod, p.PowerKW, p.MaintPerHour, p.ResourceHours,
+		p.MoonrakerURL)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_PRINTER_SAVE: %w", err)
 	}
@@ -246,7 +248,8 @@ func (r *printersRepo) Save(p models.Printer) (int64, error) {
 // List возвращает все принтеры по имени.
 func (r *printersRepo) List() ([]models.Printer, error) {
 	rows, err := r.db.Query(`SELECT id, name, model, purchase_price, currency, commissioning_date,
-		life_years, hours_per_day, calendar_mode, amort_method, power_kw, maint_per_hour, resource_hours
+		life_years, hours_per_day, calendar_mode, amort_method, power_kw, maint_per_hour, resource_hours,
+		moonraker_url
 		FROM printers ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_PRINTER_LIST: %w", err)
@@ -257,12 +260,21 @@ func (r *printersRepo) List() ([]models.Printer, error) {
 		var p models.Printer
 		if err := rows.Scan(&p.ID, &p.Name, &p.Model, &p.PurchasePrice, &p.Currency,
 			&p.CommissioningDate, &p.LifeYears, &p.HoursPerDay, &p.CalendarMode,
-			&p.AmortMethod, &p.PowerKW, &p.MaintPerHour, &p.ResourceHours); err != nil {
+			&p.AmortMethod, &p.PowerKW, &p.MaintPerHour, &p.ResourceHours,
+			&p.MoonrakerURL); err != nil {
 			return nil, fmt.Errorf("ERR_PRINTER_LIST: %w", err)
 		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// SetMoonrakerURL задаёт адрес Moonraker принтера.
+func (r *printersRepo) SetMoonrakerURL(id int64, url string) error {
+	if _, err := r.db.Exec(`UPDATE printers SET moonraker_url=? WHERE id=?`, url, id); err != nil {
+		return fmt.Errorf("ERR_PRINTER_MOONRAKER: %w", err)
+	}
+	return nil
 }
 
 // Upsert вставляет печать или обновляет её по паре (filename, start_at).
