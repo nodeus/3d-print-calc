@@ -32,8 +32,8 @@
 
   async function load() {
     try {
-      orders = await wails.listOrders();
-      customers = await wails.listCustomers();
+      orders = (await wails.listOrders()) ?? [];
+      customers = (await wails.listCustomers()) ?? [];
       if (detail) detail = await wails.orderDetail(detail.order.ID);
     } catch (e) {
       error = String(e);

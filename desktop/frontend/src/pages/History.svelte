@@ -18,7 +18,7 @@
 
   async function load() {
     try {
-      jobs = await wails.jobs(0); // всё: раньше лимит 200 обрезал историю
+      jobs = (await wails.jobs(0)) ?? []; // всё: раньше лимит 200 обрезал историю
     } catch (e) {
       error = String(e);
     }
@@ -91,7 +91,7 @@
   function originBadge(j: JobDTO): string {
     if (j.Origin === 'manual') return $t('hist.manual');
     if (j.Origin === 'moonraker') return 'Moonraker';
-    return '';
+    return 'CSV';
   }
 
   async function remove(j: JobDTO) {

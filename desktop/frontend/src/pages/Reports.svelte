@@ -12,12 +12,12 @@
 
   onMount(async () => {
     try {
-      [revenue, tops, load, debts] = await Promise.all([
+      [revenue, tops, load, debts] = (await Promise.all([
         wails.revenueByMonth(),
         wails.topMaterials(),
         wails.printerLoad(),
         wails.debts(),
-      ]);
+      ]).then((r) => r.map((x) => x ?? []))) as [MonthRevenue[], MaterialStat[], PrinterStat[], Debt[]];
     } catch (e) {
       console.error(e);
     }

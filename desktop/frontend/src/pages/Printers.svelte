@@ -28,7 +28,7 @@
 
   async function load() {
     try {
-      printers = await wails.printers();
+      printers = (await wails.printers()) ?? [];
       for (const p of printers) urls[p.ID] = p.MoonrakerURL ?? '';
     } catch (e) {
       error = String(e);

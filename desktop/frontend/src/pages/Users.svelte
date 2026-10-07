@@ -11,7 +11,7 @@
 
   async function load() {
     try {
-      list = await wails.listUsers();
+      list = (await wails.listUsers()) ?? [];
     } catch (e) {
       error = String(e);
     }

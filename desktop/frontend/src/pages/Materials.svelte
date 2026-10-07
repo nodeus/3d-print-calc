@@ -19,7 +19,7 @@
 
   async function load() {
     try {
-      materials = await wails.materials();
+      materials = (await wails.materials()) ?? [];
     } catch (e) {
       error = String(e);
     }

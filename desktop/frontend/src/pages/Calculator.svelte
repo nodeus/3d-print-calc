@@ -83,18 +83,29 @@
     if (j) applyJob(j);
   }
 
-  onMount(async () => {
+  onMount(() => {
+    loadAll();
+    // Подписка: prefill, пришедший при смонтированном калькуляторе.
+    return prefillJob.subscribe((j) => {
+      if (j) {
+        prefillJob.set(null);
+        applyJob(j);
+      }
+    });
+  });
+
+  async function loadAll() {
     try {
-      materials = await wails.materials();
-      printers = await wails.printers();
+      materials = (await wails.materials()) ?? [];
+      printers = (await wails.printers()) ?? [];
       currency = await wails.getBaseCurrency();
-      orders = (await wails.listOrders()).filter((o) => ['draft', 'quoted', 'in_work'].includes(o.Status));
-      customers = await wails.listCustomers();
+      orders = ((await wails.listOrders()) ?? []).filter((o) => ['draft', 'quoted', 'in_work'].includes(o.Status));
+      customers = (await wails.listCustomers()) ?? [];
       if (orders.length) orderId = orders[0].ID;
-      historyJobs = await wails.jobs(0);
+      historyJobs = (await wails.jobs(0)) ?? [];
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
       if (printers.length) selectPrinter(printers[0].ID);
-      // Переход из истории: применить один раз и очистить.
+      // Переход из истории: применить висящий prefill (разовый).
       const pre = get(prefillJob);
       if (pre) {
         prefillJob.set(null);
@@ -105,7 +116,7 @@
     } catch (e) {
       console.error(e);
     }
-  });
+  }
 
   function selectPrinter(id: number) {
     printerId = id;
