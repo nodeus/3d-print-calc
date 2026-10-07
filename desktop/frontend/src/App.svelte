@@ -8,19 +8,32 @@
   import Customers from './pages/Customers.svelte';
   import Orders from './pages/Orders.svelte';
   import Reports from './pages/Reports.svelte';
-  import Users from './pages/Users.svelte';
-  import { t, locale, initLocale, switchLocale } from './lib/i18n';
-  import { user, refreshUser, isAdmin } from './lib/session';
+  import Info from './pages/Info.svelte';
+  import Confirm from './lib/Confirm.svelte';
+  import { t, initLocale } from './lib/i18n';
+  import { user, refreshUser } from './lib/session';
+  import { goTab } from './lib/nav';
+  import { exportCurrentTab, hasPdfExporter } from './lib/pdf';
   import { wails } from './lib/wails';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
-  type Tab = 'calc' | 'history' | 'materials' | 'printers' | 'orders' | 'customers' | 'reports' | 'users' | 'settings';
+  type Tab = 'calc' | 'history' | 'materials' | 'printers' | 'orders' | 'customers' | 'reports' | 'info' | 'settings';
   let tab: Tab = $state('calc');
+  let tabError = $state('');
 
   onMount(async () => {
     await initLocale();
     await refreshUser();
   });
+
+  const unsubGoTab = goTab.subscribe((v) => {
+    if (v) {
+      tabError = '';
+      goTab.set(null);
+      tab = v as Tab;
+    }
+  });
+  onDestroy(unsubGoTab);
 
   const tabs: { id: Tab; key: string }[] = [
     { id: 'calc', key: 'nav.calculator' },
@@ -30,6 +43,7 @@
     { id: 'orders', key: 'nav.orders' },
     { id: 'customers', key: 'nav.customers' },
     { id: 'reports', key: 'nav.reports' },
+    { id: 'info', key: 'nav.info' },
     { id: 'settings', key: 'nav.settings' },
   ];
 
@@ -40,35 +54,47 @@
       await refreshUser();
     }
   }
+
+  function printPage() {
+    window.print();
+  }
 </script>
 
 {#if !$user}
   <Login />
 {:else}
-  <header>
+  <header class="no-print">
     <h1>{$t('app.title')}</h1>
     <div class="lang">
       <span>{$user.login} ({$user.role})</span>
+      <button onclick={printPage}>{$t('common.print')}</button>
+      {#if $hasPdfExporter}<button onclick={exportCurrentTab}>{$t('common.pdf')}</button>{/if}
       <button onclick={logout}>{$t('auth.exit')}</button>
-      <button class:active={$locale === 'ru'} onclick={() => switchLocale('ru')}>RU</button>
-      <button class:active={$locale === 'en'} onclick={() => switchLocale('en')}>EN</button>
     </div>
   </header>
-  <nav>
+  <div class="print-only"><h1>{$t('app.title')}</h1><p class="print-date">{new Date().toLocaleString()}</p></div>
+  <nav class="no-print">
     {#each tabs as tb}<button class:active={tab === tb.id} onclick={() => (tab = tb.id)}>{$t(tb.key)}</button>{/each}
-    {#if isAdmin($user)}<button class:active={tab === 'users'} onclick={() => (tab = 'users')}>{$t('nav.users')}</button>{/if}
   </nav>
   <main>
-    {#if tab === 'calc'}<Calculator />
-    {:else if tab === 'history'}<History />
-    {:else if tab === 'materials'}<Materials />
-    {:else if tab === 'printers'}<Printers />
-    {:else if tab === 'settings'}<Settings />
-    {:else if tab === 'orders'}<Orders />
-    {:else if tab === 'customers'}<Customers />
-    {:else if tab === 'users' && isAdmin($user)}<Users />
-    {:else}<Reports />{/if}
+    {#key tab}
+      <svelte:boundary>        {#if tab === 'calc'}<Calculator />
+        {:else if tab === 'history'}<History />
+        {:else if tab === 'materials'}<Materials />
+        {:else if tab === 'printers'}<Printers />
+        {:else if tab === 'settings'}<Settings />
+        {:else if tab === 'orders'}<Orders />
+        {:else if tab === 'customers'}<Customers />
+        {:else if tab === 'info'}<Info />
+        {:else}<Reports />{/if}
+        {#snippet failed(err, reset)}
+          <p class="err">{$t('app.tab_error')}: {String((err as Error)?.message ?? err)}</p>
+          <button onclick={reset}>{$t('common.retry')}</button>
+        {/snippet}
+      </svelte:boundary>
+    {/key}
   </main>
+  <Confirm />
 {/if}
 
 <style>
@@ -80,4 +106,14 @@
   button.active { background: #1f2937; color: white; border-color: #1f2937; }
   .lang { display: flex; gap: 6px; align-items: center; font-size: 13px; }
   main { padding: 12px 16px; }
+  .err { color: #b00; }
+  .print-only { display: none; }
+  .print-date { color: #666; font-size: 12px; }
+  @media print {
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    main { padding: 0; }
+    :global(body) { background: white; }
+    @page { size: A4; margin: 12mm; }
+  }
 </style>

@@ -1,8 +1,8 @@
-// Package seed — первичный сид БД из legacy-данных.
+// Package seed — сид БД legacy-данными (dev/тесты) и EnsureAdmin для чистого
+// первого запуска десктопа.
 //
-// Материалы: таблица листа «Материалы» (docs/excel-reverse-engineering.md).
-// История: CSV принтера. Используется и CLI tools/seed, и десктопом
-// при первом запуске (пустая БД). Идемпотентно: повтор безопасен,
+// Материалы: таблица листа «Материалы». История: CSV принтера.
+// Полный сид — только через CLI tools/seed. Идемпотентно: повтор безопасен,
 // непустые таблицы не трогаются.
 package seed
 
@@ -74,7 +74,7 @@ type DB interface {
 // Непустые таблицы пропускаются.
 func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	var st Stats
-	if err := ensureAdmin(db); err != nil {
+	if err := EnsureAdmin(db); err != nil {
 		return st, err
 	}
 	printerID, err := seedPrinter(db)
@@ -101,7 +101,7 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	if err != nil {
 		return st, err
 	}
-	imp, err := ImportRows(db, printerID, rows)
+	imp, err := ImportRows(db, printerID, rows, "import", nil)
 	if err != nil {
 		return st, err
 	}
@@ -110,9 +110,17 @@ func SeedAll(db DB, csv io.Reader) (Stats, error) {
 	return st, nil
 }
 
+// ProgressFunc сообщает ход импорта: done из total. Вызывается каждые
+// 25 строк и в конце (done == total). nil — без отчётов.
+type ProgressFunc func(done, total int)
+
 // ImportRows импортирует разобранные строки истории (upsert по filename+start_at).
 // Справочник подтягивается из БД: неизвестные коды → стабы. Возвращает статистику.
-func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error) {
+// origin — происхождение работ: import (CSV/сид) или moonraker.
+func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string, onProgress ProgressFunc) (Stats, error) {
+	if origin == "" {
+		origin = "import"
+	}
 	var st Stats
 	mats := db.Materials()
 	list, err := mats.List()
@@ -131,7 +139,7 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error
 	}
 	amortHour := calc.AmortCalendarHour(47454, 1096, 8) // СПИ 3 года календарных
 	jobs := db.Jobs()
-	for _, r := range rows {
+	for i, r := range rows {
 		code := importers.ParseMaterial(r.Filename)
 		m, ok := matIDs[code]
 		if !ok && code != "" {
@@ -159,12 +167,17 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error
 			AmortPerHour: amortHour, OpRate: DefaultOpRate,
 		})
 		snap, _ := json.Marshal(map[string]any{
-			"material": code, "weight_g": weightG, "cost": res.Cost, "currency": "RUB",
+			"v": 2, "material": code, "weight_g": weightG, "cost": res.Cost, "currency": "RUB",
+			"input": map[string]any{
+				"tariff": DefaultTariff, "powerKW": DefaultPower,
+				"amortPerHour": amortHour, "opRate": DefaultOpRate,
+				"prepH": 0, "postH": 0,
+			},
 		})
 		if _, err := jobs.Upsert(models.Job{
 			Filename: r.Filename, StartAt: r.StartTime.Format("2006-01-02 15:04"),
 			EndAt:     r.EndTime.Format("2006-01-02 15:04"),
-			PrinterID: printerID, SpoolID: spoolID, Status: r.Status,
+			PrinterID: printerID, SpoolID: spoolID, Status: r.Status, Origin: origin,
 			PrintSec: r.PrintDuration, TotalSec: r.TotalDuration,
 			EstimatedSec: r.EstimatedTime, SizeBytes: r.Size, FilamentTotalMm: r.FilamentTotal,
 			WeightG: weightG, LengthM: r.FilamentUsed / 1000, Slicer: r.Slicer,
@@ -172,14 +185,18 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob) (Stats, error
 		}); err != nil {
 			return st, err
 		}
+		if onProgress != nil && ((i+1)%25 == 0 || i+1 == len(rows)) {
+			onProgress(i+1, len(rows))
+		}
 	}
 	st.Jobs = len(rows)
 	return st, nil
 }
 
-// ensureAdmin создаёт admin/admin123 при пустой таблице пользователей.
+// EnsureAdmin создаёт admin/admin123 при пустой таблице пользователей.
 // Пароль обязан быть сменён — см. страницу пользователей в приложении.
-func ensureAdmin(db DB) error {
+// Вызывается и десктопом при первом запуске, и полным сидом.
+func EnsureAdmin(db DB) error {
 	n, err := db.Users().Count()
 	if err != nil {
 		return err

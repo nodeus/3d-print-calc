@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order } from '../lib/wails';
+  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order, type JobDTO, type Customer } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
   import { money } from '../lib/format';
+  import { prefillJob } from '../lib/prefill';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
+  import { get } from 'svelte/store';
 
   let materials: MaterialDTO[] = $state([]);
   let printers: PrinterDTO[] = $state([]);
@@ -37,29 +40,131 @@
   let filename = $state('');
   let savedMsg = $state(false);
   let orders: Order[] = $state([]);
+  let customers: Customer[] = $state([]);
+  let customerId = $state(0);
   let orderId = $state(0);
   let orderTitle = $state('');
   let orderQty = $state(1);
   let orderMsg = $state(false);
 
-  let result: CalcResult | null = $state(null);
+  let result = $state<CalcResult | null>(null);
   let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
   let density = $derived(materials.find((m) => m.code === matCode)?.density ?? 1.27);
+  let historyJobs: JobDTO[] = $state([]);
+  let historyId = $state(0);
+  let stubWarn = $state('');
 
-  onMount(async () => {
+  function snapMaterial(j: JobDTO): string {
     try {
-      materials = await wails.materials();
-      printers = await wails.printers();
+      return JSON.parse(j.CostSnapshot)?.material ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  interface SnapInput {
+    tariff?: number;
+    powerKW?: number;
+    amortPerHour?: number;
+    opRate?: number;
+    prepH?: number;
+    postH?: number;
+  }
+
+  function snapInput(j: JobDTO): SnapInput {
+    try {
+      return JSON.parse(j.CostSnapshot)?.input ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  let calcReady = $state(false);
+  let pendingJob: JobDTO | null = $state(null);
+
+  // Применить работу из истории: материал, принтер/тарифы/ставки из снапшота v2
+  // (v1 — только материал, тарифы остаются текущими), вес, время, имя.
+  // Селект «Работа из истории» синхронизируется (иначе там висит прочерк).
+  function applyJob(j: JobDTO) {
+    if (!calcReady) {
+      pendingJob = j; // loadAll ещё идёт — применим по готовности
+      return;
+    }
+    historyId = historyJobs.some((x) => x.ID === j.ID) ? j.ID : 0;
+    const code = snapMaterial(j);
+    const inp = snapInput(j);
+    stubWarn = '';
+    if (code && materials.some((m) => m.code === code)) {
+      matCode = code;
+    } else if (code) {
+      stubWarn = `${code}: ${$t('calc.stub_warn')}`;
+    }
+    // Принтер — только привязка (ставки берём из снапшота, они точнее текущих).
+    if (j.PrinterID && printers.some((p) => p.ID === j.PrinterID)) {
+      printerId = j.PrinterID;
+    } else if (printers.length && !printerId) {
+      selectPrinter(printers[0].ID);
+    }
+    if (inp.tariff != null) tariff = inp.tariff;
+    if (inp.powerKW != null) powerKW = inp.powerKW;
+    if (inp.amortPerHour != null) amortPerHour = inp.amortPerHour;
+    if (inp.opRate != null) opRate = inp.opRate;
+    if (inp.prepH != null) prepH = inp.prepH;
+    if (inp.postH != null) postH = inp.postH;
+    weightG = Math.round(j.WeightG * 100) / 100;
+    filamentMM = Math.round(j.LengthM * 1000 * 100) / 100 || null;
+    timeH = Math.floor(j.TotalSec / 3600);
+    timeM = Math.round((j.TotalSec % 3600) / 60);
+    filename = j.Filename;
+    recalc();
+  }
+
+  function applyHistorySelect(id: number) {
+    const j = historyJobs.find((x) => x.ID === id);
+    if (j) applyJob(j);
+  }
+
+  onMount(() => {
+    loadAll();
+    registerPdfExporter(toPDF);
+    // Подписка: prefill, пришедший при смонтированном калькуляторе.
+    const unsub = prefillJob.subscribe((j) => {
+      if (j) {
+        prefillJob.set(null);
+        applyJob(j);
+      }
+    });
+    return () => {
+      unsub();
+      registerPdfExporter(null);
+    };
+  });
+
+  async function loadAll() {
+    try {
+      materials = (await wails.materials()) ?? [];
+      printers = (await wails.printers()) ?? [];
       currency = await wails.getBaseCurrency();
-      orders = (await wails.listOrders()).filter((o) => ['draft', 'quoted', 'in_work'].includes(o.Status));
+      orders = ((await wails.listOrders()) ?? []).filter((o) => ['draft', 'quoted', 'in_work'].includes(o.Status));
+      customers = (await wails.listCustomers()) ?? [];
       if (orders.length) orderId = orders[0].ID;
+      historyJobs = (await wails.jobs(0)) ?? [];
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
       if (printers.length) selectPrinter(printers[0].ID);
-      await recalc();
+      calcReady = true;
+      // Висящий prefill: разовый из монтирования или ранний из подписки.
+      const pre = pendingJob ?? get(prefillJob);
+      pendingJob = null;
+      if (pre) {
+        prefillJob.set(null);
+        applyJob(pre);
+      } else {
+        await recalc();
+      }
     } catch (e) {
       console.error(e);
     }
-  });
+  }
 
   function selectPrinter(id: number) {
     printerId = id;
@@ -118,13 +223,34 @@
     }, 120);
   }
 
+  function orderNo(o: Order): string {
+    return o.Number || `#${o.ID}`;
+  }
+
+  function orderLabel(o: Order): string {
+    const suffix = o.Title ? ` · ${o.Title}` : '';
+    return `${orderNo(o)}${suffix} · ${custName(o.CustomerID)} · ${get(t)('st.' + o.Status)}`;
+  }
+
+  function custName(id: number): string {
+    return customers.find((c) => c.ID === id)?.Name ?? '';
+  }
+
+  let visibleOrders = $derived(orders.filter((o) => !customerId || o.CustomerID === customerId));
+
+  function pickCustomer(id: number) {
+    customerId = id;
+    const first = orders.filter((o) => !id || o.CustomerID === id)[0];
+    orderId = first ? first.ID : 0;
+  }
+
   async function save() {
     if (!result) return;
     try {
       await wails.saveJob({
         filename,
         printerId,
-        spoolId: 0,
+        spoolId: 0, // резолвится бэкендом по материалу
         status: 'completed',
         totalSec: Math.round(timeH * 3600 + timeM * 60),
         weightG: weightG ?? 0,
@@ -132,6 +258,13 @@
         cost: result.Cost,
         price: result.PriceVAT,
         currency,
+        material: matCode,
+        tariff,
+        powerKW,
+        amortPerHour,
+        opRate,
+        prepH,
+        postH,
       });
       savedMsg = true;
       setTimeout(() => (savedMsg = false), 2500);
@@ -154,7 +287,24 @@
     }
   }
 
-  const rows = $derived(
+  async function toPDF() {
+    if (!result) return;
+    const m = (v: number) => money(v, currency, $locale);
+    await downloadPDF($t('nav.calculator'), [
+      {
+        Title: '',
+        Headers: [$t('calc.breakdown'), $t('calc.amount')],
+        Rows: [
+          ...rows.map(([k, v]) => [$t(k), m(v)]),
+          [$t('calc.cost'), m(result.Cost)],
+          [$t('calc.price'), m(result.Price)],
+          [$t('calc.final'), m(result.PriceVAT)],
+        ],
+      },
+    ]);
+  }
+
+  const rows: [string, number][] = $derived(
     result
       ? [
           ['calc.row_mat', result.MatCost],
@@ -172,6 +322,17 @@
 
 <div class="grid">
   <section class="card">
+    {#if !materials.length}<p class="warn">{$t('calc.no_materials')}</p>{/if}
+    {#if !printers.length}<p class="warn">{$t('calc.no_printers')}</p>{/if}
+    <div class="row">
+      <label>{$t('calc.job')}
+        <select value={historyId} onchange={(e) => applyHistorySelect(Number(e.currentTarget.value))}>
+          <option value={0}>—</option>
+          {#each historyJobs as j}<option value={j.ID}>{j.Filename} ({j.StartAt})</option>{/each}
+        </select>
+      </label>
+    </div>
+    {#if stubWarn}<p class="warn">{stubWarn}</p>{/if}
     <div class="row">
       <label>{$t('calc.material')}
         <select bind:value={matCode} onchange={recalc}>
@@ -232,8 +393,8 @@
   </section>
 
   <section class="card">
-    <h3>{$t('calc.breakdown')}</h3>
-    {#if result}
+      <h3>{$t('calc.breakdown')}</h3>
+      {#if result}
       <table>
         <tbody>{#each rows as [key, v]}<tr><td>{$t(key)}</td><td class="n">{money(v, currency, $locale)}</td></tr>{/each}</tbody>
       </table>
@@ -250,9 +411,15 @@
       {#if savedMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
       {#if orders.length}
         <div class="row">
-          <label>{$t('ord.order')}
+          <label>{$t('cust.name')}
+            <select value={customerId} onchange={(e) => pickCustomer(Number(e.currentTarget.value))}>
+              <option value={0}>—</option>
+              {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
+            </select>
+          </label>
+          <label>{$t('ord.number')}
             <select bind:value={orderId}>
-              {#each orders as o}<option value={o.ID}>#{o.ID} · {o.Status}</option>{/each}
+              {#each visibleOrders as o}<option value={o.ID}>{orderLabel(o)}</option>{/each}
             </select>
           </label>
           <label>{$t('ord.item')}<input bind:value={orderTitle} /></label>
@@ -271,12 +438,11 @@
   .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 110px; }
   input, select { padding: 6px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  td { padding: 3px 4px; border-bottom: 1px solid #eee; }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table { font-size: 14px; }
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
   .final { font-size: 18px; border-top: 2px solid #333; margin-top: 4px; padding-top: 8px; }
   .percopy { color: #666; font-size: 13px; }
   .ok { color: green; }
+  .warn { color: #b60; }
   button { padding: 8px 14px; align-self: end; }
 </style>

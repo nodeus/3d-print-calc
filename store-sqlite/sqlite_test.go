@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
@@ -22,6 +23,26 @@ func openTestDB(t *testing.T) *DB {
 		t.Fatalf("Migrate twice: %v", err)
 	}
 	return db
+}
+
+func TestEmptyListsSerializeAsArray(t *testing.T) {
+	// Пустые выборки обязаны быть [] (не null): иначе фронт падает на .length.
+	db := openTestDB(t)
+	mats, _ := db.Materials().List()
+	printers, _ := db.Printers().List()
+	jobs, _ := db.Jobs().List(0)
+	users, _ := db.Users().List()
+	for name, v := range map[string]any{
+		"materials": mats, "printers": printers, "jobs": jobs, "users": users,
+	} {
+		raw, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(raw) != "[]" {
+			t.Errorf("%s marshals as %s, хочу []", name, raw)
+		}
+	}
 }
 
 func TestMaterialsRoundTrip(t *testing.T) {

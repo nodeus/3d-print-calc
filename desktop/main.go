@@ -1,13 +1,13 @@
 // Desktop — Wails v2: тонкие Go-биндинги поверх core/ + store-sqlite.
 //
 // Логики расчёта здесь нет — только вызовы core/calc и репозиториев.
-// БД: app.db рядом с exe (или APP_DB), миграции и CSV-сид встроены.
+// БД: app.db рядом с exe (или APP_DB), миграции встроены.
 package main
 
 import (
-	"bytes"
 	"context"
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,6 +15,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"3dprint-calc/core/importers"
 	"3dprint-calc/core/models"
@@ -28,6 +29,7 @@ var assets embed.FS
 // App — корень биндингов. Методы — в app.go, backup.go, users.go, orders.go, moonraker.go.
 type App struct {
 	ctx              context.Context
+	eventsOn         bool // true после startup: контекст настоящий wails
 	db               *sqlite.DB
 	dbPath           string
 	currentUser      *models.User
@@ -64,6 +66,8 @@ func main() {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.eventsOn = true
+	runtime.WindowSetTitle(ctx, fmt.Sprintf("3D Print Cost Calculator v%s (%s)", Version, BuildDate))
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -89,7 +93,9 @@ func (a *App) initDB() error {
 	return nil
 }
 
-// openDB открывает файл, накатывает миграции и сеет пустую БД.
+// openDB открывает файл и накатывает миграции. Первый запуск чистый:
+// только учётка admin/admin123 (seed.EnsureAdmin). Работы, материалы и принтеры
+// пользователь заводит сам — импортом CSV, из Moonraker или вручную.
 func openDB(path string) (*sqlite.DB, error) {
 	db, err := sqlite.Open(path)
 	if err != nil {
@@ -99,7 +105,7 @@ func openDB(path string) (*sqlite.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if _, err := seed.SeedAll(db, bytes.NewReader(seedCSV)); err != nil {
+	if err := seed.EnsureAdmin(db); err != nil {
 		db.Close()
 		return nil, err
 	}

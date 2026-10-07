@@ -58,7 +58,7 @@ func (r *usersRepo) List() ([]models.User, error) {
 		return nil, fmt.Errorf("ERR_USER_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.User
+	out := []models.User{}
 	for rows.Next() {
 		var u models.User
 		var role string
@@ -99,6 +99,14 @@ func (r *usersRepo) Count() (int, error) {
 	return n, nil
 }
 
+// Delete удаляет пользователя. Guards (не себя, не последнего админа) — в App.
+func (r *usersRepo) Delete(id int64) error {
+	if _, err := r.db.Exec(`DELETE FROM users WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_USER_DELETE: %w", err)
+	}
+	return nil
+}
+
 // Save создаёт (ID=0) или обновляет заказчика.
 func (r *customersRepo) Save(c models.Customer) (int64, error) {
 	if c.ID > 0 {
@@ -124,7 +132,7 @@ func (r *customersRepo) List() ([]models.Customer, error) {
 		return nil, fmt.Errorf("ERR_CUSTOMER_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Customer
+	out := []models.Customer{}
 	for rows.Next() {
 		var c models.Customer
 		if err := rows.Scan(&c.ID, &c.Name, &c.Contact, &c.Currency, &c.Note); err != nil {
@@ -133,6 +141,21 @@ func (r *customersRepo) List() ([]models.Customer, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// Delete удаляет заказчика. Блок: есть заказы.
+func (r *customersRepo) Delete(id int64) error {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM orders WHERE customer_id=?`, id).Scan(&n); err != nil {
+		return fmt.Errorf("ERR_CUSTOMER_DELETE: %w", err)
+	}
+	if n > 0 {
+		return fmt.Errorf("ERR_CUSTOMER_USED: %d заказов ссылаются на заказчика", n)
+	}
+	if _, err := r.db.Exec(`DELETE FROM customers WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_CUSTOMER_DELETE: %w", err)
+	}
+	return nil
 }
 
 // orderStatuses — допустимые статусы заказа.
@@ -152,10 +175,10 @@ func (r *ordersRepo) Create(o models.Order) (int64, error) {
 	if o.Currency == "" {
 		o.Currency = "RUB"
 	}
-	res, err := r.db.Exec(`INSERT INTO orders (customer_id, currency, fx_rate, margin_profit,
+	res, err := r.db.Exec(`INSERT INTO orders (customer_id, number, title, currency, fx_rate, margin_profit,
 		margin_dev, vat, status, total_base, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-		nullInt(o.CustomerID), o.Currency, o.FxRate, o.MarginProfit, o.MarginDev,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+		nullInt(o.CustomerID), o.Number, o.Title, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev,
 		o.VAT, o.Status, o.CreatedAt)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_ORDER_CREATE: %w", err)
@@ -168,9 +191,9 @@ func (r *ordersRepo) Create(o models.Order) (int64, error) {
 func (r *ordersRepo) Get(id int64) (models.Order, error) {
 	var o models.Order
 	var custID sql.NullInt64
-	err := r.db.QueryRow(`SELECT id, customer_id, currency, fx_rate, margin_profit,
+	err := r.db.QueryRow(`SELECT id, customer_id, number, title, currency, fx_rate, margin_profit,
 		margin_dev, vat, status, total_base, created_at FROM orders WHERE id=?`, id).
-		Scan(&o.ID, &custID, &o.Currency, &o.FxRate, &o.MarginProfit,
+		Scan(&o.ID, &custID, &o.Number, &o.Title, &o.Currency, &o.FxRate, &o.MarginProfit,
 			&o.MarginDev, &o.VAT, &o.Status, &o.TotalBase, &o.CreatedAt)
 	if err != nil {
 		return o, fmt.Errorf("ERR_ORDER_GET: %w", err)
@@ -181,17 +204,17 @@ func (r *ordersRepo) Get(id int64) (models.Order, error) {
 
 // List возвращает все заказы (новые первыми).
 func (r *ordersRepo) List() ([]models.Order, error) {
-	rows, err := r.db.Query(`SELECT id, customer_id, currency, fx_rate, margin_profit,
+	rows, err := r.db.Query(`SELECT id, customer_id, number, title, currency, fx_rate, margin_profit,
 		margin_dev, vat, status, total_base, created_at FROM orders ORDER BY id DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_ORDER_LIST: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Order
+	out := []models.Order{}
 	for rows.Next() {
 		var o models.Order
 		var custID sql.NullInt64
-		if err := rows.Scan(&o.ID, &custID, &o.Currency, &o.FxRate, &o.MarginProfit,
+		if err := rows.Scan(&o.ID, &custID, &o.Number, &o.Title, &o.Currency, &o.FxRate, &o.MarginProfit,
 			&o.MarginDev, &o.VAT, &o.Status, &o.TotalBase, &o.CreatedAt); err != nil {
 			return nil, fmt.Errorf("ERR_ORDER_LIST: %w", err)
 		}
@@ -199,6 +222,41 @@ func (r *ordersRepo) List() ([]models.Order, error) {
 		out = append(out, o)
 	}
 	return out, rows.Err()
+}
+
+// Update правит шапку заказа (статус — только через SetStatus).
+func (r *ordersRepo) Update(o models.Order) error {
+	if o.ID == 0 {
+		return fmt.Errorf("ERR_ORDER_SAVE: пустой id")
+	}
+	if _, err := r.db.Exec(`UPDATE orders SET customer_id=?, title=?, currency=?, fx_rate=?,
+		margin_profit=?, margin_dev=?, vat=? WHERE id=?`,
+		nullInt(o.CustomerID), o.Title, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev, o.VAT, o.ID); err != nil {
+		return fmt.Errorf("ERR_ORDER_SAVE: %w", err)
+	}
+	return nil
+}
+
+// Delete удаляет заказ каскадом: позиции + оплаты. Подтверждение — в UI.
+func (r *ordersRepo) Delete(id int64) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("ERR_ORDER_DELETE: %w", err)
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`DELETE FROM payments WHERE order_id=?`,
+		`DELETE FROM order_items WHERE order_id=?`,
+		`DELETE FROM orders WHERE id=?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			return fmt.Errorf("ERR_ORDER_DELETE: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("ERR_ORDER_DELETE: %w", err)
+	}
+	return nil
 }
 
 // SetStatus меняет статус заказа.
@@ -235,7 +293,7 @@ func (r *ordersRepo) Items(orderID int64) ([]models.OrderItem, error) {
 		return nil, fmt.Errorf("ERR_ORDER_ITEM: %w", err)
 	}
 	defer rows.Close()
-	var out []models.OrderItem
+	out := []models.OrderItem{}
 	for rows.Next() {
 		var it models.OrderItem
 		var jobID sql.NullInt64
@@ -270,7 +328,7 @@ func (r *ordersRepo) Payments(orderID int64) ([]models.Payment, error) {
 		return nil, fmt.Errorf("ERR_PAYMENT: %w", err)
 	}
 	defer rows.Close()
-	var out []models.Payment
+	out := []models.Payment{}
 	for rows.Next() {
 		var p models.Payment
 		if err := rows.Scan(&p.ID, &p.OrderID, &p.Amount, &p.PaidAt, &p.Note); err != nil {

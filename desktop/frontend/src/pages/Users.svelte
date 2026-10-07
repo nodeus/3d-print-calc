@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { wails, type UserDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
+  import { askConfirm } from '../lib/confirm';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let list: UserDTO[] = $state([]);
   let login = $state('');
@@ -11,12 +13,16 @@
 
   async function load() {
     try {
-      list = await wails.listUsers();
+      list = (await wails.listUsers()) ?? [];
     } catch (e) {
       error = String(e);
     }
   }
-  onMount(load);
+  onMount(() => {
+    load();
+    registerPdfExporter(toPDF);
+    return () => registerPdfExporter(null);
+  });
 
   async function create() {
     error = '';
@@ -38,6 +44,27 @@
       error = String(e);
     }
   }
+
+  async function remove(u: UserDTO) {
+    error = '';
+    if (!(await askConfirm(`${$t("common.delete_q")} «${u.login}»?`))) return;
+    try {
+      await wails.deleteUser(u.id);
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function toPDF() {
+    await downloadPDF($t('nav.users'), [
+      {
+        Title: '',
+        Headers: [$t('auth.login'), $t('users.role')],
+        Rows: list.map((u) => [u.login, u.role]),
+      },
+    ]);
+  }
 </script>
 
 <div class="row">
@@ -52,7 +79,7 @@
 </div>
 {#if error}<p class="err">{error}</p>{/if}
 <table>
-  <thead><tr><th>{$t('auth.login')}</th><th>{$t('users.role')}</th></tr></thead>
+  <thead><tr><th>{$t('auth.login')}</th><th>{$t('users.role')}</th><th class="no-print"></th></tr></thead>
   <tbody>
     {#each list as u}
       <tr>
@@ -64,6 +91,7 @@
             <option value="viewer">viewer</option>
           </select>
         </td>
+        <td class="no-print"><button onclick={() => remove(u)}>✕</button></td>
       </tr>
     {/each}
   </tbody>
@@ -72,7 +100,6 @@
 <style>
   .row { display: flex; gap: 8px; margin-bottom: 10px; }
   input, select, button { padding: 6px; font-size: 14px; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
+  table { font-size: 14px; }
   .err { color: #b00; }
 </style>

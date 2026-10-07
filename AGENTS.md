@@ -119,11 +119,17 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 
 - Desktop: из `desktop/` — `wails build [-platform windows/amd64,linux/amd64,darwin/universal]`
   (сам ставит npm-пакеты и строит frontend). Один бинарник ~15МБ, `app.db` рядом,
-  работа без установки Python/Node. Напрямую `go build ./...` требует собранного
+  работа без установки Python/Node. Релизы — только через `go run ./tools/release`
+  (папки `release/<version>/<дата>/`, в git не идут, см. `docs/release.md`). Напрямую `go build ./...` требует собранного
   `desktop/frontend/dist` (`npm run build`); `frontend/dist`, `node_modules`,
-  `package.json.md5` — не в git. Копия `desktop/assets/{seed.csv,migrations}` обязана
-  совпадать с каноном (`csv/`, `migrations/`) — следит `desktop/assets_sync_test.go`.
-- Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто).
+  `package.json.md5` — не в git. Копия `desktop/assets/migrations` обязана
+  совпадать с каноном (`migrations/`) — следит `desktop/assets_sync_test.go`.
+- Первый запуск чистый: только `admin/admin123` (пароль сменить сразу).
+  Работы/материалы/принтеры пользователь заводит сам: CSV-импорт, Moonraker, вручную.
+  Полный сид legacy-данных — только dev-инструмент `go run ./tools/seed -db ...`.
+- Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто),
+  `npm run check` в `desktop/frontend` (svelte-check: ловит ошибки шаблонов,
+  которые `vite build` пропускает — напр. `{YYYY}` в атрибутах).
 - Бэкап/восстановление: `backup.zip (app.db + csv/json)` в 1 клик, импорт с dry-run.
 
 ## 7. Что НЕ делать
@@ -132,6 +138,6 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 - Не добавлять зависимости с CGO (ломает кросс-билд) без согласования.
 - Не выносить инструменты/скрипты/временные файлы за пределы репо (`C:\Temp` запрещён —
   только `tools/`, `docs/` внутри проекта).
-- Не коммитить `app.db`, `*.exe`, `node_modules/`, секреты, реальные персональные данные.
+- Не коммитить `app.db`, `*.exe`, `release/`, `node_modules/`, секреты, реальные персональные данные.
 - Не менять схему БД без новой миграции. Не менять формулы `core/calc` без обновления
   `docs/excel-reverse-engineering.md` и тестов.

@@ -23,10 +23,22 @@ type Client struct {
 	http *http.Client
 }
 
+// NormalizeBase чистит адрес: пробелы, слэш на конце, схема по умолчанию http://.
+// Пользователи вводят голый IP с портом (192.168.0.109:7125) — без схемы
+// http.NewRequest такой URL отвергает (first path segment...colon).
+func NormalizeBase(baseURL string) string {
+	base := strings.TrimSpace(baseURL)
+	base = strings.TrimRight(base, "/")
+	if base != "" && !strings.Contains(base, "://") {
+		base = "http://" + base
+	}
+	return base
+}
+
 // New создаёт клиента с таймаутом 10с.
 func New(baseURL string) *Client {
 	return &Client{
-		base: strings.TrimRight(baseURL, "/"),
+		base: NormalizeBase(baseURL),
 		http: &http.Client{Timeout: 10 * time.Second},
 	}
 }

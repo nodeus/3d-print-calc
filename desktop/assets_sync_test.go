@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-// TestAssetsInSync гарантирует: копии в desktop/assets побайтово равны канону.
-// Канон: migrations/*.sql, csv/print_history.csv (см. AGENTS.md).
-// Новые миграции подхватываются автоматически — копируй файл в assets.
+// TestAssetsInSync гарантирует: копии миграций в desktop/assets побайтово
+// равны канону (см. AGENTS.md). Новые миграции подхватываются автоматически —
+// копируй файл в assets. CSV первым запуском больше не сеется (чистый старт).
 func TestAssetsInSync(t *testing.T) {
 	canonMig, err := filepath.Glob("../migrations/*.sql")
 	if err != nil || len(canonMig) == 0 {
 		t.Fatalf("нет канонических миграций: %v", err)
 	}
-	pairs := map[string]string{"assets/seed.csv": "../csv/print_history.csv"}
+	pairs := map[string]string{}
 	for _, f := range canonMig {
 		pairs["assets/migrations/"+filepath.Base(f)] = f
 	}

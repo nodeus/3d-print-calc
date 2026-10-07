@@ -3,6 +3,10 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"3dprint-calc/core/calc"
@@ -12,18 +16,20 @@ import (
 //go:embed all:assets/migrations
 var migrationsFS embed.FS
 
-//go:embed assets/seed.csv
-var seedCSV []byte
-
 // MaterialDTO — материал с ценой первой катушки для калькулятора.
 type MaterialDTO struct {
 	ID         int64   `json:"id"`
 	Code       string  `json:"code"`
 	Type       string  `json:"type"`
+	Vendor     string  `json:"vendor"`
+	ColorHex   string  `json:"colorHex"`
+	Note       string  `json:"note"`
 	Density    float64 `json:"density"`
 	Diameter   float64 `json:"diameter"`
 	PricePerKg float64 `json:"pricePerKg"`
 	Currency   string  `json:"currency"`
+	SpoolID    int64   `json:"spoolId"`
+	SpoolLeftG float64 `json:"spoolLeftG"`
 }
 
 // GetMaterials возвращает справочник с ценами.
@@ -35,12 +41,15 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 	out := make([]MaterialDTO, 0, len(mats))
 	for _, m := range mats {
 		dto := MaterialDTO{
-			ID: m.ID, Code: m.Code, Type: m.Type,
+			ID: m.ID, Code: m.Code, Type: m.Type, Vendor: m.Vendor,
+			ColorHex: m.ColorHex, Note: m.Note,
 			Density: m.Density, Diameter: m.Diameter, Currency: "RUB",
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
 			dto.PricePerKg = float64(spools[0].Price) / 100
 			dto.Currency = spools[0].Currency
+			dto.SpoolID = spools[0].ID
+			dto.SpoolLeftG = spools[0].WeightLeftG
 		}
 		out = append(out, dto)
 	}
@@ -64,6 +73,150 @@ func (a *App) GetPrinters() ([]PrinterDTO, error) {
 		out = append(out, PrinterDTO{Printer: p, AmortPerHour: AmortRate(p)})
 	}
 	return out, nil
+}
+
+// UpdateMaterial правит материал (manager+). Код неизменен.
+func (a *App) UpdateMaterial(m models.Material) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().Update(m)
+}
+
+// AddMaterial создаёт материал с катушкой (manager+). Цена ₽/кг.
+func (a *App) AddMaterial(code, matType string, density, pricePerKg float64) (int64, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return 0, err
+	}
+	if code == "" {
+		return 0, errEmptyCode
+	}
+	if matType == "" {
+		matType = "PETG"
+	}
+	if density <= 0 {
+		density = 1.27
+	}
+	id, err := a.db.Materials().UpsertByCode(models.Material{
+		Code: code, Type: matType, Density: density, Diameter: 1.75,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if pricePerKg > 0 {
+		if _, err := a.db.Materials().AddSpool(models.Spool{
+			MaterialID: id, Price: int64(pricePerKg*100 + 0.5),
+			Currency: "RUB", FxRate: 1, WeightInitG: 1000, WeightLeftG: 1000,
+		}); err != nil {
+			return 0, err
+		}
+	}
+	return id, nil
+}
+
+// DeleteMaterial удаляет материал (manager+). Блок при катушках — в store.
+func (a *App) DeleteMaterial(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().Delete(id)
+}
+
+// UpdateSpool правит партию: цена/валюта/остаток (manager+).
+func (a *App) UpdateSpool(s models.Spool) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().UpdateSpool(s)
+}
+
+// SetMaterialPrice ставит цену материала: обновляет первую катушку
+// или создаёт её (manager+). Остальное не трогает.
+func (a *App) SetMaterialPrice(materialID, priceMinor int64, currency string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().SetMaterialPrice(materialID, priceMinor, currency)
+}
+
+// colorRe — hex-цвет #rrggbb для фаворитов.
+var colorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// GetMaterialColorFavs возвращает цвета-фавориты (settings.material_color_favs).
+func (a *App) GetMaterialColorFavs() []string {
+	v, ok, _ := a.db.GetSetting("material_color_favs")
+	if !ok || v == "" {
+		return []string{}
+	}
+	var cols []string
+	if err := json.Unmarshal([]byte(v), &cols); err != nil {
+		return []string{}
+	}
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if colorRe.MatchString(c) {
+			out = append(out, strings.ToLower(c))
+		}
+	}
+	return out
+}
+
+// SetMaterialColorFavs сохраняет фавориты (manager+, валидация hex).
+func (a *App) SetMaterialColorFavs(cols []string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		c = strings.ToLower(strings.TrimSpace(c))
+		if !colorRe.MatchString(c) || seen[c] {
+			continue
+		}
+		seen[c] = true
+		out = append(out, c)
+	}
+	raw, _ := json.Marshal(out)
+	return a.db.SetSetting("material_color_favs", string(raw))
+}
+
+// AddPrinter создаёт принтер со всеми характеристиками (manager+).
+func (a *App) AddPrinter(p models.Printer) (int64, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return 0, err
+	}
+	if p.HoursPerDay <= 0 {
+		p.HoursPerDay = 8
+	}
+	if p.LifeYears <= 0 {
+		p.LifeYears = 3
+	}
+	if p.CalendarMode == "" {
+		p.CalendarMode = "calendar"
+	}
+	if p.AmortMethod == "" {
+		p.AmortMethod = "calendar"
+	}
+	if p.Currency == "" {
+		p.Currency = "RUB"
+	}
+	return a.db.Printers().Save(p)
+}
+
+// UpdatePrinter правит принтер целиком (manager+).
+func (a *App) UpdatePrinter(p models.Printer) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Printers().Update(p)
+}
+
+// DeletePrinter удаляет принтер (manager+). Блок при работах — в store.
+func (a *App) DeletePrinter(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Printers().Delete(id)
 }
 
 // AmortRate считает ₽/час по методу принтера.
@@ -100,17 +253,25 @@ func (a *App) WeightFromLength(density, diameterMM, lengthMM float64) float64 {
 }
 
 // JobInput — сохранение результата калькулятора в историю.
+// Material/Tariff/... — контекст расчёта для снапшота v2 (перенос и пересчёт).
 type JobInput struct {
-	Filename  string  `json:"filename"`
-	PrinterID int64   `json:"printerId"`
-	SpoolID   int64   `json:"spoolId"`
-	Status    string  `json:"status"`
-	TotalSec  int64   `json:"totalSec"`
-	WeightG   float64 `json:"weightG"`
-	LengthM   float64 `json:"lengthM"`
-	Cost      float64 `json:"cost"`
-	Price     float64 `json:"price"`
-	Currency  string  `json:"currency"`
+	Filename     string  `json:"filename"`
+	PrinterID    int64   `json:"printerId"`
+	SpoolID      int64   `json:"spoolId"`
+	Status       string  `json:"status"`
+	TotalSec     int64   `json:"totalSec"`
+	WeightG      float64 `json:"weightG"`
+	LengthM      float64 `json:"lengthM"`
+	Cost         float64 `json:"cost"`
+	Price        float64 `json:"price"`
+	Currency     string  `json:"currency"`
+	Material     string  `json:"material"`
+	Tariff       float64 `json:"tariff"`
+	PowerKW      float64 `json:"powerKW"`
+	AmortPerHour float64 `json:"amortPerHour"`
+	OpRate       float64 `json:"opRate"`
+	PrepH        float64 `json:"prepH"`
+	PostH        float64 `json:"postH"`
 }
 
 // SaveJob сохраняет расчёт (manager+). StartAt — сейчас (импорт истории — через CSV).
@@ -124,15 +285,68 @@ func (a *App) SaveJob(in JobInput) (int64, error) {
 	if in.Status == "" {
 		in.Status = "completed"
 	}
+	// Катушка по материалу (вместо вечного 0): для привязки и пересчёта.
+	spoolID := in.SpoolID
+	if spoolID == 0 && in.Material != "" {
+		if m, err := a.db.Materials().GetByCode(in.Material); err == nil {
+			if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
+				spoolID = spools[0].ID
+			}
+		}
+	}
 	snap, _ := json.Marshal(map[string]any{
-		"cost": in.Cost, "price": in.Price, "currency": in.Currency,
+		"v": 2, "material": in.Material, "currency": in.Currency,
+		"cost": in.Cost, "price": in.Price,
+		"input": map[string]any{
+			"tariff": in.Tariff, "powerKW": in.PowerKW,
+			"amortPerHour": in.AmortPerHour, "opRate": in.OpRate,
+			"prepH": in.PrepH, "postH": in.PostH,
+		},
 	})
 	return a.db.Jobs().Upsert(models.Job{
 		Filename: in.Filename, StartAt: time.Now().Format("2006-01-02 15:04"),
-		PrinterID: in.PrinterID, SpoolID: in.SpoolID, Status: in.Status,
+		PrinterID: in.PrinterID, SpoolID: spoolID, Status: in.Status, Origin: "manual",
 		PrintSec: in.TotalSec, TotalSec: in.TotalSec,
 		WeightG: in.WeightG, LengthM: in.LengthM, CostSnapshot: string(snap),
 	})
+}
+
+// DeleteJob удаляет работу из истории (manager+, только manual).
+func (a *App) DeleteJob(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Jobs().DeleteJob(id)
+}
+
+// JobEdit — поля правки ручной работы (материал отдельно: не колонка jobs).
+type JobEdit struct {
+	ID           int64   `json:"id"`
+	Filename     string  `json:"filename"`
+	Status       string  `json:"status"`
+	StartAt      string  `json:"startAt"`
+	EndAt        string  `json:"endAt"`
+	PrintSec     int64   `json:"printSec"`
+	TotalSec     int64   `json:"totalSec"`
+	EstimatedSec int64   `json:"estimatedSec"`
+	SizeBytes    int64   `json:"sizeBytes"`
+	WeightG      float64 `json:"weightG"`
+	LengthM      float64 `json:"lengthM"`
+	Slicer       string  `json:"slicer"`
+	Material     string  `json:"material"`
+}
+
+// UpdateManualJob правит ручную работу с автопересчётом (manager+).
+func (a *App) UpdateManualJob(in JobEdit) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Jobs().UpdateManual(models.Job{
+		ID: in.ID, Filename: in.Filename, Status: in.Status,
+		StartAt: in.StartAt, EndAt: in.EndAt,
+		PrintSec: in.PrintSec, TotalSec: in.TotalSec, EstimatedSec: in.EstimatedSec,
+		SizeBytes: in.SizeBytes, WeightG: in.WeightG, LengthM: in.LengthM, Slicer: in.Slicer,
+	}, in.Material)
 }
 
 // GetJobs возвращает историю (limit<=0 — всё).
@@ -177,3 +391,61 @@ func (a *App) SetBaseCurrency(code string) error {
 	}
 	return a.db.SetSetting("base_currency", code)
 }
+
+// HistoryColumns — все колонки истории печати (порядок фиксирован).
+var HistoryColumns = []string{
+	"filename", "start", "end", "status", "duration", "weight", "length",
+	"size", "filament", "slicer", "cost", "price", "origin",
+}
+
+// DefaultHistoryColumns — видимые по умолчанию.
+var DefaultHistoryColumns = []string{
+	"filename", "start", "status", "duration", "weight", "cost", "price", "origin",
+}
+
+// GetHistoryColumns возвращает видимые колонки истории.
+func (a *App) GetHistoryColumns() []string {
+	v, ok, _ := a.db.GetSetting("history_columns")
+	if !ok || v == "" {
+		return DefaultHistoryColumns
+	}
+	var cols []string
+	if err := json.Unmarshal([]byte(v), &cols); err != nil || len(cols) == 0 {
+		return DefaultHistoryColumns
+	}
+	// Фильтруем неизвестные ключи, сохраняя порядок.
+	known := map[string]bool{}
+	for _, c := range HistoryColumns {
+		known[c] = true
+	}
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if known[c] {
+			out = append(out, c)
+		}
+	}
+	if len(out) == 0 {
+		return DefaultHistoryColumns
+	}
+	return out
+}
+
+// SetHistoryColumns сохраняет видимые колонки (manager+).
+func (a *App) SetHistoryColumns(cols []string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	known := map[string]bool{}
+	for _, c := range HistoryColumns {
+		known[c] = true
+	}
+	for _, c := range cols {
+		if !known[c] {
+			return fmt.Errorf("ERR_COLUMNS: неизвестная колонка %q", c)
+		}
+	}
+	raw, _ := json.Marshal(cols)
+	return a.db.SetSetting("history_columns", string(raw))
+}
+
+var errEmptyCode = errors.New("ERR_MATERIAL_CODE: пустой код")

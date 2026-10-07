@@ -1,9 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"strconv"
 	"time"
 
 	"3dprint-calc/core/models"
+	"3dprint-calc/core/ordnum"
 	sqlite "3dprint-calc/store-sqlite"
 )
 
@@ -25,6 +28,14 @@ func (a *App) SaveCustomer(c models.Customer) (int64, error) {
 	return a.db.Customers().Save(c)
 }
 
+// DeleteCustomer — удалить заказчика (manager+). Блок при заказах — в store.
+func (a *App) DeleteCustomer(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Customers().Delete(id)
+}
+
 // OrderDetail — заказ с позициями, оплатами и балансом.
 type OrderDetail struct {
 	Order    models.Order       `json:"order"`
@@ -35,17 +46,66 @@ type OrderDetail struct {
 }
 
 // CreateOrder — новый заказ (manager+). CreatedAt проставляется сегодня.
-func (a *App) CreateOrder(customerID int64, currency string) (int64, error) {
+func (a *App) CreateOrder(customerID int64, currency, title string) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
 		return 0, err
 	}
 	if currency == "" {
 		currency = "RUB"
 	}
+	number, err := a.db.NextOrderNumber()
+	if err != nil {
+		return 0, err
+	}
 	return a.db.Orders().Create(models.Order{
-		CustomerID: customerID, Currency: currency,
+		CustomerID: customerID, Number: number, Title: title, Currency: currency,
 		CreatedAt: time.Now().Format("2006-01-02"),
 	})
+}
+
+// OrderNumberSettings — шаблон и счётчик номеров для Настроек.
+func (a *App) OrderNumberSettings() (map[string]string, error) {
+	tpl, seq := a.db.OrderNumberSettings()
+	return map[string]string{
+		"template": tpl,
+		"seq":      strconv.Itoa(seq),
+		"preview":  previewNumber(tpl, seq),
+	}, nil
+}
+
+// SetOrderNumberSettings — шаблон и счётчик (manager+). Шаблон валидируется.
+func (a *App) SetOrderNumberSettings(template, seq string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	if _, err := ordnum.Render(template, time.Now(), 1); err != nil {
+		return err
+	}
+	n, err := strconv.Atoi(seq)
+	if err != nil || n < 1 {
+		return fmt.Errorf("ERR_ORDNUM_SEQ: счётчик обязан быть ≥ 1")
+	}
+	if err := a.db.SetSetting("order_number_template", template); err != nil {
+		return err
+	}
+	return a.db.SetSetting("order_number_seq", seq)
+}
+
+// PreviewOrderNumber — пример номера для шаблона без сохранения.
+func (a *App) PreviewOrderNumber(template string) (string, error) {
+	tpl, seq := a.db.OrderNumberSettings()
+	if template != "" {
+		tpl = template
+	}
+	return ordnum.Render(tpl, time.Now(), seq)
+}
+
+func previewNumber(tpl string, seq int) string {
+	s, err := ordnum.Render(tpl, time.Now(), seq)
+	if err != nil {
+		return err.Error()
+	}
+	return s
 }
 
 // ListOrders — все заказы.
@@ -79,6 +139,22 @@ func (a *App) SetOrderStatus(id int64, status string) error {
 		return err
 	}
 	return a.db.Orders().SetStatus(id, status)
+}
+
+// UpdateOrder — правка шапки заказа (manager+).
+func (a *App) UpdateOrder(o models.Order) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().Update(o)
+}
+
+// DeleteOrder — удаление заказа каскадом (manager+). Confirm — в UI.
+func (a *App) DeleteOrder(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().Delete(id)
 }
 
 // OrderItemInput — позиция из калькулятора (деньги — минорные единицы).

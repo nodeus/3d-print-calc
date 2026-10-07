@@ -47,10 +47,55 @@ export interface MaterialDTO {
   id: number;
   code: string;
   type: string;
+  vendor: string;
+  colorHex: string;
+  note: string;
   density: number;
   diameter: number;
   pricePerKg: number;
   currency: string;
+  spoolId: number;
+  spoolLeftG: number;
+}
+
+export interface Spool {
+  ID: number;
+  MaterialID: number;
+  Price: number;
+  Currency: string;
+  FxRate: number;
+  BoughtAt: string;
+  WeightInitG: number;
+  WeightLeftG: number;
+  Archived: boolean;
+}
+
+export interface Material {
+  ID: number;
+  Code: string;
+  Type: string;
+  Vendor: string;
+  ColorHex: string;
+  Density: number;
+  Diameter: number;
+  Note: string;
+}
+
+export interface Printer {
+  ID: number;
+  Name: string;
+  Model: string;
+  PurchasePrice: number;
+  Currency: string;
+  CommissioningDate: string;
+  LifeYears: number;
+  HoursPerDay: number;
+  CalendarMode: string;
+  AmortMethod: string;
+  PowerKW: number;
+  MaintPerHour: number;
+  ResourceHours: number;
+  MoonrakerURL: string;
 }
 
 export interface PrinterDTO {
@@ -75,13 +120,19 @@ export interface JobDTO {
   ID: number;
   Filename: string;
   StartAt: string;
+  EndAt: string;
   PrinterID: number;
   SpoolID: number;
   Status: string;
+  Origin: string;
   PrintSec: number;
   TotalSec: number;
+  EstimatedSec: number;
+  SizeBytes: number;
+  FilamentTotalMm: number;
   WeightG: number;
   LengthM: number;
+  Slicer: string;
   CostSnapshot: string;
 }
 
@@ -96,6 +147,29 @@ export interface JobInput {
   cost: number;
   price: number;
   currency: string;
+  material: string;
+  tariff: number;
+  powerKW: number;
+  amortPerHour: number;
+  opRate: number;
+  prepH: number;
+  postH: number;
+}
+
+export interface JobEdit {
+  id: number;
+  filename: string;
+  status: string;
+  startAt: string;
+  endAt: string;
+  printSec: number;
+  totalSec: number;
+  estimatedSec: number;
+  sizeBytes: number;
+  weightG: number;
+  lengthM: number;
+  slicer: string;
+  material: string;
 }
 
 export interface BackupManifest {
@@ -131,6 +205,8 @@ export interface Customer {
 export interface Order {
   ID: number;
   CustomerID: number;
+  Number: string;
+  Title: string;
   Currency: string;
   FxRate: number;
   MarginProfit: number;
@@ -189,14 +265,25 @@ export interface PrinterStat {
 export interface Debt {
   orderId: number;
   customer: string;
+  title: string;
   total: number;
   paid: number;
   balance: number;
   status: string;
 }
 
+export interface PDFSection {
+  Title: string;
+  Headers: string[];
+  Rows: string[][];
+}
+
 declare global {
   interface Window {
+    runtime: {
+      EventsOn(event: string, callback: (data: never) => void): void;
+      EventsOff(event: string): void;
+    };
     go: {
       main: {
         App: {
@@ -226,10 +313,18 @@ declare global {
           ChangeMyPassword(oldPw: string, pw: string): Promise<void>;
           ListCustomers(): Promise<Customer[]>;
           SaveCustomer(c: Customer): Promise<number>;
-          CreateOrder(customerId: number, currency: string): Promise<number>;
+          CreateOrder(customerId: number, currency: string, title: string): Promise<number>;
           ListOrders(): Promise<Order[]>;
           GetOrderDetail(id: number): Promise<OrderDetail>;
           SetOrderStatus(id: number, status: string): Promise<void>;
+          UpdateOrder(o: Order): Promise<void>;
+          DeleteOrder(id: number): Promise<void>;
+          DeleteJob(id: number): Promise<void>;
+          UpdateManualJob(job: JobEdit): Promise<void>;
+          OrderNumberSettings(): Promise<Record<string, string>>;
+          SetOrderNumberSettings(template: string, seq: string): Promise<void>;
+          PreviewOrderNumber(template: string): Promise<string>;
+          OpenURL(url: string): Promise<void>;
           AddOrderItem(item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }): Promise<number>;
           AddPayment(orderId: number, amount: number, note: string): Promise<number>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
@@ -240,6 +335,22 @@ declare global {
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
           MoonrakerApply(): Promise<ImportReport>;
+          AddMaterial(code: string, matType: string, density: number, pricePerKg: number): Promise<number>;
+          UpdateMaterial(m: Material): Promise<void>;
+          DeleteMaterial(id: number): Promise<void>;
+          UpdateSpool(s: Spool): Promise<void>;
+          SetMaterialPrice(materialId: number, priceMinor: number, currency: string): Promise<void>;
+          GetMaterialColorFavs(): Promise<string[]>;
+          SetMaterialColorFavs(cols: string[]): Promise<void>;
+          AddPrinter(p: Printer): Promise<number>;
+          UpdatePrinter(p: Printer): Promise<void>;
+          DeletePrinter(id: number): Promise<void>;
+          DeleteCustomer(id: number): Promise<void>;
+          DeleteUser(id: number): Promise<void>;
+          AppVersion(): Promise<Record<string, string>>;
+          GetHistoryColumns(): Promise<string[]>;
+          SetHistoryColumns(cols: string[]): Promise<void>;
+          ExportPDF(title: string, filename: string, sections: PDFSection[]): Promise<string>;
         };
       };
     }
@@ -276,10 +387,19 @@ export const wails = {
   changeMyPassword: (oldPw: string, pw: string) => api().ChangeMyPassword(oldPw, pw),
   listCustomers: () => api().ListCustomers(),
   saveCustomer: (c: Customer) => api().SaveCustomer(c),
-  createOrder: (customerId: number, currency: string) => api().CreateOrder(customerId, currency),
+  createOrder: (customerId: number, currency: string, title: string) =>
+    api().CreateOrder(customerId, currency, title),
   listOrders: () => api().ListOrders(),
   orderDetail: (id: number) => api().GetOrderDetail(id),
   setOrderStatus: (id: number, status: string) => api().SetOrderStatus(id, status),
+  updateOrder: (o: Order) => api().UpdateOrder(o),
+  deleteOrder: (id: number) => api().DeleteOrder(id),
+  deleteJob: (id: number) => api().DeleteJob(id),
+  updateManualJob: (job: JobEdit) => api().UpdateManualJob(job),
+  orderNumberSettings: () => api().OrderNumberSettings(),
+  setOrderNumberSettings: (template: string, seq: string) => api().SetOrderNumberSettings(template, seq),
+  previewOrderNumber: (template: string) => api().PreviewOrderNumber(template),
+  openURL: (url: string) => api().OpenURL(url),
   addOrderItem: (item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }) =>
     api().AddOrderItem(item),
   addPayment: (orderId: number, amount: number, note: string) => api().AddPayment(orderId, amount, note),
@@ -291,4 +411,40 @@ export const wails = {
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
   moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
   moonrakerApply: () => api().MoonrakerApply(),
+  addMaterial: (code: string, matType: string, density: number, pricePerKg: number) =>
+    api().AddMaterial(code, matType, density, pricePerKg),
+  updateMaterial: (m: Material) => api().UpdateMaterial(m),
+  deleteMaterial: (id: number) => api().DeleteMaterial(id),
+  updateSpool: (s: Spool) => api().UpdateSpool(s),
+  setMaterialPrice: (materialId: number, priceMinor: number, currency: string) =>
+    api().SetMaterialPrice(materialId, priceMinor, currency),
+  getMaterialColorFavs: () => api().GetMaterialColorFavs(),
+  setMaterialColorFavs: (cols: string[]) => api().SetMaterialColorFavs(cols),
+  addPrinter: (p: Printer) => api().AddPrinter(p),
+  updatePrinter: (p: Printer) => api().UpdatePrinter(p),
+  deletePrinter: (id: number) => api().DeletePrinter(id),
+  deleteCustomer: (id: number) => api().DeleteCustomer(id),
+  deleteUser: (id: number) => api().DeleteUser(id),
+  appVersion: () => api().AppVersion(),
+  historyColumns: () => api().GetHistoryColumns(),
+  setHistoryColumns: (cols: string[]) => api().SetHistoryColumns(cols),
+  exportPDF: (title: string, filename: string, sections: PDFSection[]) =>
+    api().ExportPDF(title, filename, sections),
+  onImportProgress: (cb: (done: number, total: number) => void): void => {
+    try {
+      window.runtime.EventsOn('import-progress', (d: unknown) => {
+        const m = d as { done: number; total: number };
+        cb(m.done, m.total);
+      });
+    } catch {
+      /* не под wails (dev) — прогресса нет */
+    }
+  },
+  offImportProgress: (): void => {
+    try {
+      window.runtime.EventsOff('import-progress');
+    } catch {
+      /* noop */
+    }
+  },
 };

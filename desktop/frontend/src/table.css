@@ -1,0 +1,35 @@
+/* Единые таблицы приложения.
+ * - Заголовки выравниваются как данные (.n — вправо, включая th).
+ * - Тонкие вертикальные разделители столбцов.
+ * Печать: компактный кегль, разделители сохраняются.
+ */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  vertical-align: top;
+}
+th:not(:first-child),
+td:not(:first-child) {
+  border-left: 1px solid #e8e8e8;
+}
+th.n,
+td.n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+@media print {
+  table {
+    font-size: 11px;
+  }
+  .card {
+    border: none;
+    padding: 0;
+    max-width: none;
+  }
+}

@@ -6,6 +6,7 @@
 build/
 bin/
 desktop/build/
+/release/
 
 # Wails / frontend (dist и package.json.md5 — артефакты `wails build`, в git не идут;
 # package-lock.json — коммитим. Каноническая сборка десктопа — `wails build`,
@@ -40,6 +41,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+~$*
 
 # Secrets / env
 .env
@@ -48,3 +50,6 @@ Thumbs.db
 *.pem
 secrets/
 desktop/frontend/wailsjs/
+
+# Harness session transcripts
+session-*.md

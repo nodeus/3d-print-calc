@@ -2,6 +2,8 @@
   import { onMount } from 'svelte';
   import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt } from '../lib/wails';
   import { t } from '../lib/i18n';
+  import { gotoOrder } from '../lib/nav';
+  import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num, hms } from '../lib/format';
 
   let revenue: MonthRevenue[] = $state([]);
@@ -9,18 +11,49 @@
   let load: PrinterStat[] = $state([]);
   let debts: Debt[] = $state([]);
 
-  onMount(async () => {
+  onMount(() => {
+    loadAll();
+    registerPdfExporter(toPDF);
+    return () => registerPdfExporter(null);
+  });
+
+  async function loadAll() {
     try {
-      [revenue, tops, load, debts] = await Promise.all([
+      [revenue, tops, load, debts] = (await Promise.all([
         wails.revenueByMonth(),
         wails.topMaterials(),
         wails.printerLoad(),
         wails.debts(),
-      ]);
+      ]).then((r) => r.map((x) => x ?? []))) as [MonthRevenue[], MaterialStat[], PrinterStat[], Debt[]];
     } catch (e) {
       console.error(e);
     }
-  });
+  }
+
+  async function toPDF() {
+    await downloadPDF($t('nav.reports'), [
+      {
+        Title: $t('rep.revenue'),
+        Headers: [$t('rep.month'), $t('ord.total'), $t('rep.orders')],
+        Rows: revenue.map((r) => [r.month, money(r.total / 100, 'RUB', 'ru'), String(r.orders)]),
+      },
+      {
+        Title: $t('rep.debts'),
+        Headers: ['#', $t('ord.title'), $t('cust.name'), $t('ord.balance'), $t('ord.status')],
+        Rows: debts.map((d) => [String(d.orderId), d.title, d.customer, money(d.balance / 100, 'RUB', 'ru'), d.status]),
+      },
+      {
+        Title: $t('rep.topmats'),
+        Headers: [$t('mat.code'), $t('rep.jobs'), $t('hist.weight')],
+        Rows: tops.map((m) => [m.code, String(m.jobs), num(m.weight)]),
+      },
+      {
+        Title: $t('rep.load'),
+        Headers: [$t('printer.name'), $t('rep.jobs'), $t('calc.time_h')],
+        Rows: load.map((p) => [p.name, String(p.jobs), hms(p.totalSec)]),
+      },
+    ]);
+  }
 </script>
 
 <div class="grid">
@@ -34,8 +67,8 @@
   <section class="card">
     <h3>{$t('rep.debts')}</h3>
     <table>
-      <thead><tr><th>#</th><th>{$t('cust.name')}</th><th>{$t('ord.balance')}</th><th>{$t('ord.status')}</th></tr></thead>
-      <tbody>{#each debts as d}<tr><td>{d.orderId}</td><td>{d.customer}</td><td class="n">{money(d.balance / 100, 'RUB', 'ru')}</td><td>{d.status}</td></tr>{/each}</tbody>
+      <thead><tr><th>#</th><th>{$t('ord.title')}</th><th>{$t('cust.name')}</th><th class="n">{$t('ord.balance')}</th><th>{$t('ord.status')}</th></tr></thead>
+      <tbody>{#each debts as d}<tr class="link" onclick={() => gotoOrder(d.orderId)}><td>{d.orderId}</td><td>{d.title}</td><td>{d.customer}</td><td class="n">{money(d.balance / 100, 'RUB', 'ru')}</td><td>{$t('st.' + d.status)}</td></tr>{/each}</tbody>
     </table>
   </section>
   <section class="card">
@@ -58,7 +91,6 @@
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
   h3 { margin: 0 0 8px; font-size: 15px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 4px 6px; border-bottom: 1px solid #eee; text-align: left; }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table { font-size: 13px; }
+  tr.link { cursor: pointer; }
 </style>
