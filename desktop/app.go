@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"3dprint-calc/core/calc"
@@ -20,10 +21,15 @@ type MaterialDTO struct {
 	ID         int64   `json:"id"`
 	Code       string  `json:"code"`
 	Type       string  `json:"type"`
+	Vendor     string  `json:"vendor"`
+	ColorHex   string  `json:"colorHex"`
+	Note       string  `json:"note"`
 	Density    float64 `json:"density"`
 	Diameter   float64 `json:"diameter"`
 	PricePerKg float64 `json:"pricePerKg"`
 	Currency   string  `json:"currency"`
+	SpoolID    int64   `json:"spoolId"`
+	SpoolLeftG float64 `json:"spoolLeftG"`
 }
 
 // GetMaterials возвращает справочник с ценами.
@@ -35,12 +41,15 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 	out := make([]MaterialDTO, 0, len(mats))
 	for _, m := range mats {
 		dto := MaterialDTO{
-			ID: m.ID, Code: m.Code, Type: m.Type,
+			ID: m.ID, Code: m.Code, Type: m.Type, Vendor: m.Vendor,
+			ColorHex: m.ColorHex, Note: m.Note,
 			Density: m.Density, Diameter: m.Diameter, Currency: "RUB",
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
 			dto.PricePerKg = float64(spools[0].Price) / 100
 			dto.Currency = spools[0].Currency
+			dto.SpoolID = spools[0].ID
+			dto.SpoolLeftG = spools[0].WeightLeftG
 		}
 		out = append(out, dto)
 	}
@@ -72,6 +81,37 @@ func (a *App) UpdateMaterial(m models.Material) error {
 		return err
 	}
 	return a.db.Materials().Update(m)
+}
+
+// AddMaterial создаёт материал с катушкой (manager+). Цена ₽/кг.
+func (a *App) AddMaterial(code, matType string, density, pricePerKg float64) (int64, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return 0, err
+	}
+	if code == "" {
+		return 0, errEmptyCode
+	}
+	if matType == "" {
+		matType = "PETG"
+	}
+	if density <= 0 {
+		density = 1.27
+	}
+	id, err := a.db.Materials().UpsertByCode(models.Material{
+		Code: code, Type: matType, Density: density, Diameter: 1.75,
+	})
+	if err != nil {
+		return 0, err
+	}
+	if pricePerKg > 0 {
+		if _, err := a.db.Materials().AddSpool(models.Spool{
+			MaterialID: id, Price: int64(pricePerKg*100 + 0.5),
+			Currency: "RUB", FxRate: 1, WeightInitG: 1000, WeightLeftG: 1000,
+		}); err != nil {
+			return 0, err
+		}
+	}
+	return id, nil
 }
 
 // DeleteMaterial удаляет материал (manager+). Блок при катушках — в store.
@@ -240,3 +280,5 @@ func (a *App) SetBaseCurrency(code string) error {
 	}
 	return a.db.SetSetting("base_currency", code)
 }
+
+var errEmptyCode = errors.New("ERR_MATERIAL_CODE: пустой код")
