@@ -1,0 +1,45 @@
+# Binaries / build output
+*.exe
+*.dll
+*.so
+*.dylib
+build/
+bin/
+desktop/build/
+
+# Wails / frontend
+desktop/frontend/node_modules/
+desktop/frontend/dist/
+desktop/frontend/.svelte-kit/
+node_modules/
+
+# Go
+*.test
+*.out
+coverage.txt
+
+# SQLite / app data (never commit real DB)
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+app.db
+
+# Backups / exports with real data
+*.zip
+backup*.zip
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets / env
+.env
+.env.*
+*.key
+*.pem
+secrets/

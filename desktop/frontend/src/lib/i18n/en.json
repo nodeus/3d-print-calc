@@ -1,0 +1,14 @@
+{
+  "app.title": "3D Print Cost Calculator",
+  "nav.calculator": "Calculator",
+  "nav.history": "Print history",
+  "nav.materials": "Materials",
+  "nav.printers": "Printers",
+  "nav.orders": "Orders",
+  "nav.reports": "Reports",
+  "nav.settings": "Settings",
+  "calc.cost": "Cost",
+  "calc.price": "Price",
+  "common.save": "Save",
+  "common.cancel": "Cancel"
+}

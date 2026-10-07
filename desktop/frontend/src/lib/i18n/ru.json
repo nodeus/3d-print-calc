@@ -1,0 +1,14 @@
+{
+  "app.title": "Калькулятор стоимости 3D-печати",
+  "nav.calculator": "Калькулятор",
+  "nav.history": "История печати",
+  "nav.materials": "Материалы",
+  "nav.printers": "Принтеры",
+  "nav.orders": "Заказы",
+  "nav.reports": "Отчёты",
+  "nav.settings": "Настройки",
+  "calc.cost": "Себестоимость",
+  "calc.price": "Цена",
+  "common.save": "Сохранить",
+  "common.cancel": "Отмена"
+}
