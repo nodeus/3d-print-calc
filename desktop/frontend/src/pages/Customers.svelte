@@ -3,6 +3,7 @@
   import { wails, type Customer } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { downloadPDF } from '../lib/pdf';
 
   let list: Customer[] = $state([]);
   let error = $state('');
@@ -61,6 +62,16 @@
       error = String(e);
     }
   }
+
+  async function toPDF() {
+    await downloadPDF($t('nav.customers'), [
+      {
+        Title: '',
+        Headers: [$t('cust.name'), $t('cust.contact'), $t('cust.note')],
+        Rows: list.map((c) => [c.Name, c.Contact, c.Note]),
+      },
+    ]);
+  }
 </script>
 
 {#if canWrite($user)}
@@ -72,6 +83,7 @@
   </div>
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
+<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 
 <table>
   <thead><tr><th>{$t('cust.name')}</th><th>{$t('cust.contact')}</th><th>{$t('cust.note')}</th><th class="no-print"></th></tr></thead>

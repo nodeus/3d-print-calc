@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { openOrderId } from '../lib/nav';
+  import { downloadPDF } from '../lib/pdf';
   import { money } from '../lib/format';
 
   let orders: Order[] = $state([]);
@@ -149,6 +150,27 @@
       error = String(e);
     }
   }
+
+  async function toPDF() {
+    if (detail) {
+      const cur = detail.order.Currency;
+      await downloadPDF(`${$t('ord.number')}: ${orderNo(detail.order)}`, [
+        {
+          Title: '',
+          Headers: [$t('ord.item'), $t('ord.qty'), $t('calc.cost'), $t('calc.price')],
+          Rows: detail.items.map((it) => [it.Title, String(it.Qty), money(it.Cost / 100, cur, 'ru'), money(it.Price / 100, cur, 'ru')]),
+        },
+      ]);
+    } else {
+      await downloadPDF($t('nav.orders'), [
+        {
+          Title: '',
+          Headers: [$t('ord.number'), $t('cust.name'), $t('ord.status'), $t('ord.total')],
+          Rows: orders.map((o) => [orderNo(o), custName(o.CustomerID), $t('st.' + o.Status), money(o.TotalBase / 100, o.Currency, 'ru')]),
+        },
+      ]);
+    }
+  }
 </script>
 
 {#if error}<p class="err">{error}</p>{/if}
@@ -163,6 +185,7 @@
         <button onclick={create}>{$t('ord.new')}</button>
       </div>
     {/if}
+    <div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
     <table>
       <thead><tr><th>{$t('ord.number')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th></tr></thead>
       <tbody>

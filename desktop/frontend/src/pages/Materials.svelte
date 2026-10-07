@@ -3,6 +3,7 @@
   import { wails, type MaterialDTO, type Material } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { downloadPDF } from '../lib/pdf';
   import { money } from '../lib/format';
 
   let materials: MaterialDTO[] = $state([]);
@@ -67,6 +68,16 @@
       error = String(e);
     }
   }
+
+  async function toPDF() {
+    await downloadPDF($t('nav.materials'), [
+      {
+        Title: '',
+        Headers: [$t('mat.code'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.vendor')],
+        Rows: materials.map((m) => [m.code, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), m.vendor]),
+      },
+    ]);
+  }
 </script>
 
 {#if canWrite($user)}
@@ -81,6 +92,7 @@
   </div>
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
+<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 
 <table>
   <thead><tr><th>{$t('mat.code')}</th><th>{$t('mat.type')}</th><th>{$t('mat.price')}</th><th>{$t('mat.density')}</th><th>{$t('mat.vendor')}</th><th class="no-print"></th></tr></thead>

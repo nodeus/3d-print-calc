@@ -3,6 +3,7 @@
   import { wails, type PrinterDTO, type Printer, type ImportReport } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
+  import { downloadPDF } from '../lib/pdf';
   import { money, num } from '../lib/format';
 
   let printers: PrinterDTO[] = $state([]);
@@ -131,7 +132,19 @@
       wails.offImportProgress();
     }
   }
+
+  async function toPDF() {
+    await downloadPDF($t('nav.printers'), [
+      {
+        Title: '',
+        Headers: [$t('printer.name'), $t('printer.model'), $t('printer.price'), $t('printer.amort'), $t('printer.method')],
+        Rows: printers.map((p) => [p.Name, p.Model, money(p.PurchasePrice / 100, p.Currency, 'ru'), num(p.amortPerHour), p.AmortMethod]),
+      },
+    ]);
+  }
 </script>
+
+<div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
 
 {#if canWrite($user) && !editId && !isNew}
   <div class="row no-print"><button onclick={startAdd}>{$t('printer.add')}</button></div>

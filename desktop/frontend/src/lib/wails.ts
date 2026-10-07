@@ -247,6 +247,12 @@ export interface Debt {
   status: string;
 }
 
+export interface PDFSection {
+  Title: string;
+  Headers: string[];
+  Rows: string[][];
+}
+
 declare global {
   interface Window {
     runtime: {
@@ -314,6 +320,7 @@ declare global {
           DeleteCustomer(id: number): Promise<void>;
           DeleteUser(id: number): Promise<void>;
           AppVersion(): Promise<Record<string, string>>;
+          ExportPDF(title: string, sections: PDFSection[]): Promise<string>;
         };
       };
     }
@@ -385,6 +392,7 @@ export const wails = {
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),
+  exportPDF: (title: string, sections: PDFSection[]) => api().ExportPDF(title, sections),
   onImportProgress: (cb: (done: number, total: number) => void): void => {
     try {
       window.runtime.EventsOn('import-progress', (d: unknown) => {

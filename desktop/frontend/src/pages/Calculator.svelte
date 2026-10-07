@@ -4,6 +4,7 @@
   import { t, locale } from '../lib/i18n';
   import { money } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
+  import { downloadPDF } from '../lib/pdf';
   import { get } from 'svelte/store';
 
   let materials: MaterialDTO[] = $state([]);
@@ -227,6 +228,23 @@
     }
   }
 
+  async function toPDF() {
+    if (!result) return;
+    const m = (v: number) => money(v, currency, $locale);
+    await downloadPDF($t('nav.calculator'), [
+      {
+        Title: `${matCode} · ${filename || '—'}`,
+        Headers: [$t('calc.breakdown'), $t('calc.cost')],
+        Rows: [
+          ...rows.map(([k, v]) => [$t(k), m(v)]),
+          [$t('calc.cost'), m(result.Cost)],
+          [$t('calc.price'), m(result.Price)],
+          [$t('calc.final'), m(result.PriceVAT)],
+        ],
+      },
+    ]);
+  }
+
   const rows: [string, number][] = $derived(
     result
       ? [
@@ -316,8 +334,9 @@
   </section>
 
   <section class="card">
-    <h3>{$t('calc.breakdown')}</h3>
-    {#if result}
+      <h3>{$t('calc.breakdown')}</h3>
+      {#if result}
+      <div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
       <table>
         <tbody>{#each rows as [key, v]}<tr><td>{$t(key)}</td><td class="n">{money(v, currency, $locale)}</td></tr>{/each}</tbody>
       </table>

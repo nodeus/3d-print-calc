@@ -3,6 +3,7 @@
   import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { gotoOrder } from '../lib/nav';
+  import { downloadPDF } from '../lib/pdf';
   import { money, num, hms } from '../lib/format';
 
   let revenue: MonthRevenue[] = $state([]);
@@ -22,9 +23,35 @@
       console.error(e);
     }
   });
+
+  async function toPDF() {
+    await downloadPDF($t('nav.reports'), [
+      {
+        Title: $t('rep.revenue'),
+        Headers: [$t('rep.month'), $t('ord.total'), $t('rep.orders')],
+        Rows: revenue.map((r) => [r.month, money(r.total / 100, 'RUB', 'ru'), String(r.orders)]),
+      },
+      {
+        Title: $t('rep.debts'),
+        Headers: ['#', $t('cust.name'), $t('ord.balance'), $t('ord.status')],
+        Rows: debts.map((d) => [String(d.orderId), d.customer, money(d.balance / 100, 'RUB', 'ru'), d.status]),
+      },
+      {
+        Title: $t('rep.topmats'),
+        Headers: [$t('mat.code'), $t('rep.jobs'), $t('hist.weight')],
+        Rows: tops.map((m) => [m.code, String(m.jobs), num(m.weight)]),
+      },
+      {
+        Title: $t('rep.load'),
+        Headers: [$t('printer.name'), $t('rep.jobs'), $t('calc.time_h')],
+        Rows: load.map((p) => [p.name, String(p.jobs), hms(p.totalSec)]),
+      },
+    ]);
+  }
 </script>
 
 <div class="grid">
+  <div class="row no-print"><button onclick={toPDF}>{$t('common.pdf')}</button></div>
   <section class="card">
     <h3>{$t('rep.revenue')}</h3>
     <table>

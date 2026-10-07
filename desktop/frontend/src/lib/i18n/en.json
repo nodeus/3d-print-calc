@@ -144,6 +144,7 @@
   "moon.import": "Import history (dry-run)",
   "nav.info": "Info",
   "common.print": "Print",
+  "common.pdf": "PDF",
   "mat.vendor": "Vendor",
   "cust.note": "Note",
   "printer.add": "Add printer",

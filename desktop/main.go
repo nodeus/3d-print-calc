@@ -29,6 +29,7 @@ var assets embed.FS
 // App — корень биндингов. Методы — в app.go, backup.go, users.go, orders.go, moonraker.go.
 type App struct {
 	ctx              context.Context
+	eventsOn         bool // true после startup: контекст настоящий wails
 	db               *sqlite.DB
 	dbPath           string
 	currentUser      *models.User
@@ -65,6 +66,7 @@ func main() {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.eventsOn = true
 	runtime.WindowSetTitle(ctx, fmt.Sprintf("3D Print Cost Calculator v%s (%s)", Version, BuildDate))
 }
 

@@ -6,6 +6,7 @@
   import { num, hms } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
   import { goTab } from '../lib/nav';
+  import { downloadPDF } from '../lib/pdf';
 
   let jobs: JobDTO[] = $state([]);
   let error = $state('');
@@ -88,6 +89,19 @@
     goTab.set('calc');
   }
 
+  async function toPDF() {
+    await downloadPDF($t('nav.history'), [
+      {
+        Title: '',
+        Headers: [$t('hist.filename'), $t('hist.start'), $t('hist.status'), $t('hist.duration'), $t('hist.weight'), $t('hist.cost'), $t('calc.price'), $t('hist.origin')],
+        Rows: filtered.map((j) => [
+          j.Filename, j.StartAt, j.Status, hms(j.TotalSec),
+          num(j.WeightG), num(snap(j).cost), num(snap(j).price), originBadge(j),
+        ]),
+      },
+    ]);
+  }
+
   function originBadge(j: JobDTO): string {
     if (j.Origin === 'manual') return $t('hist.manual');
     if (j.Origin === 'moonraker') return 'Moonraker';
@@ -121,6 +135,7 @@
     <button disabled={page === 0} onclick={() => page--}>‹</button>
     {page + 1} / {pages}
     <button disabled={page >= pages - 1} onclick={() => page++}>›</button>
+    <button onclick={toPDF}>{$t('common.pdf')}</button>
   </span>
 </div>
 

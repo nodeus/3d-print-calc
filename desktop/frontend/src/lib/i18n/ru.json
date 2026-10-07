@@ -144,6 +144,7 @@
   "moon.import": "Импорт истории (dry-run)",
   "nav.info": "Информация",
   "common.print": "Печать",
+  "common.pdf": "PDF",
   "mat.vendor": "Производитель",
   "cust.note": "Заметка",
   "printer.add": "Добавить принтер",
