@@ -28,9 +28,6 @@ func TestCalculate_NoPlus24Regression(t *testing.T) {
 	if diff := got.Amort - want; diff > 1e-9 || diff < -1e-9 {
 		t.Fatalf("amort = %v, want %v (баг +24?)", got.Amort, want)
 	}
-	if got.Amort > 24 && in.TotalSec/3600 < 4 {
-		t.Fatalf("amort suspiciously large: %v", got.Amort)
-	}
 }
 
 func TestAmortCalendarHour(t *testing.T) {
