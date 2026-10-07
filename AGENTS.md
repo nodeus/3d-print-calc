@@ -69,14 +69,21 @@ migrations/           # SQL-миграции (goose-стиль, пронумер
 ```
 hours      = total_sec / 3600
 mat_cost   = price_per_kg / 1000 * weight_g
+purge      = price_per_kg / 1000 * purge_waste_g          # башни/брак/поддержки
 elec       = tariff * power_kw * hours
 amort      = amort_method(printer) * hours   # calendar | workdays | resource
+maint      = maint_per_hour * hours                       # ТО/оснастка
 labor      = op_rate*prep_h + op_rate*post_h + designer_rate*model_h + model_price
-subtotal   = mat + elec + amort + labor + extra_mat
+subtotal   = mat + purge + elec + amort + maint + labor + extra_mat
 fail_adj   = subtotal * fail_rate
-cost       = subtotal + fail_adj
-price      = cost*(1+margin_profit+margin_dev) + fees, затем round(rule) + VAT
+cost       = subtotal + fail_adj                          # итог — за стол
+price      = cost*(1+margin_profit+margin_dev) + fees, затем round(step) + VAT
+per_copy   = cost_f / copies, price_f / copies            # итоги делятся на N копий
+weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
 ```
+
+Нулевые `purge/maint/fail/VAT/round`, `copies<=1` — нейтральны (legacy-поведение).
+Деньги в `calc` — float основных единиц; хранение — `int64` минорных + `fx_rate`.
 
 Настройки амортизации/мощности/ТО — **на принтер**. Снапшот всех тарифов — в `jobs`/`order_items`.
 
@@ -110,8 +117,12 @@ orders, order_items, fx_rates, settings`. Импорт идемпотентен 
 
 ## 6. Сборка и запуск (цели)
 
-- Desktop: `wails build -platform windows/amd64,linux/amd64,darwin/universal` — один бинарник,
-  `app.db` рядом, работа без установки Python/Node.
+- Desktop: из `desktop/` — `wails build [-platform windows/amd64,linux/amd64,darwin/universal]`
+  (сам ставит npm-пакеты и строит frontend). Один бинарник ~15МБ, `app.db` рядом,
+  работа без установки Python/Node. Напрямую `go build ./...` требует собранного
+  `desktop/frontend/dist` (`npm run build`); `frontend/dist`, `node_modules`,
+  `package.json.md5` — не в git. Копия `desktop/assets/{seed.csv,migrations}` обязана
+  совпадать с каноном (`csv/`, `migrations/`) — следит `desktop/assets_sync_test.go`.
 - Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто).
 - Бэкап/восстановление: `backup.zip (app.db + csv/json)` в 1 клик, импорт с dry-run.
 

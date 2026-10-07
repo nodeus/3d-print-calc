@@ -39,35 +39,36 @@ type Customer struct {
 
 // Maker — дизайнер/моделлер/печатник со ставкой.
 type Maker struct {
-	ID         int64
-	Type       MakerType
-	Name       string
-	RatePerH   int64 // минорные единицы/час
-	Currency   string
+	ID       int64
+	Type     MakerType
+	Name     string
+	RatePerH int64 // минорные единицы/час
+	Currency string
 }
 
 // Material — справочник пластика (код уникален).
 type Material struct {
-	ID        int64
-	Code      string // напр. PETG-NIT-W4
-	Type      string // PLA | PETG | ABS | ...
-	Vendor    string
-	ColorHex  string
-	Density   float64 // г/см³, напр. 1.27
-	Diameter  float64 // мм, напр. 1.75
+	ID       int64
+	Code     string // напр. PETG-NIT-W4
+	Type     string // PLA | PETG | ABS | ...
+	Vendor   string
+	ColorHex string
+	Density  float64 // г/см³, напр. 1.27
+	Diameter float64 // мм, напр. 1.75
+	Note     string
 }
 
 // Spool — закупочная партия (катушка) с ценой и остатком.
 type Spool struct {
-	ID            int64
-	MaterialID    int64
-	Price         int64 // минорные единицы
-	Currency      string
-	FxRate        float64
-	BoughtAt      string // ISO-дата
-	WeightInitG   float64
-	WeightLeftG   float64
-	Archived      bool
+	ID          int64
+	MaterialID  int64
+	Price       int64 // минорные единицы
+	Currency    string
+	FxRate      float64
+	BoughtAt    string // ISO-дата
+	WeightInitG float64
+	WeightLeftG float64
+	Archived    bool
 }
 
 // Printer — принтер со своим расчётом амортизации.
@@ -85,21 +86,27 @@ type Printer struct {
 	PowerKW           float64
 	MaintPerHour      int64
 	ResourceHours     float64
+	MoonrakerURL      string // http://host:7125, пусто = не настроен
 }
 
 // Job — печать/работа со снапшотом расчёта.
 type Job struct {
-	ID           int64
-	Filename     string
-	StartAt      string
-	PrinterID    int64
-	SpoolID      int64
-	Status       string
-	PrintSec     int64
-	TotalSec     int64
-	WeightG      float64
-	LengthM      float64
-	CostSnapshot string // JSON
+	ID              int64
+	Filename        string
+	StartAt         string
+	EndAt           string
+	PrinterID       int64
+	SpoolID         int64
+	Status          string
+	PrintSec        int64
+	TotalSec        int64
+	EstimatedSec    int64
+	SizeBytes       int64
+	FilamentTotalMm float64
+	WeightG         float64
+	LengthM         float64
+	Slicer          string
+	CostSnapshot    string // JSON
 }
 
 // Order — заказ клиента.
@@ -111,6 +118,27 @@ type Order struct {
 	MarginProfit float64
 	MarginDev    float64
 	VAT          float64
-	Status       string
+	Status       string // draft | quoted | in_work | done | paid | cancelled
 	TotalBase    int64
+	CreatedAt    string // ISO-дата
+}
+
+// OrderItem — позиция заказа (qty может быть дробным).
+type OrderItem struct {
+	ID      int64
+	OrderID int64
+	JobID   int64
+	Title   string
+	Qty     float64
+	Cost    int64 // минорные единицы
+	Price   int64 // минорные единицы
+}
+
+// Payment — оплата по заказу.
+type Payment struct {
+	ID      int64
+	OrderID int64
+	Amount  int64 // минорные единицы
+	PaidAt  string
+	Note    string
 }
