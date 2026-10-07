@@ -55,6 +55,7 @@ type Material struct {
 	ColorHex string
 	Density  float64 // г/см³, напр. 1.27
 	Diameter float64 // мм, напр. 1.75
+	Note     string
 }
 
 // Spool — закупочная партия (катушка) с ценой и остатком.

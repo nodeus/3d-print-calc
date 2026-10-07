@@ -26,6 +26,8 @@ var profileTokens = map[string]bool{
 
 // ParseMaterial извлекает код материала из имени файла, нормализуя
 // подчёркивание в дефис под справочник (`PETG_NIT-W4` → `PETG-NIT-W4`).
+// Дефисный токен продлевается следующим сегментом, если тот кодообразный
+// (`PETG-NIT` + `W2` → `PETG-NIT-W2`; профиль `NIT` после `PETG-B5` — нет).
 // Возвращает "" для generic PETG/PLA, длительностей и профилей.
 // Точное совпадение со справочником проверяет вызывающий код (по БД).
 func ParseMaterial(filename string) string {
@@ -50,6 +52,11 @@ func ParseMaterial(filename string) string {
 		}
 		return ""
 	}
+	// Дефисная форма: возможно, код разорван подчёркиванием (PETG-NIT_W2).
+	idx := strings.Index(filename, m[0])
+	if seg := nextSegment(filename, idx+len(m[0])-1); isMaterialSuffix(seg) {
+		return token + "-" + seg
+	}
 	return token
 }
 
@@ -68,21 +75,25 @@ func nextSegment(s string, pos int) string {
 }
 
 // isMaterialSuffix проверяет, похож ли сегмент на код материала:
-// есть буквы, не длительность, не токен профиля, без точек.
+// буквы + цифры (коды типа NIT-W4, W2, PPL01 — всегда с цифрой),
+// не длительность, не токен профиля, без точек.
 func isMaterialSuffix(seg string) bool {
 	if seg == "" || strings.Contains(seg, ".") {
 		return false
 	}
-	hasLetter := false
+	hasLetter, hasDigit := false, false
 	for _, r := range seg {
 		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
 			return false
 		}
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+		switch {
+		case (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z'):
 			hasLetter = true
+		case r >= '0' && r <= '9':
+			hasDigit = true
 		}
 	}
-	if !hasLetter {
+	if !hasLetter || !hasDigit {
 		return false
 	}
 	if durationRe.MatchString(seg) {

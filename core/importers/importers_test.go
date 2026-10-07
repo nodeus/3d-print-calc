@@ -61,7 +61,8 @@ func TestParseMaterial(t *testing.T) {
 		{"my_rack_PETG-B5_4m38s.gcode", "PETG-B5"},
 		{"my_rack_PETG-B5_NIT_0.20mm Standard my_2h1m.gcode", "PETG-B5"}, // NIT — профиль, не материал
 		{"seed-planter_1x3_PETG_NIT-W4_0.20mm Standard @Creality K1C my_2h4m.gcode", "PETG-NIT-W4"},
-		{"body_PLA_Creality_0.20mm Standard 150_1h2m.gcode", "PLA-Creality"},
+		{"sleeve_12mm_PETG-NIT_W2_16m31s.gcode", "PETG-NIT-W2"},  // код разорван '_' — склеиваем
+		{"body_PLA_Creality_0.20mm Standard 150_1h2m.gcode", ""}, // Creality — пресет вендора, не код
 		{"Bottom - 0.4 PETG-PC_PETG_NIT-B3_0.20mm Standard 150_31m51s.gcode", "PETG-NIT-B3"},
 		{"hook_PETG_1h10m.gcode", ""},  // generic без кода
 		{"top_PETG_1h46m.gcode", ""},   // generic без кода
