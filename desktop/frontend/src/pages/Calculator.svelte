@@ -96,8 +96,10 @@
   let calcReady = $state(false);
   let pendingJob: JobDTO | null = $state(null);
 
-  // Применить работу из истории: материал, принтер/тарифы/ставки из снапшота v2
-  // (v1 — только материал, тарифы остаются текущими), вес, время, имя.
+  // Применить работу из истории: физика (материал, вес, время, имя) — всегда;
+  // ставки — только из настоящих данных: ручная работа или исправленная
+  // (edited=1) импортная. Чистый импорт ставок не содержит — пользовательские
+  // значения (тариф, обработка, НДС...) сохраняются.
   // Селект «Работа из истории» синхронизируется (иначе там висит прочерк).
   function applyJob(j: JobDTO) {
     if (!calcReady) {
@@ -119,25 +121,28 @@
     } else if (printers.length && !printerId) {
       selectPrinter(printers[0].ID);
     }
-    if (inp.tariff != null) tariff = inp.tariff;
-    if (inp.powerKW != null) powerKW = inp.powerKW;
-    if (inp.amortPerHour != null) amortPerHour = inp.amortPerHour;
-    if (inp.opRate != null) opRate = inp.opRate;
-    if (inp.prepH != null) prepH = inp.prepH;
-    if (inp.postH != null) postH = inp.postH;
-    if (inp.designerRate != null) designerRate = inp.designerRate;
-    if (inp.modelH != null) modelH = inp.modelH;
-    if (inp.modelPrice != null) modelPrice = inp.modelPrice;
-    if (inp.extraMat != null) extraMat = inp.extraMat;
-    if (inp.failRate != null) failPct = inp.failRate * 100;
-    if (inp.marginProfit != null) marginProfitPct = inp.marginProfit * 100;
-    if (inp.marginDev != null) marginDevPct = inp.marginDev * 100;
-    if (inp.fees != null) fees = inp.fees;
-    if (inp.maintPerHour != null) maintPerHour = inp.maintPerHour;
-    if (inp.purgeWasteG != null) purgeG = inp.purgeWasteG;
-    if (inp.copies != null && inp.copies >= 1) copies = Math.round(inp.copies);
-    if (inp.vatRate != null) vatPct = inp.vatRate * 100;
-    if (inp.roundStep != null) roundStep = inp.roundStep;
+    const ratesReal = j.Origin === 'manual' || j.Edited === 1;
+    if (ratesReal) {
+      if (inp.tariff != null) tariff = inp.tariff;
+      if (inp.powerKW != null) powerKW = inp.powerKW;
+      if (inp.amortPerHour != null) amortPerHour = inp.amortPerHour;
+      if (inp.opRate != null) opRate = inp.opRate;
+      if (inp.prepH != null) prepH = inp.prepH;
+      if (inp.postH != null) postH = inp.postH;
+      if (inp.designerRate != null) designerRate = inp.designerRate;
+      if (inp.modelH != null) modelH = inp.modelH;
+      if (inp.modelPrice != null) modelPrice = inp.modelPrice;
+      if (inp.extraMat != null) extraMat = inp.extraMat;
+      if (inp.failRate != null) failPct = inp.failRate * 100;
+      if (inp.marginProfit != null) marginProfitPct = inp.marginProfit * 100;
+      if (inp.marginDev != null) marginDevPct = inp.marginDev * 100;
+      if (inp.fees != null) fees = inp.fees;
+      if (inp.maintPerHour != null) maintPerHour = inp.maintPerHour;
+      if (inp.purgeWasteG != null) purgeG = inp.purgeWasteG;
+      if (inp.copies != null && inp.copies >= 1) copies = Math.round(inp.copies);
+      if (inp.vatRate != null) vatPct = inp.vatRate * 100;
+      if (inp.roundStep != null) roundStep = inp.roundStep;
+    }
     weightG = Math.round(j.WeightG * 100) / 100;
     filamentMM = Math.round(j.LengthM * 1000 * 100) / 100 || null;
     timeH = Math.floor(j.TotalSec / 3600);
@@ -165,6 +170,7 @@
     });
     return () => {
       unsub();
+      persist(); // добить дебаунс recalc: вкладка ничего не теряет
       registerPdfExporter(null);
     };
   });

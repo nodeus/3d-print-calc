@@ -11,6 +11,7 @@ import (
 
 	"3dprint-calc/core/calc"
 	"3dprint-calc/core/models"
+	"3dprint-calc/core/store"
 	sqlite "3dprint-calc/store-sqlite"
 )
 
@@ -353,7 +354,9 @@ func (a *App) DeleteJob(id int64) error {
 	return a.db.Jobs().DeleteJob(id)
 }
 
-// JobEdit — поля правки ручной работы (материал отдельно: не колонка jobs).
+// JobEdit — поля правки работы истории (материал отдельно: не колонка jobs).
+// Расчётные поля (тарифы, ставки, наценки...) фронт шлёт полным набором:
+// бэкенд пересчитывает снапшот строго по ним, старый контекст не используется.
 type JobEdit struct {
 	ID           int64   `json:"id"`
 	Filename     string  `json:"filename"`
@@ -368,9 +371,29 @@ type JobEdit struct {
 	LengthM      float64 `json:"lengthM"`
 	Slicer       string  `json:"slicer"`
 	Material     string  `json:"material"`
+	Tariff       float64 `json:"tariff"`
+	PowerKW      float64 `json:"powerKW"`
+	AmortPerHour float64 `json:"amortPerHour"`
+	MaintPerHour float64 `json:"maintPerHour"`
+	PurgeWasteG  float64 `json:"purgeWasteG"`
+	OpRate       float64 `json:"opRate"`
+	PrepH        float64 `json:"prepH"`
+	PostH        float64 `json:"postH"`
+	DesignerRate float64 `json:"designerRate"`
+	ModelH       float64 `json:"modelH"`
+	ModelPrice   float64 `json:"modelPrice"`
+	ExtraMat     float64 `json:"extraMat"`
+	FailRate     float64 `json:"failRate"`
+	MarginProfit float64 `json:"marginProfit"`
+	MarginDev    float64 `json:"marginDev"`
+	Fees         float64 `json:"fees"`
+	Copies       int     `json:"copies"`
+	VATRate      float64 `json:"vatRate"`
+	RoundStep    float64 `json:"roundStep"`
 }
 
-// UpdateManualJob правит ручную работу с автопересчётом (manager+).
+// UpdateManualJob правит работу истории с автопересчётом (manager+).
+// Расчёт идёт строго по переданным полям (см. JobEdit), не по старому снапшоту.
 func (a *App) UpdateManualJob(in JobEdit) error {
 	if err := a.need(models.RoleManager); err != nil {
 		return err
@@ -380,7 +403,15 @@ func (a *App) UpdateManualJob(in JobEdit) error {
 		StartAt: in.StartAt, EndAt: in.EndAt,
 		PrintSec: in.PrintSec, TotalSec: in.TotalSec, EstimatedSec: in.EstimatedSec,
 		SizeBytes: in.SizeBytes, WeightG: in.WeightG, LengthM: in.LengthM, Slicer: in.Slicer,
-	}, in.Material)
+	}, in.Material, store.JobCalcInput{
+		Tariff: in.Tariff, PowerKW: in.PowerKW, AmortPerHour: in.AmortPerHour,
+		MaintPerHour: in.MaintPerHour, PurgeWasteG: in.PurgeWasteG,
+		OpRate: in.OpRate, PrepH: in.PrepH, PostH: in.PostH,
+		DesignerRate: in.DesignerRate, ModelH: in.ModelH, ModelPrice: in.ModelPrice,
+		ExtraMat: in.ExtraMat, FailRate: in.FailRate,
+		MarginProfit: in.MarginProfit, MarginDev: in.MarginDev, Fees: in.Fees,
+		Copies: in.Copies, VATRate: in.VATRate, RoundStep: in.RoundStep,
+	})
 }
 
 // GetJobs возвращает историю (limit<=0 — всё).
