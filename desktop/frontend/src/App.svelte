@@ -12,6 +12,7 @@
   import Confirm from './lib/Confirm.svelte';
   import { t, initLocale } from './lib/i18n';
   import { user, refreshUser } from './lib/session';
+  import { loadTheme } from './lib/theme';
   import { goTab } from './lib/nav';
   import { exportCurrentTab, hasPdfExporter } from './lib/pdf';
   import { wails } from './lib/wails';
@@ -23,6 +24,7 @@
 
   onMount(async () => {
     await initLocale();
+    await loadTheme();
     await refreshUser();
   });
 
@@ -103,17 +105,17 @@
 {/if}
 
 <style>
-  :global(body) { font-family: system-ui, sans-serif; margin: 0; background: #fafafa; color: #222; }
-  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #1f2937; color: white; }
+  :global(body) { font-family: system-ui, sans-serif; margin: 0; background: var(--bg); color: var(--fg); }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: var(--header-bg); color: var(--header-fg); }
   h1 { font-size: 17px; margin: 0; }
-  nav { display: flex; gap: 4px; padding: 8px 16px; background: #e5e7eb; }
-  nav button, .lang button { padding: 6px 12px; border: 1px solid #ccc; background: white; cursor: pointer; border-radius: 4px; }
-  button.active { background: #1f2937; color: white; border-color: #1f2937; }
+  nav { display: flex; gap: 4px; padding: 8px 16px; background: var(--nav-bg); }
+  nav button, .lang button { padding: 6px 12px; border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg); cursor: pointer; border-radius: 4px; }
+  button.active { background: var(--header-bg); color: var(--header-fg); border-color: var(--header-bg); }
   .lang { display: flex; gap: 6px; align-items: center; font-size: 13px; }
   main { padding: 12px 16px; }
-  .err { color: #b00; }
+  .err { color: var(--err); }
   .print-only { display: none; }
-  .print-date { color: #666; font-size: 12px; }
+  .print-date { color: var(--muted); font-size: 12px; }
   @media print {
     .no-print { display: none !important; }
     .print-only { display: block !important; }

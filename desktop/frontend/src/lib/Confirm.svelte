@@ -48,7 +48,7 @@
     padding: 8px 18px;
   }
   button.warn {
-    border-color: #b00;
-    color: #b00;
+    border-color: var(--err);
+    color: var(--err);
   }
 </style>

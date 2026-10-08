@@ -348,15 +348,15 @@
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-  .note { color: #666; }
+  .note { color: var(--muted); }
   input, select, button { padding: 6px; font-size: 14px; }
-  .count { color: #666; font-size: 13px; }
+  .count { color: var(--muted); font-size: 13px; }
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
   table { font-size: 13px; }
   td.file { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
-  .err { color: #b00; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .err { color: var(--err); }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
   .card h3 { margin: 0 0 8px; font-size: 15px; }
   .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 130px; }

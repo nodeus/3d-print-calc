@@ -425,6 +425,35 @@ func (a *App) SetBaseCurrency(code string) error {
 	return a.db.SetSetting("base_currency", code)
 }
 
+// ListFxRates — курсы валют.
+func (a *App) ListFxRates() ([]sqlite.FxRate, error) {
+	return a.db.ListFxRates()
+}
+
+// SetFxRate задаёт курс валюты на сегодня (manager+).
+func (a *App) SetFxRate(currency string, rate float64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.SetFxRate(currency, rate)
+}
+
+// DeleteFxRate удаляет курс (manager+).
+func (a *App) DeleteFxRate(currency, day string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.DeleteFxRate(currency, day)
+}
+
+// ConvertCurrency пересчитывает все суммы в target и переключает базу (manager+).
+func (a *App) ConvertCurrency(target string, rate float64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.ConvertCurrency(target, rate)
+}
+
 // HistoryColumns — все колонки истории печати (порядок фиксирован).
 var HistoryColumns = []string{
 	"filename", "start", "end", "status", "duration", "weight", "length",

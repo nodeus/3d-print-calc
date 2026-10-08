@@ -379,6 +379,12 @@ declare global {
           DeleteCustomer(id: number): Promise<void>;
           DeleteUser(id: number): Promise<void>;
           AppVersion(): Promise<Record<string, string>>;
+          UISettings(): Promise<{ theme: string; custom: Record<string, Record<string, string>> }>;
+          SetUITheme(name: string): Promise<void>;
+          SaveCustomTheme(name: string, vars: Record<string, string>): Promise<void>;
+          DeleteCustomTheme(name: string): Promise<void>;
+          ExportThemeFile(name: string): Promise<string>;
+          ImportThemeFile(): Promise<string>;
           GetHistoryColumns(): Promise<string[]>;
           SetHistoryColumns(cols: string[]): Promise<void>;
           ExportPDF(title: string, filename: string, sections: PDFSection[]): Promise<string>;
@@ -462,6 +468,12 @@ export const wails = {
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),
+  uiSettings: () => api().UISettings(),
+  setUITheme: (name: string) => api().SetUITheme(name),
+  saveCustomTheme: (name: string, vars: Record<string, string>) => api().SaveCustomTheme(name, vars),
+  deleteCustomTheme: (name: string) => api().DeleteCustomTheme(name),
+  exportThemeFile: (name: string) => api().ExportThemeFile(name),
+  importThemeFile: () => api().ImportThemeFile(),
   historyColumns: () => api().GetHistoryColumns(),
   setHistoryColumns: (cols: string[]) => api().SetHistoryColumns(cols),
   exportPDF: (title: string, filename: string, sections: PDFSection[]) =>

@@ -344,14 +344,14 @@
 
 <style>
   .cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; }
   .row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; }
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 13px; }
-  tr.sel td { background: #eef; }
+  tr.sel td { background: var(--sel-bg); }
   tbody tr { cursor: pointer; }
-  .filterchip { background: #eef; border-radius: 4px; padding: 4px 8px; display: inline-block; }
-  .pay { color: #666; font-size: 13px; margin: 2px 0; }
-  .err { color: #b00; }
+  .filterchip { background: var(--sel-bg); border-radius: 4px; padding: 4px 8px; display: inline-block; }
+  .pay { color: var(--muted); font-size: 13px; margin: 2px 0; }
+  .err { color: var(--err); }
 </style>

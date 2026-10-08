@@ -185,8 +185,8 @@
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
-  .err { color: #b00; }
-  .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid #999; border-radius: 3px; padding: 0; vertical-align: middle; }
+  .err { color: var(--err); }
+  .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; padding: 0; vertical-align: middle; }
   button.sw { cursor: pointer; margin: 1px; }
   .colorrow { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
   input[type='color'] { width: 40px; height: 30px; padding: 2px; }

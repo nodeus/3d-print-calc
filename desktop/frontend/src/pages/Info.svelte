@@ -61,8 +61,8 @@
 
 <style>
   .cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; align-items: start; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 16px; }
   h2 { margin-top: 0; }
   li { margin-bottom: 6px; }
-  button.link { background: none; border: none; color: #0645ad; cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
+  button.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
 </style>

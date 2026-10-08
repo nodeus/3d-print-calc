@@ -113,6 +113,6 @@
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   input, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
-  .err { color: #b00; }
-  button.link { background: none; border: none; color: #0645ad; cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
+  .err { color: var(--err); }
+  button.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
 </style>

@@ -154,12 +154,12 @@
 
 <style>
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; }
   .card.wide { grid-column: 1 / -1; }
   h3 { margin: 0 0 8px; font-size: 15px; }
   table { font-size: 13px; }
   th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
   tr.link { cursor: pointer; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
-  .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid #999; border-radius: 3px; vertical-align: middle; }
+  .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; vertical-align: middle; }
 </style>

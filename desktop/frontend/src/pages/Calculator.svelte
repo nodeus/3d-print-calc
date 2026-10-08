@@ -531,15 +531,15 @@
 
 <style>
   .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; }
   .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 110px; }
   input, select { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
-  .final { font-size: 18px; border-top: 2px solid #333; margin-top: 4px; padding-top: 8px; }
-  .percopy { color: #666; font-size: 13px; }
+  .final { font-size: 18px; border-top: 2px solid var(--final-border); margin-top: 4px; padding-top: 8px; }
+  .percopy { color: var(--muted); font-size: 13px; }
   .ok { color: green; }
-  .warn { color: #b60; }
+  .warn { color: var(--warn); }
   button { padding: 8px 14px; align-self: end; }
 </style>

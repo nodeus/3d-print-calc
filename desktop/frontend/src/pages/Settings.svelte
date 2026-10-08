@@ -3,10 +3,16 @@
   import { wails, type BackupManifest, type ImportReport } from '../lib/wails';
   import { t, locale, switchLocale } from '../lib/i18n';
   import { user, isAdmin } from '../lib/session';
+  import { THEME_VARS, applyTheme, persistTheme, type ThemeVars } from '../lib/theme';
   import Users from './Users.svelte';
 
   let currency = $state('RUB');
   const codes = ['RUB', 'USD', 'EUR', 'KZT', 'BYN'];
+  // Тема.
+  let theme = $state('light');
+  let customs: string[] = $state([]);
+  let customName = $state('');
+  let customVars = $state<ThemeVars>({});
 
   let backupPath = $state('');
   let backupManifest: BackupManifest | null = $state(null);
@@ -112,10 +118,75 @@
       currency = await wails.getBaseCurrency();
       await loadNumbers();
       visibleColumns = await wails.historyColumns();
+      const ui = await wails.uiSettings();
+      theme = ui.theme || 'light';
+      customs = Object.keys(ui.custom ?? {});
+      // Стартовая точка редактора — первая кастомная (если есть).
+      if (customs.length) customVars = { ...(ui.custom?.[customs[0]] ?? {}) };
     } catch (e) {
       console.error(e);
     }
   });
+
+  async function pickTheme(name: string) {
+    theme = name;
+    error = '';
+    try {
+      const ui = await wails.uiSettings();
+      applyTheme(name, ui.custom ?? {});
+      await persistTheme(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function saveCustom() {
+    error = '';
+    const name = customName.trim();
+    if (!name) return;
+    try {
+      await wails.saveCustomTheme(name, customVars);
+      const ui = await wails.uiSettings();
+      customs = Object.keys(ui.custom ?? {});
+      customName = '';
+      await pickTheme(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function removeCustom(name: string) {
+    error = '';
+    try {
+      await wails.deleteCustomTheme(name);
+      const ui = await wails.uiSettings();
+      customs = Object.keys(ui.custom ?? {});
+      if (theme === name) await pickTheme('light');
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function exportCustom(name: string) {
+    error = '';
+    try {
+      await wails.exportThemeFile(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function importCustom() {
+    error = '';
+    try {
+      const name = await wails.importThemeFile();
+      const ui = await wails.uiSettings();
+      customs = Object.keys(ui.custom ?? {});
+      if (name) await pickTheme(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   async function changeCurrency(code: string) {
     currency = code;
@@ -198,6 +269,36 @@
 {#if error}<p class="err">{error}</p>{/if}
 
 <div class="card">
+  <h3>{$t('set.theme')}</h3>
+  <div class="row">
+    <select value={theme} onchange={(e) => pickTheme(e.currentTarget.value)}>
+      <option value="light">{$t('set.theme_light')}</option>
+      <option value="dark">{$t('set.theme_dark')}</option>
+      {#each customs as c}<option value={c}>{c}</option>{/each}
+    </select>
+  </div>
+{#if canWrite($user)}
+    <div class="row">
+      <input placeholder={$t('set.theme_name')} bind:value={customName} />
+      <button onclick={saveCustom}>{$t('set.theme_save')}</button>
+      <button onclick={importCustom}>{$t('set.theme_import')}</button>
+    </div>
+    <div class="checks">
+      {#each THEME_VARS as v}
+        <label class="check"><input type="color" value={/^#[0-9a-fA-F]{6}$/.test(customVars[v] ?? '') ? customVars[v] : '#000000'} oninput={(e) => (customVars[v] = e.currentTarget.value)} /> {v}</label>
+      {/each}
+    </div>
+    {#if customs.length}
+      <div class="row">
+        {#each customs as c}
+          <span>{c} <button onclick={() => exportCustom(c)}>↓</button> <button onclick={() => removeCustom(c)}>✕</button></span>
+        {/each}
+      </div>
+    {/if}
+  {/if}
+</div>
+
+<div class="card">
   <h3>{$t('set.pw')}</h3>
   <label>{$t('auth.password')} ({$t('set.pw_old')})<input type="password" bind:value={oldPw} /></label>
   <label>{$t('set.pw_new')}<input type="password" bind:value={newPw} /></label>
@@ -232,18 +333,18 @@
 {/if}
 
 <style>
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; max-width: 560px; margin-bottom: 12px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; max-width: 560px; margin-bottom: 12px; }
   .card.wide { max-width: none; }
   h3 { margin: 0 0 8px; font-size: 15px; }
   label { display: flex; flex-direction: column; margin-bottom: 8px; font-size: 13px; }
   select { padding: 6px; font-size: 14px; }
-  .note { color: #666; font-size: 13px; }
+  .note { color: var(--muted); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
   .checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
   label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; line-height: 1.4; white-space: nowrap; }
   label.check input { margin: 0; width: 16px; height: 16px; flex: none; }
   button { padding: 8px 14px; }
-  button.warn { border-color: #b00; color: #b00; }
+  button.warn { border-color: var(--err); color: var(--err); }
   .ok { color: green; word-break: break-all; }
-  .err { color: #b00; }
+  .err { color: var(--err); }
 </style>

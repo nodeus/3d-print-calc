@@ -217,12 +217,12 @@
 {#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs})</p>{/if}
 
 <style>
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; margin-bottom: 8px; max-width: 720px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; margin-bottom: 8px; max-width: 720px; }
   .row { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 120px; }
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; margin-bottom: 12px; }
-  button.warn { border-color: #b00; color: #b00; }
+  button.warn { border-color: var(--err); color: var(--err); }
   .ok { color: green; }
-  .err { color: #b00; }
+  .err { color: var(--err); }
 </style>
