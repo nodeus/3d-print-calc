@@ -113,6 +113,46 @@ func (a *App) ListOrders() ([]models.Order, error) {
 	return a.db.Orders().List()
 }
 
+// OrderRow — заказ с оплатами для списка.
+type OrderRow struct {
+	Order    models.Order `json:"order"`
+	Paid     int64        `json:"paid"`
+	Balance  int64        `json:"balance"`
+	PayState string       `json:"payState"` // paid | partial | unpaid
+}
+
+// PayStateOf вычисляет состояние оплаты: paid / partial / unpaid.
+func PayStateOf(total, paid int64) string {
+	if paid >= total {
+		return "paid"
+	}
+	if paid <= 0 {
+		return "unpaid"
+	}
+	return "partial"
+}
+
+// ListOrderRows — заказы с оплаченным/остатком/состоянием для списка.
+func (a *App) ListOrderRows() ([]OrderRow, error) {
+	orders, err := a.db.Orders().List()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]OrderRow, 0, len(orders))
+	for _, o := range orders {
+		paid, err := a.db.Orders().PaidTotal(o.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, OrderRow{
+			Order: o, Paid: paid,
+			Balance:  o.TotalBase - paid,
+			PayState: PayStateOf(o.TotalBase, paid),
+		})
+	}
+	return out, nil
+}
+
 // GetOrderDetail — заказ целиком.
 func (a *App) GetOrderDetail(id int64) (OrderDetail, error) {
 	var d OrderDetail
@@ -157,6 +197,14 @@ func (a *App) DeleteOrder(id int64) error {
 	return a.db.Orders().Delete(id)
 }
 
+// DeleteOrderItem — удалить позицию с пересчётом (manager+).
+func (a *App) DeleteOrderItem(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().DeleteOrderItem(id)
+}
+
 // OrderItemInput — позиция из калькулятора (деньги — минорные единицы).
 type OrderItemInput struct {
 	OrderID int64   `json:"orderId"`
@@ -190,15 +238,6 @@ func (a *App) AddPayment(orderID, itemID, amount int64, note string) (int64, err
 		OrderID: orderID, OrderItem: itemID, Amount: amount,
 		PaidAt: time.Now().Format("2006-01-02"), Note: note,
 	})
-}
-
-// DeleteOrderItem — удалить позицию с пересчётом (manager+).
-// Оплаты позиции сохраняются как оплаты всего заказа.
-func (a *App) DeleteOrderItem(id int64) error {
-	if err := a.need(models.RoleManager); err != nil {
-		return err
-	}
-	return a.db.Orders().DeleteOrderItem(id)
 }
 
 // RevenueByMonth — выручка по месяцам.

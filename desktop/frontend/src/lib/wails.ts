@@ -212,6 +212,8 @@ export interface Order {
   MarginProfit: number;
   MarginDev: number;
   VAT: number;
+  DiscountPct: number;
+  DiscountFixed: number;
   Status: string;
   TotalBase: number;
   CreatedAt: string;
@@ -230,6 +232,7 @@ export interface OrderItem {
 export interface Payment {
   ID: number;
   OrderID: number;
+  OrderItem: number;
   Amount: number;
   PaidAt: string;
   Note: string;
@@ -241,6 +244,13 @@ export interface OrderDetail {
   payments: Payment[];
   paid: number;
   balance: number;
+}
+
+export interface OrderRow {
+  order: Order;
+  paid: number;
+  balance: number;
+  payState: string;
 }
 
 export interface MonthRevenue {
@@ -315,6 +325,7 @@ declare global {
           SaveCustomer(c: Customer): Promise<number>;
           CreateOrder(customerId: number, currency: string, title: string): Promise<number>;
           ListOrders(): Promise<Order[]>;
+          ListOrderRows(): Promise<OrderRow[]>;
           GetOrderDetail(id: number): Promise<OrderDetail>;
           SetOrderStatus(id: number, status: string): Promise<void>;
           UpdateOrder(o: Order): Promise<void>;
@@ -326,7 +337,9 @@ declare global {
           PreviewOrderNumber(template: string): Promise<string>;
           OpenURL(url: string): Promise<void>;
           AddOrderItem(item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }): Promise<number>;
-          AddPayment(orderId: number, amount: number, note: string): Promise<number>;
+          DeleteOrderItem(id: number): Promise<void>;
+          DeleteOrderItem(id: number): Promise<void>;
+          AddPayment(orderId: number, itemId: number, amount: number, note: string): Promise<number>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
           TopMaterials(): Promise<MaterialStat[]>;
           PrinterLoad(): Promise<PrinterStat[]>;
@@ -390,6 +403,7 @@ export const wails = {
   createOrder: (customerId: number, currency: string, title: string) =>
     api().CreateOrder(customerId, currency, title),
   listOrders: () => api().ListOrders(),
+  listOrderRows: () => api().ListOrderRows(),
   orderDetail: (id: number) => api().GetOrderDetail(id),
   setOrderStatus: (id: number, status: string) => api().SetOrderStatus(id, status),
   updateOrder: (o: Order) => api().UpdateOrder(o),
@@ -402,7 +416,10 @@ export const wails = {
   openURL: (url: string) => api().OpenURL(url),
   addOrderItem: (item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }) =>
     api().AddOrderItem(item),
-  addPayment: (orderId: number, amount: number, note: string) => api().AddPayment(orderId, amount, note),
+  deleteOrderItem: (id: number) => api().DeleteOrderItem(id),
+  addPayment: (orderId: number, itemId: number, amount: number, note: string) =>
+    api().AddPayment(orderId, itemId, amount, note),
+  deleteOrderItem: (id: number) => api().DeleteOrderItem(id),
   revenueByMonth: () => api().RevenueByMonth(),
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
