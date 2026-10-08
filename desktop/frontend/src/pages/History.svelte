@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type JobDTO } from '../lib/wails';
+  import { wails, type JobDTO, type MaterialDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { num, hms } from '../lib/format';
@@ -10,6 +10,7 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let jobs: JobDTO[] = $state([]);
+  let materials: MaterialDTO[] = $state([]);
   let error = $state('');
   let query = $state('');
   let statusFilter = $state('');
@@ -95,7 +96,8 @@
   async function load() {
     try {
       jobs = (await wails.jobs(0)) ?? []; // всё: раньше лимит 200 обрезал историю
-      columns = await wails.historyColumns();
+      columns = (await wails.historyColumns()) ?? columns;
+      materials = (await wails.materials()) ?? [];
     } catch (e) {
       error = String(e);
     }
@@ -281,7 +283,12 @@
           {#each ['completed', 'cancelled', 'error'] as s}<option value={s}>{s}</option>{/each}
         </select>
       </label>
-      <label>{$t('calc.material')}<input bind:value={edit.material} placeholder="PETG-NIT-W4" /></label>
+      <label>{$t('calc.material')}
+        <select bind:value={edit.material}>
+          <option value="">—</option>
+          {#each materials as m}<option value={m.code}>{m.code}</option>{/each}
+        </select>
+      </label>
       <label>{$t('hist.slicer')}<input bind:value={edit.slicer} placeholder="OrcaSlicer" /></label>
     </div>
     <div class="row">

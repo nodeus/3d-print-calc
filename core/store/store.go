@@ -66,6 +66,7 @@ type Orders interface {
 	AddItem(it models.OrderItem) (int64, error)
 	Items(orderID int64) ([]models.OrderItem, error)
 	DeleteOrderItem(id int64) error
+	SetItemPaid(id int64, paid bool) error // ручная отметка (сумм не меняет)
 	AddPayment(p models.Payment) (int64, error)
 	Payments(orderID int64) ([]models.Payment, error)
 	PaidTotal(orderID int64) (int64, error)

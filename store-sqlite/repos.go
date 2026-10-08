@@ -290,7 +290,7 @@ func (r *ordersRepo) AddItem(it models.OrderItem) (int64, error) {
 
 // Items возвращает позиции заказа.
 func (r *ordersRepo) Items(orderID int64) ([]models.OrderItem, error) {
-	rows, err := r.db.Query(`SELECT id, order_id, job_id, title, qty, cost, price
+	rows, err := r.db.Query(`SELECT id, order_id, job_id, title, qty, cost, price, paid_manual
 		FROM order_items WHERE order_id=? ORDER BY id`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_ORDER_ITEM: %w", err)
@@ -300,13 +300,27 @@ func (r *ordersRepo) Items(orderID int64) ([]models.OrderItem, error) {
 	for rows.Next() {
 		var it models.OrderItem
 		var jobID sql.NullInt64
-		if err := rows.Scan(&it.ID, &it.OrderID, &jobID, &it.Title, &it.Qty, &it.Cost, &it.Price); err != nil {
+		var paidManual int
+		if err := rows.Scan(&it.ID, &it.OrderID, &jobID, &it.Title, &it.Qty, &it.Cost, &it.Price, &paidManual); err != nil {
 			return nil, fmt.Errorf("ERR_ORDER_ITEM: %w", err)
 		}
 		it.JobID = jobID.Int64
+		it.PaidManual = paidManual != 0
 		out = append(out, it)
 	}
 	return out, rows.Err()
+}
+
+// SetItemPaid ставит/снимает ручную отметку оплаты позиции (сумм не меняет).
+func (r *ordersRepo) SetItemPaid(id int64, paid bool) error {
+	v := 0
+	if paid {
+		v = 1
+	}
+	if _, err := r.db.Exec(`UPDATE order_items SET paid_manual=? WHERE id=?`, v, id); err != nil {
+		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
+	}
+	return nil
 }
 
 // AddPayment фиксирует оплату (всего заказа или позиции).
