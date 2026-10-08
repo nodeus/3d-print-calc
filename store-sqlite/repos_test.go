@@ -275,3 +275,67 @@ func TestReports(t *testing.T) {
 	}
 	_ = load
 }
+
+func TestSetItemPaid(t *testing.T) {
+	db := openTestDB(t)
+	repo := db.Orders()
+	cid, _ := db.Customers().Save(models.Customer{Name: "К"})
+	oid, _ := repo.Create(models.Order{CustomerID: cid, CreatedAt: "2026-01-01"})
+	iid, err := repo.AddItem(models.OrderItem{OrderID: oid, Title: "a", Qty: 1, Price: 10000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetItemPaid(iid, true); err != nil {
+		t.Fatalf("SetItemPaid: %v", err)
+	}
+	items, _ := repo.Items(oid)
+	if len(items) != 1 || !items[0].PaidManual {
+		t.Fatalf("флаг не встал: %+v", items)
+	}
+	// Суммы не двигаются от флага.
+	got, _ := repo.Get(oid)
+	if got.TotalBase != 10000 {
+		t.Fatalf("total = %d", got.TotalBase)
+	}
+	paid, _ := repo.PaidTotal(oid)
+	if paid != 0 {
+		t.Fatalf("paid = %d, деньги не вносились", paid)
+	}
+	if err := repo.SetItemPaid(iid, false); err != nil {
+		t.Fatal(err)
+	}
+	items, _ = repo.Items(oid)
+	if items[0].PaidManual {
+		t.Fatal("флаг не снялся")
+	}
+}
+
+func TestSpoolStatsNullAttribution(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, _ := mats.UpsertByCode(models.Material{Code: "PETG-S", Density: 1.27})
+	mats.AddSpool(models.Spool{MaterialID: mid, Price: 100, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	mats.AddSpool(models.Spool{MaterialID: mid, Price: 100, Currency: "RUB", WeightInitG: 500, WeightLeftG: 500})
+	// Работы без spool_id, но с кодом в снапшоте — идут на первую катушку.
+	for i, w := range []float64{100, 200} {
+		if _, err := db.Jobs().Upsert(models.Job{
+			Filename: "f" + string(rune('a'+i)) + ".gcode", StartAt: "2026-01-01 10:00",
+			WeightG: w, CostSnapshot: `{"material":"PETG-S","cost":1}`,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stats, err := db.SpoolStats()
+	if err != nil {
+		t.Fatalf("SpoolStats: %v", err)
+	}
+	if len(stats) != 2 {
+		t.Fatalf("stats = %+v", stats)
+	}
+	if stats[0].Jobs != 2 || stats[0].UsedG != 300 || stats[0].LeftG != 700 {
+		t.Fatalf("первая катушка: %+v", stats[0])
+	}
+	if stats[1].Jobs != 0 || stats[1].LeftG != 500 {
+		t.Fatalf("вторая катушка: %+v", stats[1])
+	}
+}

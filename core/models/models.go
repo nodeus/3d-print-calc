@@ -133,13 +133,14 @@ type Order struct {
 
 // OrderItem — позиция заказа (qty может быть дробным).
 type OrderItem struct {
-	ID      int64
-	OrderID int64
-	JobID   int64
-	Title   string
-	Qty     float64
-	Cost    int64 // минорные единицы
-	Price   int64 // минорные единицы
+	ID         int64
+	OrderID    int64
+	JobID      int64
+	Title      string
+	Qty        float64
+	Cost       int64 // минорные единицы
+	Price      int64 // минорные единицы
+	PaidManual bool  // ручная отметка «Оплачен» (сумм не меняет)
 }
 
 // Payment — оплата по заказу (целиком или по позиции).

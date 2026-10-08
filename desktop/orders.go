@@ -205,6 +205,14 @@ func (a *App) DeleteOrderItem(id int64) error {
 	return a.db.Orders().DeleteOrderItem(id)
 }
 
+// ToggleItemPaid — ручная отметка оплаты позиции (manager+, сумм не меняет).
+func (a *App) ToggleItemPaid(id int64, paid bool) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().SetItemPaid(id, paid)
+}
+
 // OrderItemInput — позиция из калькулятора (деньги — минорные единицы).
 type OrderItemInput struct {
 	OrderID int64   `json:"orderId"`

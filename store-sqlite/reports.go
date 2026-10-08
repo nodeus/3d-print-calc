@@ -144,11 +144,17 @@ type SpoolStat struct {
 
 // SpoolStats — остатки по катушкам: used = Σ веса работ, left = init − used.
 // Ничего не перезаписывает (идемпотентно при реимпортах).
+// Работы с явным spool_id идут на свою катушку; работы без катушки —
+// на первую катушку того же материала (код из снапшота). Без кода — ничьи.
 func (d *DB) SpoolStats() ([]SpoolStat, error) {
 	rows, err := d.sql.Query(`SELECT m.code, m.color_hex, m.vendor, s.weight_init_g,
 		COUNT(j.id), COALESCE(SUM(j.weight_g), 0)
 		FROM spools s JOIN materials m ON m.id = s.material_id
-		LEFT JOIN jobs j ON j.spool_id = s.id
+		LEFT JOIN jobs j ON j.spool_id = s.id OR (
+			j.spool_id IS NULL
+			AND json_extract(COALESCE(j.cost_snapshot, '{}'), '$.material') = m.code
+			AND s.id = (SELECT MIN(s2.id) FROM spools s2 WHERE s2.material_id = m.id)
+		)
 		GROUP BY s.id ORDER BY m.code`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_REPORT: %w", err)
