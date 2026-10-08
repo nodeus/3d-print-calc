@@ -90,15 +90,41 @@ func (a *App) DeleteCustomTheme(name string) error {
 	return nil
 }
 
+// baseThemes — встроенные темы (зеркало theme.css): их нет в Custom,
+// но экспорт в файл обязан работать и для них.
+var baseThemes = map[string]map[string]string{
+	"light": {
+		"bg": "#fafafa", "fg": "#222222", "card-border": "#dddddd",
+		"nav-bg": "#e5e7eb", "header-bg": "#1f2937", "header-fg": "#ffffff",
+		"btn-bg": "#ffffff", "btn-fg": "#222222", "btn-border": "#cccccc",
+		"input-bg": "#ffffff", "input-fg": "#222222",
+		"muted": "#666666", "err": "#bb0000", "warn": "#bb6600",
+		"accent": "#0645ad", "sel-bg": "#eeeeff",
+		"final-border": "#333333", "sw-border": "#999999",
+	},
+	"dark": {
+		"bg": "#1a1d21", "fg": "#e6e6e6", "card-border": "#3a3f45",
+		"nav-bg": "#24282e", "header-bg": "#101216", "header-fg": "#ffffff",
+		"btn-bg": "#2a2e34", "btn-fg": "#e6e6e6", "btn-border": "#4a5058",
+		"input-bg": "#24282e", "input-fg": "#e6e6e6",
+		"muted": "#9aa0a6", "err": "#ff6b6b", "warn": "#ffb020",
+		"accent": "#7aa2ff", "sel-bg": "#2c3a55",
+		"final-border": "#8a8f96", "sw-border": "#6a6f76",
+	},
+}
+
 // ExportThemeFile сохраняет набор в JSON-файл.
 func (a *App) ExportThemeFile(name string) (string, error) {
-	s, err := a.UISettings()
-	if err != nil {
-		return "", err
-	}
-	vars, ok := s.Custom[name]
+	vars, ok := baseThemes[name]
 	if !ok {
-		return "", fmt.Errorf("ERR_THEME: нет темы %q", name)
+		s, err := a.UISettings()
+		if err != nil {
+			return "", err
+		}
+		vars, ok = s.Custom[name]
+		if !ok {
+			return "", fmt.Errorf("ERR_THEME: нет темы %q", name)
+		}
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		DefaultFilename: name + ".theme.json",
