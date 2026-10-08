@@ -128,5 +128,7 @@
   @media print {
     :global(body[data-tab='orders'] main) { page: ordersLandscape; }
     :global(body[data-tab='reports'] main) { page: reportsLandscape; }
+    :global(.cols) { grid-template-columns: 1fr !important; }
+    :global(.grid) { grid-template-columns: 1fr !important; }
   }
 </style>

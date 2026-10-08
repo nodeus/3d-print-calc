@@ -232,7 +232,7 @@
   async function toPDF() {
     if (detail) {
       const cur = detail.order.Currency;
-      await downloadPDF(`${$t('ord.number')}: ${orderNo(detail.order)}`, [
+      await downloadPDF(`${$t('ord.number')}: ${orderNo(detail.order)} · ${detail.order.CreatedAt}`, [
         {
           Title: orderTitle(detail.order),
           Headers: ['№', $t('ord.item'), $t('ord.qty'), $t('calc.price'), $t('ord.paid'), $t('ord.pay_state')],
@@ -255,8 +255,8 @@
       await downloadPDF($t('nav.orders'), [
         {
           Title: '',
-          Headers: [$t('ord.number'), $t('ord.title'), $t('cust.name'), $t('ord.status'), $t('ord.total'), $t('ord.paid'), $t('ord.balance'), $t('ord.pay_state')],
-          Rows: visibleRows.map((r) => [orderNo(r.order), orderTitle(r.order), custName(r.order.CustomerID), $t('st.' + r.order.Status), money(r.order.TotalBase / 100, r.order.Currency, 'ru'), money(r.paid / 100, r.order.Currency, 'ru'), money(r.balance / 100, r.order.Currency, 'ru'), payStateLabel(r.payState)]),
+          Headers: [$t('ord.number'), $t('ord.created'), $t('ord.title'), $t('cust.name'), $t('ord.status'), $t('ord.total'), $t('ord.paid'), $t('ord.balance'), $t('ord.pay_state')],
+          Rows: visibleRows.map((r) => [orderNo(r.order), r.order.CreatedAt, orderTitle(r.order), custName(r.order.CustomerID), $t('st.' + r.order.Status), money(r.order.TotalBase / 100, r.order.Currency, 'ru'), money(r.paid / 100, r.order.Currency, 'ru'), money(r.balance / 100, r.order.Currency, 'ru'), payStateLabel(r.payState)]),
         },
       ]);
     }
@@ -280,11 +280,11 @@
       </div>
     {/if}
     <table>
-      <thead><tr><th>{$t('ord.number')}</th><th>{$t('ord.title')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th><th class="n">{$t('ord.paid')}</th><th class="n">{$t('ord.balance')}</th><th>{$t('ord.pay_state')}</th></tr></thead>
+      <thead><tr><th>{$t('ord.number')}</th><th>{$t('ord.created')}</th><th>{$t('ord.title')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th><th class="n">{$t('ord.paid')}</th><th class="n">{$t('ord.balance')}</th><th>{$t('ord.pay_state')}</th></tr></thead>
       <tbody>
         {#each visibleRows as r}
           <tr class:sel={detail?.order.ID === r.order.ID} onclick={() => openDetail(r.order.ID)}>
-            <td>{orderNo(r.order)}</td><td>{orderTitle(r.order)}</td><td>{custName(r.order.CustomerID)}</td><td>{$t('st.' + r.order.Status)}</td><td class="n">{money(r.order.TotalBase / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.paid / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.balance / 100, r.order.Currency, 'ru')}</td><td>{payStateLabel(r.payState)}</td>
+            <td>{orderNo(r.order)}</td><td>{r.order.CreatedAt}</td><td>{orderTitle(r.order)}</td><td>{custName(r.order.CustomerID)}</td><td>{$t('st.' + r.order.Status)}</td><td class="n">{money(r.order.TotalBase / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.paid / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.balance / 100, r.order.Currency, 'ru')}</td><td>{payStateLabel(r.payState)}</td>
           </tr>
         {/each}
       </tbody>
@@ -293,7 +293,7 @@
 
   {#if detail}
     <section class="card">
-      <h3>{$t('ord.number')}: {orderNo(detail.order)} · {orderTitle(detail.order)}</h3>
+      <h3>{$t('ord.number')}: {orderNo(detail.order)} · {orderTitle(detail.order)} · {detail.order.CreatedAt}</h3>
       {#if canWrite($user)}
         <div class="row no-print">
           <select value={detail.order.Status} onchange={(e) => setStatus(e.currentTarget.value)}>

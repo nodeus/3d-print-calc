@@ -91,7 +91,8 @@ labor      = op_rate*prep_h + op_rate*post_h + designer_rate*model_h + model_pri
 subtotal   = mat + purge + elec + amort + maint + labor + extra_mat
 fail_adj   = subtotal * fail_rate
 cost       = subtotal + fail_adj                          # итог — за стол
-price      = cost*(1+margin_profit+margin_dev) + fees, затем round(step) + VAT
+price      = cost*(1+margin_profit+margin_dev) + fees, затем round(step) + VAT + round(step)
+           # второй проход round убирает копейки, возвращённые НДС (280×1.22=341.6→340)
 per_copy   = cost_f / copies, price_f / copies            # итоги делятся на N копий
 weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
 ```

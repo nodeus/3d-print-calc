@@ -69,7 +69,9 @@ type Result struct {
 // Calculate считает себестоимость и цену. Формулы — см. AGENTS.md раздел 3.
 //
 // Порядок: subtotal(+maint+purge) → fail → cost → price(+margins+fees) →
-// round(step) → VAT. Per-copy — делением финалов на Copies.
+// round(step) → VAT → round(step) ещё раз. Второй проход нужен, потому что
+// НДС возвращает копейки (280 × 1.22 = 341.6). Без шага — как есть, с копейками.
+// Per-copy — делением финалов на Copies.
 func Calculate(in Input) Result {
 	hours := in.TotalSec / 3600
 	mat := in.PricePerKg / 1000 * in.WeightG
@@ -83,7 +85,7 @@ func Calculate(in Input) Result {
 	cost := subtotal + failAdj
 	price := cost*(1+in.MarginProfit+in.MarginDev) + in.Fees
 	rounded := RoundStep(price, in.RoundStep)
-	withVAT := rounded * (1 + in.VATRate)
+	withVAT := RoundStep(rounded*(1+in.VATRate), in.RoundStep)
 
 	copies := in.Copies
 	if copies < 1 {

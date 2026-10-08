@@ -386,16 +386,39 @@
 
   async function toPDF() {
     if (!result) return;
-    const m = (v: number) => money(v, currency, $locale);
+    const fmt = (v: number) => money(v, currency, $locale);
+    const mat = materials.find((x) => x.code === matCode);
+    const printer = printers.find((x) => x.ID === printerId);
     await downloadPDF($t('nav.calculator'), [
+      {
+        Title: $t('calc.params'),
+        Headers: [$t('calc.param'), $t('calc.value')],
+        Rows: [
+          [$t('calc.material'), `${matCode} (${fmt(mat?.pricePerKg ?? 0)})`],
+          [$t('calc.printer'), printer ? `${printer.Name} (${printer.Model})` : '—'],
+          [$t('calc.time'), `${timeH}h ${timeM}m`],
+          [$t('calc.weight'), `${weightG ?? 0} г`],
+          [$t('calc.tariff'), String(tariff)],
+          [$t('calc.power'), String(powerKW)],
+          [$t('calc.amort'), String(amortPerHour)],
+          [$t('calc.op_rate'), `${opRate} / ${prepH}h + ${postH}h`],
+          [$t('calc.designer_rate'), `${designerRate} / ${modelH}h + ${modelPrice}`],
+          [$t('calc.extra'), String(extraMat)],
+          [$t('calc.fail'), `${failPct}%`],
+          [$t('calc.margin_profit'), `${marginProfitPct}%`],
+          [$t('calc.margin_dev'), `${marginDevPct}%`],
+          [$t('calc.copies'), String(copies)],
+          [$t('calc.vat'), `${vatPct}%`],
+        ],
+      },
       {
         Title: '',
         Headers: [$t('calc.breakdown'), $t('calc.amount')],
         Rows: [
-          ...rows.map(([k, v]) => [$t(k), m(v)]),
-          [$t('calc.cost'), m(result.Cost)],
-          [$t('calc.price'), m(result.Price)],
-          [$t('calc.final'), m(result.PriceVAT)],
+          ...rows.map(([k, v]) => [$t(k), fmt(v)]),
+          [$t('calc.cost'), fmt(result.Cost)],
+          [$t('calc.price'), fmt(result.Price)],
+          [$t('calc.final'), fmt(result.PriceVAT)],
         ],
       },
     ]);
