@@ -123,11 +123,12 @@ func table(pdf *gofpdf.Fpdf, headers []string, rows [][]string) {
 			pdf.SetFont("DejaVu", "", 9)
 			pdf.SetFillColor(255, 255, 255)
 		}
+		// Цвет заливки строки: только зебра, цвет материала — лишь квадратику.
+		rowR, rowG, rowB := 255, 255, 255
 		if i%2 == 1 {
-			pdf.SetFillColor(245, 245, 245)
-		} else {
-			pdf.SetFillColor(255, 255, 255)
+			rowR, rowG, rowB = 245, 245, 245
 		}
+		pdf.SetFillColor(rowR, rowG, rowB)
 		for c := 0; c < n; c++ {
 			cell := ""
 			if c < len(row) {
@@ -135,9 +136,12 @@ func table(pdf *gofpdf.Fpdf, headers []string, rows [][]string) {
 			}
 			if r, g, b, ok := parseHexColor(cell); ok {
 				// Цветная ячейка: залитый квадрат + hex рядом.
+				// Fill возвращаем к зебре сразу: иначе весь остаток
+				// строки красится цветом материала (баг v1.0.8).
 				x, y := pdf.GetX(), pdf.GetY()
 				pdf.SetFillColor(r, g, b)
 				pdf.Rect(x+1, y+1, 4, 4, "F")
+				pdf.SetFillColor(rowR, rowG, rowB)
 				pdf.SetX(x + 6)
 				pdf.CellFormat(w-6, 6, cell, "1", 0, "L", true, 0, "")
 				continue
