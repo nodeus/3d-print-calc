@@ -2,6 +2,10 @@ package export
 
 import (
 	"bytes"
+	"compress/zlib"
+	"io"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -48,4 +52,56 @@ func TestBuildPDFColorCell(t *testing.T) {
 	if !bytes.HasPrefix(data, []byte("%PDF")) {
 		t.Fatal("не PDF")
 	}
+}
+
+// TestBuildPDFColorCellKeepsRowFill: квадратик красится цветом материала,
+// а заливка строки обязана вернуться к зебре — иначе весь остаток строки
+// заливается цветом материала (баг v1.0.8). Проверяем порядок операторов
+// в распакованном content-стриме: красная заливка → rect → белая заливка.
+func TestBuildPDFColorCellKeepsRowFill(t *testing.T) {
+	data, err := BuildPDF("app", "Цвета", []Section{{
+		Headers: []string{"Код", "Цвет", "Тип"},
+		Rows:    [][]string{{"PETG-R", "#ff0000", "PETG"}},
+	}})
+	if err != nil {
+		t.Fatalf("BuildPDF: %v", err)
+	}
+	text := pdfContentText(t, data)
+	// Операторы gofpdf: цветная заливка — «r g b rg», белая — «1.000 g»,
+	// залитый квадрат — «x y w h re f» (h отрицательный), рамки ячеек — «re B».
+	red := strings.Index(text, "1.000 0.000 0.000 rg")
+	rect := regexp.MustCompile(`-?[\d.]+ -?[\d.]+ -?[\d.]+ -?[\d.]+ re f`).FindStringIndex(text)
+	white := -1
+	if rect != nil {
+		if i := strings.Index(text[rect[1]:], "1.000 g"); i >= 0 {
+			white = rect[1] + i
+		}
+	}
+	if red < 0 || rect == nil || white < 0 || !(red < rect[0] && rect[0] < white) {
+		t.Fatalf("порядок операторов бит: red=%d rect=%v white=%d", red, rect, white)
+	}
+}
+
+// pdfContentText склеивает распакованные content-стримы PDF.
+func pdfContentText(t *testing.T, data []byte) string {
+	t.Helper()
+	reStream := regexp.MustCompile(`(?s)stream\r?\n(.+?)\r?\nendstream`)
+	var sb strings.Builder
+	for _, m := range reStream.FindAllSubmatch(data, -1) {
+		zr, err := zlib.NewReader(bytes.NewReader(m[1]))
+		if err != nil {
+			continue // метаданные/шрифты — не flate
+		}
+		raw, err := io.ReadAll(zr)
+		zr.Close()
+		if err != nil {
+			continue
+		}
+		sb.Write(raw)
+		sb.WriteByte('\n')
+	}
+	if sb.Len() == 0 {
+		t.Fatal("content-стримы не распаковались")
+	}
+	return sb.String()
 }

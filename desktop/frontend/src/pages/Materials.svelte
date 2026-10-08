@@ -186,7 +186,7 @@
   input, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
   .err { color: var(--err); }
-  .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; padding: 0; vertical-align: middle; }
+  .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; padding: 0; vertical-align: middle; print-color-adjust: exact; }
   button.sw { cursor: pointer; margin: 1px; }
   .colorrow { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
   input[type='color'] { width: 40px; height: 30px; padding: 2px; }
