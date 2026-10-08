@@ -131,6 +131,35 @@ func (c *Client) History(ctx context.Context, limit, start int64) ([]Job, int, e
 	return out, hr.Result.Count, nil
 }
 
+// HistoryAll забирает ВСЮ историю постранично (новые первыми).
+// pageSize — размер страницы (1..500, иначе 250). onPage вызывается после
+// каждой страницы (nil — молча). Останавливается на пустой странице или
+// при достижении total с сервера.
+func (c *Client) HistoryAll(ctx context.Context, pageSize int64, onPage func(fetched, total int)) ([]Job, error) {
+	if pageSize <= 0 || pageSize > 500 {
+		pageSize = 250
+	}
+	out := []Job{}
+	var start int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return out, fmt.Errorf("ERR_MOONRAKER: %w", err)
+		}
+		page, total, err := c.History(ctx, pageSize, start)
+		if err != nil {
+			return out, err
+		}
+		out = append(out, page...)
+		if onPage != nil {
+			onPage(len(out), total)
+		}
+		if len(page) == 0 || (total > 0 && len(out) >= total) {
+			return out, nil
+		}
+		start += int64(len(page))
+	}
+}
+
 // Ping проверяет связь: GET {base}/server/info.
 func (c *Client) Ping(ctx context.Context) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/server/info", nil)

@@ -211,7 +211,7 @@
     {#if status[p.ID]}<p class="ok">Moonraker {status[p.ID]}</p>{/if}
   </div>
 {/each}
-{#if report}<p>{$t('set.csv_preview')}: total {report.total}, new {report.new}, existing {report.existing}</p>{/if}
+{#if report}<p>{$t('set.csv_preview')}: total {report.total}{#if report.serverTotal} / {$t('moon.server_total')}: {report.serverTotal}{/if}, new {report.new}, existing {report.existing}</p>{/if}
 {#if report?.dryRun && canWrite($user)}<button class="warn no-print" onclick={apply} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
 {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
 {#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs})</p>{/if}
