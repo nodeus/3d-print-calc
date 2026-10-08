@@ -194,7 +194,7 @@
   "moon.title": "Moonraker (K1C)",
   "moon.check": "Проверить связь",
   "moon.import": "Импорт истории (dry-run)",
-  "moon.server_total": "всего на принтере",
+  "moon.lifetime_total": "всего за всё время",
   "nav.info": "Информация",
   "common.print": "Печать",
   "common.pdf": "PDF",

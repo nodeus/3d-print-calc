@@ -40,7 +40,7 @@ func (a *App) MoonrakerStatus(printerID int64) (string, error) {
 func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
 	rep.DryRun = true
-	rows, serverTotal, err := a.fetchMoonraker(printerID, limit)
+	rows, err := a.fetchMoonraker(printerID, limit)
 	if err != nil {
 		return rep, err
 	}
@@ -49,7 +49,14 @@ func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport,
 		return rep, err
 	}
 	rep.Total, rep.New, rep.Existing = len(rows), fresh, exist
-	rep.ServerTotal = serverTotal
+	// Lifetime-счётчик: сколько работ принтер видел за всё время.
+	if p, ferr := a.findPrinter(printerID); ferr == nil && p.MoonrakerURL != "" {
+		ctx, cancel := context.WithTimeout(a.ctx, 15*time.Second)
+		if n, terr := moonraker.New(p.MoonrakerURL).Totals(ctx); terr == nil {
+			rep.LifetimeTotal = n
+		}
+		cancel()
+	}
 	a.pendingMoonraker = rows
 	a.pendingPrinterID = printerID
 	a.pendingNew, a.pendingExisting = fresh, exist
@@ -88,13 +95,13 @@ func (a *App) findPrinter(id int64) (models.Printer, error) {
 	return models.Printer{}, errPrinterNotFound
 }
 
-func (a *App) fetchMoonraker(printerID int64, limit int) ([]importers.PrintJob, int, error) {
+func (a *App) fetchMoonraker(printerID int64, limit int) ([]importers.PrintJob, error) {
 	p, err := a.findPrinter(printerID)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	if p.MoonrakerURL == "" {
-		return nil, 0, errMoonrakerUnset
+		return nil, errMoonrakerUnset
 	}
 	page := int64(limit)
 	if page <= 0 || page > 500 {
@@ -102,20 +109,18 @@ func (a *App) fetchMoonraker(printerID int64, limit int) ([]importers.PrintJob, 
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Minute)
 	defer cancel()
-	var serverTotal int
 	jobs, err := moonraker.New(p.MoonrakerURL).HistoryAll(ctx, page,
-		func(fetched, total int) {
-			serverTotal = total
-			a.emitProgress(fetched, total)
+		func(fetched, _ int) {
+			a.emitProgress(fetched, 0)
 		})
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	out := make([]importers.PrintJob, 0, len(jobs))
 	for _, j := range jobs {
 		out = append(out, j.ToPrintJob())
 	}
-	return out, serverTotal, nil
+	return out, nil
 }
 
 var (

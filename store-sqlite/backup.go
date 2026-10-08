@@ -250,12 +250,12 @@ func (d *DB) ExportMaterialsCSV(w io.Writer) error {
 
 // ImportReport — итог импорта истории.
 type ImportReport struct {
-	Total       int  `json:"total"`
-	New         int  `json:"new"`
-	Existing    int  `json:"existing"`
-	Stubs       int  `json:"stubs"`
-	DryRun      bool `json:"dryRun"`
-	ServerTotal int  `json:"serverTotal,omitempty"` // всего на сервере (Moonraker)
+	Total         int  `json:"total"`
+	New           int  `json:"new"`
+	Existing      int  `json:"existing"`
+	Stubs         int  `json:"stubs"`
+	DryRun        bool `json:"dryRun"`
+	LifetimeTotal int  `json:"lifetimeTotal,omitempty"` // всего за всё время (Moonraker totals)
 }
 
 // ImportHistory импортирует CSV принтера. dryRun=true — только отчёт без записи.

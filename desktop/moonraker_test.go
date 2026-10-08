@@ -107,6 +107,10 @@ func TestMoonrakerPreviewAllPages(t *testing.T) {
 			w.Write([]byte(`{"result": {"moonraker_version": "v0.9.3"}}`))
 			return
 		}
+		if r.URL.Path == "/server/history/totals" {
+			w.Write([]byte(`{"result": {"job_totals": {"total_jobs": 260}}}`))
+			return
+		}
 		q := r.URL.Query()
 		limit, _ := strconv.Atoi(q.Get("limit"))
 		start, _ := strconv.Atoi(q.Get("start"))
@@ -155,7 +159,7 @@ func TestMoonrakerPreviewAllPages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
-	if rep.Total != totalJobs || rep.New != totalJobs || rep.ServerTotal != totalJobs {
+	if rep.Total != totalJobs || rep.New != totalJobs || rep.LifetimeTotal != totalJobs {
 		t.Fatalf("preview = %+v, хочу все %d", rep, totalJobs)
 	}
 	applied, err := app.MoonrakerApply()
