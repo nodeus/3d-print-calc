@@ -1,12 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type BackupManifest, type ImportReport } from '../lib/wails';
+  import { wails, type BackupManifest, type ImportReport, type FxRate } from '../lib/wails';
   import { t, locale, switchLocale } from '../lib/i18n';
-  import { user, isAdmin } from '../lib/session';
+  import { setBaseSym } from '../lib/currency';
+  import { user, isAdmin, canWrite } from '../lib/session';
+  import { askConfirm } from '../lib/confirm';
+  import { THEME_PRESET_DARK, THEME_PRESET_LIGHT, applyTheme, persistTheme } from '../lib/theme';
   import Users from './Users.svelte';
 
   let currency = $state('RUB');
   const codes = ['RUB', 'USD', 'EUR', 'KZT', 'BYN'];
+  // Тема: базовые light/dark + 32 пресета. Выбранный пресет хранится
+  // в БД как обычная кастомная тема (переживает перезапуск).
+  let theme = $state('light');
 
   let backupPath = $state('');
   let backupManifest: BackupManifest | null = $state(null);
@@ -110,19 +116,121 @@
   onMount(async () => {
     try {
       currency = await wails.getBaseCurrency();
+      setBaseSym(currency);
       await loadNumbers();
       visibleColumns = await wails.historyColumns();
+      await loadRates();
+      const ui = await wails.uiSettings();
+      theme = ui.theme || 'light';
     } catch (e) {
       console.error(e);
     }
   });
 
+  async function pickTheme(name: string) {
+    theme = name;
+    error = '';
+    try {
+      const ui = await wails.uiSettings();
+      applyTheme(name, ui.custom ?? {});
+      await persistTheme(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  // pickPreset кладёт пресет в БД как кастомную тему и сразу применяет.
+  async function pickPreset(name: string, vars: Record<string, string>) {
+    error = '';
+    try {
+      await wails.saveCustomTheme(name, vars);
+      await pickTheme(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function exportCustom(name: string) {
+    error = '';
+    try {
+      await wails.exportThemeFile(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function importCustom() {
+    error = '';
+    try {
+      const name = await wails.importThemeFile();
+      if (name) await pickTheme(name);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   async function changeCurrency(code: string) {
     currency = code;
+    setBaseSym(code);
     try {
       await wails.setBaseCurrency(code);
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  // Курсы и конвертация.
+  let rates: FxRate[] = $state([]);
+  let rateCur = $state('');
+  let rateVal = $state(0);
+  let convCur = $state('');
+  let convRate = $state(0);
+
+  async function loadRates() {
+    try {
+      rates = (await wails.listFxRates()) ?? [];
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function saveRate() {
+    error = '';
+    if (!rateCur.trim() || !(rateVal > 0)) return;
+    try {
+      await wails.setFxRate(rateCur.trim().toUpperCase(), rateVal);
+      rateCur = '';
+      rateVal = 0;
+      await loadRates();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function removeRate(r: FxRate) {
+    error = '';
+    try {
+      await wails.deleteFxRate(r.currency, r.day);
+      await loadRates();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function convertAll() {
+    error = '';
+    const target = convCur.trim().toUpperCase();
+    if (!target || !(convRate > 0)) return;
+    if (!(await askConfirm(`${$t('fx.convert_q')} ${target} @ ${convRate}? (${$t('fx.backup_warn')})`))) return;
+    try {
+      await wails.convertCurrency(target, convRate);
+      currency = target;
+      setBaseSym(target);
+      convCur = '';
+      convRate = 0;
+      await loadRates();
+    } catch (e) {
+      error = String(e);
     }
   }
 
@@ -170,6 +278,30 @@
 </div>
 
 <div class="card">
+  <h3>{$t('fx.title')}</h3>
+  <table>
+    <thead><tr><th>{$t('fx.currency')}</th><th class="n">{$t('fx.rate')}</th><th>{$t('fx.day')}</th><th class="no-print"></th></tr></thead>
+    <tbody>
+      {#each rates as r}<tr><td>{r.currency}</td><td class="n">{r.rate}</td><td>{r.day}</td><td class="no-print"><button onclick={() => removeRate(r)}>✕</button></td></tr>{/each}
+    </tbody>
+  </table>
+  {#if canWrite($user)}
+    <div class="row">
+      <input placeholder="USD" bind:value={rateCur} />
+      <input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={rateVal} />
+      <button onclick={saveRate}>{$t('common.save')}</button>
+    </div>
+    <h3>{$t('fx.convert')}</h3>
+    <p class="note">{$t('fx.convert_note')}</p>
+    <div class="row">
+      <input placeholder="USD" bind:value={convCur} />
+      <input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={convRate} />
+      <button class="warn" onclick={convertAll}>{$t('fx.convert_go')}</button>
+    </div>
+  {/if}
+</div>
+
+<div class="card">
   <h3>{$t('set.backup')}</h3>
   <div class="row">
     <button onclick={() => run(wails.exportBackup, (p) => (backupPath = p))}>{$t('set.backup_save')}</button>
@@ -198,6 +330,46 @@
 {#if error}<p class="err">{error}</p>{/if}
 
 <div class="card">
+  <h3>{$t('set.theme')}</h3>
+  <p class="note">{$t('set.theme_current')}: <b>{theme}</b></p>
+  <h4>{$t('set.theme_base')}</h4>
+  <div class="swatches">
+    <button class="sw" class:on={theme === 'light'} onclick={() => pickTheme('light')} title={$t('set.theme_light')}>
+      <span class="dots"><i style="background:#fafafa"></i><i style="background:#222222"></i><i style="background:#0645ad"></i><i style="background:#ffffff"></i></span>
+      {$t('set.theme_light')}
+    </button>
+    <button class="sw" class:on={theme === 'dark'} onclick={() => pickTheme('dark')} title={$t('set.theme_dark')}>
+      <span class="dots"><i style="background:#1a1d21"></i><i style="background:#e6e6e6"></i><i style="background:#7aa2ff"></i><i style="background:#2a2e34"></i></span>
+      {$t('set.theme_dark')}
+    </button>
+  </div>
+  <h4>{$t('set.theme_dark_presets')} ({THEME_PRESET_DARK.length})</h4>
+  <div class="swatches">
+    {#each THEME_PRESET_DARK as p}
+      <button class="sw" class:on={theme === p.name} onclick={() => pickPreset(p.name, p.vars)} title={p.name}>
+        <span class="dots"><i style="background:{p.vars.bg}"></i><i style="background:{p.vars.fg}"></i><i style="background:{p.vars.accent}"></i><i style="background:{p.vars['btn-bg']}"></i></span>
+        {p.name}
+      </button>
+    {/each}
+  </div>
+  <h4>{$t('set.theme_light_presets')} ({THEME_PRESET_LIGHT.length})</h4>
+  <div class="swatches">
+    {#each THEME_PRESET_LIGHT as p}
+      <button class="sw" class:on={theme === p.name} onclick={() => pickPreset(p.name, p.vars)} title={p.name}>
+        <span class="dots"><i style="background:{p.vars.bg}"></i><i style="background:{p.vars.fg}"></i><i style="background:{p.vars.accent}"></i><i style="background:{p.vars['btn-bg']}"></i></span>
+        {p.name}
+      </button>
+    {/each}
+  </div>
+{#if canWrite($user)}
+  <div class="row">
+    <button onclick={() => exportCustom(theme)}>{$t('set.theme_save')}</button>
+    <button onclick={importCustom}>{$t('set.theme_import')}</button>
+  </div>
+{/if}
+</div>
+
+<div class="card">
   <h3>{$t('set.pw')}</h3>
   <label>{$t('auth.password')} ({$t('set.pw_old')})<input type="password" bind:value={oldPw} /></label>
   <label>{$t('set.pw_new')}<input type="password" bind:value={newPw} /></label>
@@ -218,7 +390,7 @@
 <div class="card">
   <h3>{$t('set.ordnum')}</h3>
   <label>{$t('set.ordnum_tpl')}<input bind:value={numTemplate} oninput={previewNumbers} placeholder={'{YYYY}-{nnnn}'} /></label>
-  <label>{$t('set.ordnum_seq')}<input type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
+  <label>{$t('set.ordnum_seq')}<input placeholder="42" type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
   <p>{$t('set.ordnum_preview')}: <b>{numPreview}</b></p>
   <p class="note">{$t('set.ordnum_help')}</p>
   <div class="row"><button onclick={saveNumbers}>{$t('common.save')}</button></div>
@@ -232,18 +404,24 @@
 {/if}
 
 <style>
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; max-width: 560px; margin-bottom: 12px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; max-width: 560px; margin-bottom: 12px; }
   .card.wide { max-width: none; }
   h3 { margin: 0 0 8px; font-size: 15px; }
+  h4 { margin: 12px 0 6px; font-size: 13px; color: var(--muted); }
+  .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+  button.sw { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 10px; font-size: 12px; min-width: 118px; }
+  button.sw.on { outline: 2px solid var(--accent); }
+  .dots { display: flex; gap: 3px; }
+  .dots i { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--sw-border); }
   label { display: flex; flex-direction: column; margin-bottom: 8px; font-size: 13px; }
   select { padding: 6px; font-size: 14px; }
-  .note { color: #666; font-size: 13px; }
+  .note { color: var(--muted); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
   .checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
   label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; line-height: 1.4; white-space: nowrap; }
   label.check input { margin: 0; width: 16px; height: 16px; flex: none; }
   button { padding: 8px 14px; }
-  button.warn { border-color: #b00; color: #b00; }
+  button.warn { border-color: var(--err); color: var(--err); }
   .ok { color: green; word-break: break-all; }
-  .err { color: #b00; }
+  .err { color: var(--err); }
 </style>

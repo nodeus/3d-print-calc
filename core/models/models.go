@@ -48,14 +48,15 @@ type Maker struct {
 
 // Material — справочник пластика (код уникален).
 type Material struct {
-	ID       int64
-	Code     string // напр. PETG-NIT-W4
-	Type     string // PLA | PETG | ABS | ...
-	Vendor   string
-	ColorHex string
-	Density  float64 // г/см³, напр. 1.27
-	Diameter float64 // мм, напр. 1.75
-	Note     string
+	ID                  int64
+	Code                string // напр. PETG-NIT-W4
+	Type                string // PLA | PETG | ABS | ...
+	Vendor              string
+	ColorHex            string
+	Density             float64 // г/см³, напр. 1.27
+	Diameter            float64 // мм, напр. 1.75
+	DefaultSpoolWeightG float64 // вес новых катушек, г (дефолт 1000)
+	Note                string
 }
 
 // Spool — закупочная партия (катушка) с ценой и остатком.
@@ -99,6 +100,8 @@ type Job struct {
 	SpoolID         int64
 	Status          string
 	Origin          string // import | manual | moonraker (удаление из UI — только manual)
+	Edited          int    // 1 = импортированная правилась вручную (бейдж «изменена»)
+	OrigSnapshot    string // первозданный снапшот+поля для отката (JSON)
 	PrintSec        int64
 	TotalSec        int64
 	EstimatedSec    int64
@@ -112,36 +115,40 @@ type Job struct {
 
 // Order — заказ клиента.
 type Order struct {
-	ID           int64
-	CustomerID   int64
-	Number       string // номер по шаблону (ordnum); пусто у старых — фолбэк #id
-	Title        string // название («Клиент — ДД.ММ.ГГГГ» по умолчанию)
-	Currency     string
-	FxRate       float64
-	MarginProfit float64
-	MarginDev    float64
-	VAT          float64
-	Status       string // draft | quoted | in_work | done | paid | cancelled
-	TotalBase    int64
-	CreatedAt    string // ISO-дата
+	ID            int64
+	CustomerID    int64
+	Number        string // номер по шаблону (ordnum); пусто у старых — фолбэк #id
+	Title         string // название («Клиент — ДД.ММ.ГГГГ» по умолчанию)
+	Currency      string
+	FxRate        float64
+	MarginProfit  float64 // legacy, больше не редактируется (посчитано в калькуляторе)
+	MarginDev     float64 // legacy, см. выше
+	VAT           float64 // legacy, см. выше
+	DiscountPct   float64 // скидка % от суммы позиций (применяется первой)
+	DiscountFixed int64   // скидка фикс. суммой (применяется второй, минорные)
+	Status        string  // draft | quoted | in_work | done | paid | cancelled
+	TotalBase     int64
+	CreatedAt     string // ISO-дата
 }
 
 // OrderItem — позиция заказа (qty может быть дробным).
 type OrderItem struct {
-	ID      int64
-	OrderID int64
-	JobID   int64
-	Title   string
-	Qty     float64
-	Cost    int64 // минорные единицы
-	Price   int64 // минорные единицы
+	ID         int64
+	OrderID    int64
+	JobID      int64
+	Title      string
+	Qty        float64
+	Cost       int64 // минорные единицы
+	Price      int64 // минорные единицы
+	PaidManual bool  // ручная отметка «Оплачен» (сумм не меняет)
 }
 
-// Payment — оплата по заказу.
+// Payment — оплата по заказу (целиком или по позиции).
 type Payment struct {
-	ID      int64
-	OrderID int64
-	Amount  int64 // минорные единицы
-	PaidAt  string
-	Note    string
+	ID        int64
+	OrderID   int64
+	OrderItem int64 // 0 = весь заказ, иначе позиция
+	Amount    int64 // минорные единицы
+	PaidAt    string
+	Note      string
 }

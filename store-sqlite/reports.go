@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"fmt"
+	"time"
 )
 
 // Отчёты режима «поток»: агрегации поверх заказов и истории.
@@ -68,14 +69,20 @@ func (d *DB) TopMaterials(limit int) ([]MaterialStat, error) {
 
 // PrinterStat — загрузка принтера.
 type PrinterStat struct {
-	Name     string `json:"name"`
-	Jobs     int64  `json:"jobs"`
-	TotalSec int64  `json:"totalSec"`
+	Name     string  `json:"name"`
+	Jobs     int64   `json:"jobs"`
+	TotalSec int64   `json:"totalSec"`
+	LengthM  float64 `json:"lengthM"`
+	WeightG  float64 `json:"weightG"`
+	RemainH  float64 `json:"remainH"` // остаток ресурса/эксплуатации, ч
 }
 
-// PrinterLoad — число печати и суммарное время по принтерам.
+// PrinterLoad — число печати, время, длина, вес и остаток ресурса по принтерам.
 func (d *DB) PrinterLoad() ([]PrinterStat, error) {
-	rows, err := d.sql.Query(`SELECT p.name, COUNT(j.id), COALESCE(SUM(j.total_sec), 0)
+	rows, err := d.sql.Query(`SELECT p.name, COUNT(j.id), COALESCE(SUM(j.total_sec), 0),
+		COALESCE(SUM(j.length_m), 0), COALESCE(SUM(j.weight_g), 0),
+		p.commissioning_date, p.life_years, p.hours_per_day,
+		p.calendar_mode, p.amort_method, p.resource_hours
 		FROM printers p LEFT JOIN jobs j ON j.printer_id = p.id
 		GROUP BY p.id ORDER BY p.name`)
 	if err != nil {
@@ -85,8 +92,84 @@ func (d *DB) PrinterLoad() ([]PrinterStat, error) {
 	out := []PrinterStat{}
 	for rows.Next() {
 		var s PrinterStat
-		if err := rows.Scan(&s.Name, &s.Jobs, &s.TotalSec); err != nil {
+		var commissioned string
+		var lifeYears int
+		var hoursPerDay float64
+		var calendarMode, amortMethod string
+		var resourceHours float64
+		if err := rows.Scan(&s.Name, &s.Jobs, &s.TotalSec, &s.LengthM, &s.WeightG,
+			&commissioned, &lifeYears, &hoursPerDay, &calendarMode, &amortMethod,
+			&resourceHours); err != nil {
 			return nil, fmt.Errorf("ERR_REPORT: %w", err)
+		}
+		s.RemainH = remainHours(commissioned, lifeYears, hoursPerDay,
+			calendarMode, amortMethod, resourceHours, float64(s.TotalSec)/3600)
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// remainHours — остаток ресурса/эксплуатации в часах (пол — ноль).
+func remainHours(commissioned string, lifeYears int, hoursPerDay float64,
+	calendarMode, amortMethod string, resourceHours, usedHours float64) float64 {
+	var total float64
+	if amortMethod == "resource" && resourceHours > 0 {
+		total = resourceHours
+	} else {
+		days := float64(lifeYears * 365)
+		if start, err := time.Parse("2006-01-02", commissioned); err == nil && lifeYears > 0 {
+			days = start.AddDate(lifeYears, 0, 0).Sub(start).Hours() / 24
+		}
+		if calendarMode == "workdays" || amortMethod == "workdays" {
+			days = days * 5 / 7
+		}
+		total = days * hoursPerDay
+	}
+	if rem := total - usedHours; rem > 0 {
+		return rem
+	}
+	return 0
+}
+
+// SpoolStat — остатки катушки: использование из истории, остаток вычисляемый.
+type SpoolStat struct {
+	Code     string  `json:"code"`
+	ColorHex string  `json:"colorHex"`
+	Vendor   string  `json:"vendor"`
+	Jobs     int64   `json:"jobs"`
+	UsedG    float64 `json:"usedG"`
+	InitG    float64 `json:"initG"`
+	LeftG    float64 `json:"leftG"`
+}
+
+// SpoolStats — остатки по катушкам: used = Σ веса работ, left = init − used.
+// Ничего не перезаписывает (идемпотентно при реимпортах).
+// Работы с явным spool_id идут на свою катушку; работы без катушки —
+// на первую катушку того же материала (код из снапшота). Без кода — ничьи.
+func (d *DB) SpoolStats() ([]SpoolStat, error) {
+	rows, err := d.sql.Query(`SELECT m.code, m.color_hex, m.vendor, s.weight_init_g,
+		COUNT(j.id), COALESCE(SUM(j.weight_g), 0)
+		FROM spools s JOIN materials m ON m.id = s.material_id
+		LEFT JOIN jobs j ON j.spool_id = s.id OR (
+			j.spool_id IS NULL
+			AND json_extract(COALESCE(j.cost_snapshot, '{}'), '$.material') = m.code
+			AND s.id = (SELECT MIN(s2.id) FROM spools s2 WHERE s2.material_id = m.id)
+		)
+		GROUP BY s.id ORDER BY m.code`)
+	if err != nil {
+		return nil, fmt.Errorf("ERR_REPORT: %w", err)
+	}
+	defer rows.Close()
+	out := []SpoolStat{}
+	for rows.Next() {
+		var s SpoolStat
+		if err := rows.Scan(&s.Code, &s.ColorHex, &s.Vendor, &s.InitG,
+			&s.Jobs, &s.UsedG); err != nil {
+			return nil, fmt.Errorf("ERR_REPORT: %w", err)
+		}
+		s.LeftG = s.InitG - s.UsedG
+		if s.LeftG < 0 {
+			s.LeftG = 0
 		}
 		out = append(out, s)
 	}
@@ -96,7 +179,9 @@ func (d *DB) PrinterLoad() ([]PrinterStat, error) {
 // Debt — неоплаченный остаток заказа.
 type Debt struct {
 	OrderID  int64  `json:"orderId"`
+	OrderNo  string `json:"orderNo"`
 	Customer string `json:"customer"`
+	Title    string `json:"title"`
 	Total    int64  `json:"total"`
 	Paid     int64  `json:"paid"`
 	Balance  int64  `json:"balance"`
@@ -105,7 +190,8 @@ type Debt struct {
 
 // Debts возвращает заказы с положительным остатком (кроме отменённых).
 func (d *DB) Debts() ([]Debt, error) {
-	rows, err := d.sql.Query(`SELECT o.id, COALESCE(c.name, ''), o.total_base,
+	rows, err := d.sql.Query(`SELECT o.id, COALESCE(o.number, ''), COALESCE(c.name, ''),
+		COALESCE(o.title, ''), o.total_base,
 		COALESCE((SELECT SUM(amount) FROM payments p WHERE p.order_id = o.id), 0), o.status
 		FROM orders o LEFT JOIN customers c ON c.id = o.customer_id
 		WHERE o.status NOT IN ('cancelled', 'paid') ORDER BY o.id DESC`)
@@ -116,7 +202,7 @@ func (d *DB) Debts() ([]Debt, error) {
 	out := []Debt{}
 	for rows.Next() {
 		var x Debt
-		if err := rows.Scan(&x.OrderID, &x.Customer, &x.Total, &x.Paid, &x.Status); err != nil {
+		if err := rows.Scan(&x.OrderID, &x.OrderNo, &x.Customer, &x.Title, &x.Total, &x.Paid, &x.Status); err != nil {
 			return nil, fmt.Errorf("ERR_REPORT: %w", err)
 		}
 		x.Balance = x.Total - x.Paid

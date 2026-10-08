@@ -59,7 +59,7 @@ func (a *App) CreateOrder(customerID int64, currency, title string) (int64, erro
 	}
 	return a.db.Orders().Create(models.Order{
 		CustomerID: customerID, Number: number, Title: title, Currency: currency,
-		CreatedAt: time.Now().Format("2006-01-02"),
+		CreatedAt: time.Now().Format("2006-01-02 15:04"),
 	})
 }
 
@@ -113,6 +113,46 @@ func (a *App) ListOrders() ([]models.Order, error) {
 	return a.db.Orders().List()
 }
 
+// OrderRow — заказ с оплатами для списка.
+type OrderRow struct {
+	Order    models.Order `json:"order"`
+	Paid     int64        `json:"paid"`
+	Balance  int64        `json:"balance"`
+	PayState string       `json:"payState"` // paid | partial | unpaid
+}
+
+// PayStateOf вычисляет состояние оплаты: paid / partial / unpaid.
+func PayStateOf(total, paid int64) string {
+	if paid >= total {
+		return "paid"
+	}
+	if paid <= 0 {
+		return "unpaid"
+	}
+	return "partial"
+}
+
+// ListOrderRows — заказы с оплаченным/остатком/состоянием для списка.
+func (a *App) ListOrderRows() ([]OrderRow, error) {
+	orders, err := a.db.Orders().List()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]OrderRow, 0, len(orders))
+	for _, o := range orders {
+		paid, err := a.db.Orders().PaidTotal(o.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, OrderRow{
+			Order: o, Paid: paid,
+			Balance:  o.TotalBase - paid,
+			PayState: PayStateOf(o.TotalBase, paid),
+		})
+	}
+	return out, nil
+}
+
 // GetOrderDetail — заказ целиком.
 func (a *App) GetOrderDetail(id int64) (OrderDetail, error) {
 	var d OrderDetail
@@ -157,6 +197,22 @@ func (a *App) DeleteOrder(id int64) error {
 	return a.db.Orders().Delete(id)
 }
 
+// DeleteOrderItem — удалить позицию с пересчётом (manager+).
+func (a *App) DeleteOrderItem(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().DeleteOrderItem(id)
+}
+
+// ToggleItemPaid — ручная отметка оплаты позиции (manager+, сумм не меняет).
+func (a *App) ToggleItemPaid(id int64, paid bool) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().SetItemPaid(id, paid)
+}
+
 // OrderItemInput — позиция из калькулятора (деньги — минорные единицы).
 type OrderItemInput struct {
 	OrderID int64   `json:"orderId"`
@@ -181,13 +237,13 @@ func (a *App) AddOrderItem(in OrderItemInput) (int64, error) {
 	})
 }
 
-// AddPayment — оплата (manager+).
-func (a *App) AddPayment(orderID, amount int64, note string) (int64, error) {
+// AddPayment — оплата всего заказа (itemID=0) или позиции (manager+).
+func (a *App) AddPayment(orderID, itemID, amount int64, note string) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
 		return 0, err
 	}
 	return a.db.Orders().AddPayment(models.Payment{
-		OrderID: orderID, Amount: amount,
+		OrderID: orderID, OrderItem: itemID, Amount: amount,
 		PaidAt: time.Now().Format("2006-01-02"), Note: note,
 	})
 }
@@ -205,6 +261,11 @@ func (a *App) TopMaterials() ([]sqlite.MaterialStat, error) {
 // PrinterLoad — загрузка принтеров.
 func (a *App) PrinterLoad() ([]sqlite.PrinterStat, error) {
 	return a.db.PrinterLoad()
+}
+
+// SpoolStats — остатки катушек для отчётов.
+func (a *App) SpoolStats() ([]sqlite.SpoolStat, error) {
+	return a.db.SpoolStats()
 }
 
 // Debts — неоплаченные остатки.

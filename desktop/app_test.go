@@ -49,7 +49,33 @@ func TestAppCleanStart(t *testing.T) {
 	}
 }
 
-// TestBackupReopen проверяет ApplyBackup: закрытие, замена файла, переоткрытие.
+// TestBaseThemes: встроенные light/dark содержат все 18 переменных валидным
+// hex — экспорт в файл работает и для базовых тем (зеркало theme.css).
+func TestBaseThemes(t *testing.T) {
+	want := []string{
+		"bg", "fg", "card-border", "nav-bg", "header-bg", "header-fg",
+		"btn-bg", "btn-fg", "btn-border", "input-bg", "input-fg",
+		"muted", "err", "warn", "accent", "sel-bg", "final-border", "sw-border",
+	}
+	for _, name := range []string{"light", "dark"} {
+		vars, ok := baseThemes[name]
+		if !ok {
+			t.Fatalf("нет базовой темы %q", name)
+		}
+		if len(vars) != len(want) {
+			t.Fatalf("%s: %d vars, хочу %d", name, len(vars), len(want))
+		}
+		for _, k := range want {
+			v, ok := vars[k]
+			if !ok {
+				t.Fatalf("%s: нет ключа %q", name, k)
+			}
+			if !hexColor.MatchString(v) {
+				t.Fatalf("%s.%s = %q: не hex", name, k, v)
+			}
+		}
+	}
+}
 func TestBackupReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "app.db")
 	db, err := openDB(path)

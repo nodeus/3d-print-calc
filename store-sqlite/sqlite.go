@@ -166,9 +166,10 @@ func (r *materialsRepo) UpsertByCode(m models.Material) (int64, error) {
 // GetByCode возвращает материал по коду.
 func (r *materialsRepo) GetByCode(code string) (models.Material, error) {
 	var m models.Material
-	err := r.db.QueryRow(`SELECT id, code, type, vendor, color_hex, density, diameter, note
-		FROM materials WHERE code=?`, code).
-		Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density, &m.Diameter, &m.Note)
+	err := r.db.QueryRow(`SELECT id, code, type, vendor, color_hex, density, diameter,
+		default_spool_weight_g, note FROM materials WHERE code=?`, code).
+		Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density, &m.Diameter,
+			&m.DefaultSpoolWeightG, &m.Note)
 	if err != nil {
 		return m, fmt.Errorf("ERR_MATERIAL_GET: %w", err)
 	}
@@ -177,8 +178,8 @@ func (r *materialsRepo) GetByCode(code string) (models.Material, error) {
 
 // List возвращает все материалы по коду.
 func (r *materialsRepo) List() ([]models.Material, error) {
-	rows, err := r.db.Query(`SELECT id, code, type, vendor, color_hex, density, diameter, note
-		FROM materials ORDER BY code`)
+	rows, err := r.db.Query(`SELECT id, code, type, vendor, color_hex, density, diameter,
+		default_spool_weight_g, note FROM materials ORDER BY code`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_MATERIAL_LIST: %w", err)
 	}
@@ -186,7 +187,8 @@ func (r *materialsRepo) List() ([]models.Material, error) {
 	out := []models.Material{}
 	for rows.Next() {
 		var m models.Material
-		if err := rows.Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density, &m.Diameter, &m.Note); err != nil {
+		if err := rows.Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density,
+			&m.Diameter, &m.DefaultSpoolWeightG, &m.Note); err != nil {
 			return nil, fmt.Errorf("ERR_MATERIAL_LIST: %w", err)
 		}
 		out = append(out, m)
@@ -307,18 +309,23 @@ func (r *jobsRepo) Upsert(j models.Job) (int64, error) {
 	return id, nil
 }
 
-// DeleteJob удаляет работу. Разрешено только manual (ручные из калькулятора);
-// импортированные и moonraker удаляются только через CSV/бэкап-перезалив.
+// DeleteJob удаляет работу: ручные (manual) — полностью; изменённые
+// импортированные (edited=1) — откатываются к первозданному, строка остаётся.
+// Нетронутые import/moonraker удалять нельзя (данные из источника).
 func (r *jobsRepo) DeleteJob(id int64) error {
 	var origin string
-	if err := r.db.QueryRow(`SELECT origin FROM jobs WHERE id=?`, id).Scan(&origin); err != nil {
+	var edited int
+	if err := r.db.QueryRow(`SELECT origin, edited FROM jobs WHERE id=?`, id).Scan(&origin, &edited); err != nil {
 		return fmt.Errorf("ERR_JOB_DELETE: %w", err)
 	}
 	if origin == "" {
 		origin = "import"
 	}
 	if origin != "manual" {
-		return fmt.Errorf("ERR_JOB_DELETE: можно удалять только работы, добавленные вручную")
+		if edited == 0 {
+			return fmt.Errorf("ERR_JOB_DELETE: импортированные работы удалять нельзя")
+		}
+		return r.RevertJob(id)
 	}
 	if _, err := r.db.Exec(`DELETE FROM jobs WHERE id=?`, id); err != nil {
 		return fmt.Errorf("ERR_JOB_DELETE: %w", err)
@@ -329,7 +336,7 @@ func (r *jobsRepo) DeleteJob(id int64) error {
 // List возвращает последние печати (limit <= 0 — все).
 func (r *jobsRepo) List(limit int) ([]models.Job, error) {
 	q := `SELECT id, filename, start_at, end_at, printer_id, spool_id, status, origin,
-		print_sec, total_sec, estimated_sec, size_bytes, filament_total_mm,
+		edited, print_sec, total_sec, estimated_sec, size_bytes, filament_total_mm,
 		weight_g, length_m, slicer, cost_snapshot
 		FROM jobs ORDER BY start_at DESC`
 	var rows *sql.Rows
@@ -347,12 +354,13 @@ func (r *jobsRepo) List(limit int) ([]models.Job, error) {
 	for rows.Next() {
 		var j models.Job
 		var printerID, spoolID sql.NullInt64
+		var edited int
 		if err := rows.Scan(&j.ID, &j.Filename, &j.StartAt, &j.EndAt, &printerID, &spoolID,
-			&j.Status, &j.Origin, &j.PrintSec, &j.TotalSec, &j.EstimatedSec, &j.SizeBytes,
+			&j.Status, &j.Origin, &edited, &j.PrintSec, &j.TotalSec, &j.EstimatedSec, &j.SizeBytes,
 			&j.FilamentTotalMm, &j.WeightG, &j.LengthM, &j.Slicer, &j.CostSnapshot); err != nil {
 			return nil, fmt.Errorf("ERR_JOB_LIST: %w", err)
 		}
-		j.PrinterID, j.SpoolID = printerID.Int64, spoolID.Int64
+		j.PrinterID, j.SpoolID, j.Edited = printerID.Int64, spoolID.Int64, edited
 		out = append(out, j)
 	}
 	return out, rows.Err()

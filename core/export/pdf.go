@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"regexp"
+	"strconv"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -131,8 +133,30 @@ func table(pdf *gofpdf.Fpdf, headers []string, rows [][]string) {
 			if c < len(row) {
 				cell = row[c]
 			}
+			if r, g, b, ok := parseHexColor(cell); ok {
+				// Цветная ячейка: залитый квадрат + hex рядом.
+				x, y := pdf.GetX(), pdf.GetY()
+				pdf.SetFillColor(r, g, b)
+				pdf.Rect(x+1, y+1, 4, 4, "F")
+				pdf.SetX(x + 6)
+				pdf.CellFormat(w-6, 6, cell, "1", 0, "L", true, 0, "")
+				continue
+			}
 			pdf.CellFormat(w, 6, cell, "1", 0, "L", true, 0, "")
 		}
 		pdf.Ln(-1)
 	}
+}
+
+var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// parseHexColor разбирает #rrggbb в компоненты 0..255.
+func parseHexColor(s string) (int, int, int, bool) {
+	if !hexColorRe.MatchString(s) {
+		return 0, 0, 0, false
+	}
+	r, _ := strconv.ParseUint(s[1:3], 16, 8)
+	g, _ := strconv.ParseUint(s[3:5], 16, 8)
+	b, _ := strconv.ParseUint(s[5:7], 16, 8)
+	return int(r), int(g), int(b), true
 }

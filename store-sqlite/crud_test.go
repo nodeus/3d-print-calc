@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	"3dprint-calc/core/calc"
 	"3dprint-calc/core/models"
+	"3dprint-calc/core/store"
 )
 
 func TestMaterialCRUDGuards(t *testing.T) {
@@ -170,16 +172,14 @@ func TestUpdateManualReprice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// import править нельзя.
-	imp, _ := jobs.Upsert(models.Job{Filename: "i.gcode", StartAt: "2026-01-01 10:00", Origin: "import"})
-	if err := jobs.UpdateManual(models.Job{ID: imp}, "PETG-R"); err == nil {
-		t.Fatal("правка import обязана блокироваться")
-	}
+	// import теперь тоже правится (с флагом edited), а не блокируется.
 	// Правка веса 10→20г: мат составит 20₽ (плюс свет/амортизация/труд по контексту).
 	if err := jobs.UpdateManual(models.Job{
 		ID: id, Filename: "r.gcode", StartAt: "2026-01-01 10:00", Status: "completed",
 		TotalSec: 3600, WeightG: 20,
-	}, "PETG-R"); err != nil {
+	}, "PETG-R", store.JobCalcInput{
+		Tariff: 7.08, PowerKW: 0.35, AmortPerHour: 5.41, OpRate: 100, Copies: 1,
+	}); err != nil {
 		t.Fatalf("UpdateManual: %v", err)
 	}
 	list, _ := jobs.List(0)
@@ -207,5 +207,98 @@ func TestUpdateManualReprice(t *testing.T) {
 	}
 	if got.WeightG != 20 || got.Status != "completed" {
 		t.Fatalf("поля не сохранились: %+v", got)
+	}
+}
+
+// TestUpdateManualFullInput: правка пишет пересчёт строго по переданному
+// контексту (не по старому снапшоту), вход эхом — в снапшот v2.
+func TestUpdateManualFullInput(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, err := mats.UpsertByCode(models.Material{Code: "PETG-F", Type: "PETG", Density: 1.27, Diameter: 1.75})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Катушка 1000 ₽/кг → 1 ₽/г.
+	if _, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	jobs := db.Jobs()
+	id, err := jobs.Upsert(models.Job{Filename: "f.gcode", StartAt: "2026-01-01 10:00",
+		Origin: "import", TotalSec: 7200, WeightG: 10, CostSnapshot: `{"v":1}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := store.JobCalcInput{
+		Tariff: 10, PowerKW: 0.5, AmortPerHour: 7, MaintPerHour: 1, PurgeWasteG: 5,
+		OpRate: 200, PrepH: 0.5, PostH: 0.25,
+		DesignerRate: 600, ModelH: 1, ModelPrice: 100,
+		ExtraMat: 50, FailRate: 0.1, MarginProfit: 0.5, MarginDev: 0.2, Fees: 30,
+		Copies: 2, VATRate: 0.22, RoundStep: 10,
+	}
+	if err := jobs.UpdateManual(models.Job{
+		ID: id, Filename: "f.gcode", StartAt: "2026-01-01 10:00", Status: "completed",
+		TotalSec: 7200, WeightG: 100,
+	}, "PETG-F", in); err != nil {
+		t.Fatalf("UpdateManual: %v", err)
+	}
+	list, _ := jobs.List(0)
+	var got models.Job
+	for _, j := range list {
+		if j.ID == id {
+			got = j
+		}
+	}
+	if got.Edited != 1 {
+		t.Fatalf("флаг edited: %+v", got)
+	}
+	var snap struct {
+		V        int                `json:"v"`
+		Material string             `json:"material"`
+		Cost     float64            `json:"cost"`
+		Price    float64            `json:"price"`
+		Currency string             `json:"currency"`
+		Input    map[string]float64 `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(got.CostSnapshot), &snap); err != nil {
+		t.Fatalf("снапшот битый: %v", err)
+	}
+	if snap.V != 2 || snap.Material != "PETG-F" || snap.Currency != "RUB" {
+		t.Fatalf("шапка снапшота: %+v", snap)
+	}
+	for k, want := range map[string]float64{
+		"tariff": 10, "powerKW": 0.5, "amortPerHour": 7, "maintPerHour": 1,
+		"purgeWasteG": 5, "opRate": 200, "prepH": 0.5, "postH": 0.25,
+		"designerRate": 600, "modelH": 1, "modelPrice": 100,
+		"extraMat": 50, "failRate": 0.1, "marginProfit": 0.5, "marginDev": 0.2,
+		"fees": 30, "copies": 2, "vatRate": 0.22, "roundStep": 10,
+	} {
+		if snap.Input[k] != want {
+			t.Fatalf("input.%s = %v, хочу %v", k, snap.Input[k], want)
+		}
+	}
+	want := calc.Calculate(calc.Input{
+		TotalSec: 7200, WeightG: 100, PricePerKg: 1000,
+		Tariff: 10, PowerKW: 0.5, AmortPerHour: 7, MaintPerHour: 1, PurgeWasteG: 5,
+		OpRate: 200, PrepH: 0.5, PostH: 0.25,
+		DesignerRate: 600, ModelH: 1, ModelPrice: 100,
+		ExtraMat: 50, FailRate: 0.1, MarginProfit: 0.5, MarginDev: 0.2, Fees: 30,
+		Copies: 2, VATRate: 0.22, RoundStep: 10,
+	})
+	if snap.Cost != want.Cost || snap.Price != want.PriceVAT {
+		t.Fatalf("cost/price = %v/%v, хочу %v/%v", snap.Cost, snap.Price, want.Cost, want.PriceVAT)
+	}
+	// orig_snapshot записан (иначе откат упадёт): вес и снапшот возвращаются.
+	if err := jobs.RevertJob(id); err != nil {
+		t.Fatalf("RevertJob: %v", err)
+	}
+	list, _ = jobs.List(0)
+	for _, j := range list {
+		if j.ID == id {
+			got = j
+		}
+	}
+	if got.Edited != 0 || got.WeightG != 10 || got.CostSnapshot != `{"v":1}` {
+		t.Fatalf("откат: %+v", got)
 	}
 }

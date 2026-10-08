@@ -2,15 +2,17 @@ import { writable, derived, get } from 'svelte/store';
 import ru from './i18n/ru.json';
 import en from './i18n/en.json';
 import { wails } from './wails';
+import { baseSym, setBaseSym } from './currency';
 
 const dicts: Record<string, Record<string, string>> = { ru, en };
 
 export const locale = writable<string>('ru');
 
-// t — перевод ключа; при отсутствии ключа возвращает сам ключ.
-export const t = derived(locale, ($locale) => {
+// t — перевод ключа ({C} подставляется символом базовой валюты);
+// при отсутствии ключа возвращает сам ключ.
+export const t = derived([locale, baseSym], ([$locale, $sym]) => {
   const d = dicts[$locale] ?? ru;
-  return (key: string): string => d[key] ?? dicts['ru'][key] ?? key;
+  return (key: string): string => (d[key] ?? dicts['ru'][key] ?? key).replaceAll('{C}', $sym);
 });
 
 export async function initLocale(): Promise<void> {
@@ -21,6 +23,11 @@ export async function initLocale(): Promise<void> {
     locale.set('ru');
   }
   document.documentElement.lang = get(locale);
+  try {
+    setBaseSym(await wails.getBaseCurrency());
+  } catch {
+    /* noop */
+  }
 }
 
 export async function switchLocale(value: string): Promise<void> {

@@ -6,6 +6,7 @@ import (
 
 	"3dprint-calc/core/calc"
 	"3dprint-calc/core/models"
+	"3dprint-calc/core/store"
 )
 
 // CRUD справочников: правки и удаления с блокировкой при живых связях.
@@ -18,8 +19,8 @@ func (r *materialsRepo) Update(m models.Material) error {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: пустой id")
 	}
 	if _, err := r.db.Exec(`UPDATE materials SET type=?, vendor=?, color_hex=?,
-		density=?, diameter=?, note=? WHERE id=?`,
-		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.Note, m.ID); err != nil {
+		density=?, diameter=?, default_spool_weight_g=?, note=? WHERE id=?`,
+		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.DefaultSpoolWeightG, m.Note, m.ID); err != nil {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
 	}
 	return nil
@@ -68,6 +69,7 @@ func (r *materialsRepo) UpdateSpool(s models.Spool) error {
 
 // SetMaterialPrice ставит цену первой катушки (создаёт катушку при отсутствии).
 // Остальные поля катушки не трогает — в отличие от UpdateSpool.
+// Новая катушка — весом default_spool_weight_g материала.
 func (r *materialsRepo) SetMaterialPrice(materialID, priceMinor int64, currency string) error {
 	if materialID == 0 {
 		return fmt.Errorf("ERR_SPOOL_SAVE: пустой material_id")
@@ -83,9 +85,15 @@ func (r *materialsRepo) SetMaterialPrice(materialID, priceMinor int64, currency 
 		return err
 	}
 	if len(spools) == 0 {
+		w := 1000.0
+		var def float64
+		if err := r.db.QueryRow(`SELECT default_spool_weight_g FROM materials WHERE id=?`,
+			materialID).Scan(&def); err == nil && def > 0 {
+			w = def
+		}
 		_, err := r.AddSpool(models.Spool{
 			MaterialID: materialID, Price: priceMinor, Currency: currency, FxRate: 1,
-			WeightInitG: 1000, WeightLeftG: 1000,
+			WeightInitG: w, WeightLeftG: w,
 		})
 		return err
 	}
@@ -127,48 +135,54 @@ func (r *printersRepo) Delete(id int64) error {
 	return nil
 }
 
-// legacy-тарифы сида/импорта для пересчёта старых снапшотов v1.
-const (
-	legacyTariff = 7.08
-	legacyPower  = 0.35
-	legacyOpRate = 100.0
-)
-
-// snapshotCtx вытаскивает контекст тарифов из снапшота (v2) или legacy-дефолты.
-func snapshotCtx(raw string) (tariff, powerKW, amortPerHour, opRate, prepH, postH float64) {
-	tariff, powerKW, opRate = legacyTariff, legacyPower, legacyOpRate
-	amortPerHour = calc.AmortCalendarHour(47454, 1096, 8)
+// snapshotCurrency вытаскивает валюту из снапшота (v2), иначе RUB.
+func snapshotCurrency(raw string) string {
 	var snap struct {
-		Input map[string]float64 `json:"input"`
+		Currency string `json:"currency"`
 	}
-	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
-		return tariff, powerKW, amortPerHour, opRate, prepH, postH
+	if err := json.Unmarshal([]byte(raw), &snap); err != nil || snap.Currency == "" {
+		return "RUB"
 	}
-	get := func(k string, fb float64) float64 {
-		if v, ok := snap.Input[k]; ok {
-			return v
-		}
-		return fb
-	}
-	return get("tariff", tariff), get("powerKW", powerKW),
-		get("amortPerHour", amortPerHour), get("opRate", opRate),
-		get("prepH", 0), get("postH", 0)
+	return snap.Currency
 }
 
-// UpdateManual правит ручную работу (origin=manual) и АВТОМАТИЧЕСКИ пересчитывает
-// себестоимость: цена материала — текущая (первая катушка), тарифы — из контекста
-// снапшота (v1 → legacy-дефолты). Снапшот перезаписывается как v2.
-func (r *jobsRepo) UpdateManual(j models.Job, material string) error {
+// UpdateManual правит работу истории (manual и import) и пересчитывает
+// себестоимость И цену строго по переданному расчётному контексту in.
+// Цена материала — текущая (первая катушка). Снапшот — v2, валюта — из
+// старого снапшота (RUB по умолчанию). Первая правка импортированной
+// фиксирует первозданное в orig_snapshot для отката (edited=1).
+func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcInput) error {
 	if j.ID == 0 {
 		return fmt.Errorf("ERR_JOB_SAVE: пустой id")
 	}
-	var origin, oldSnap string
-	if err := r.db.QueryRow(`SELECT origin, cost_snapshot FROM jobs WHERE id=?`, j.ID).
-		Scan(&origin, &oldSnap); err != nil {
+	var cur models.Job
+	var edited int
+	var orig string
+	err := r.db.QueryRow(`SELECT filename, status, start_at, end_at, print_sec, total_sec,
+		estimated_sec, size_bytes, weight_g, length_m, slicer, cost_snapshot, origin, edited, orig_snapshot
+		FROM jobs WHERE id=?`, j.ID).Scan(
+		&cur.Filename, &cur.Status, &cur.StartAt, &cur.EndAt, &cur.PrintSec, &cur.TotalSec,
+		&cur.EstimatedSec, &cur.SizeBytes, &cur.WeightG, &cur.LengthM, &cur.Slicer,
+		&cur.CostSnapshot, &cur.Origin, &edited, &orig)
+	if err != nil {
 		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
 	}
-	if origin != "" && origin != "manual" {
-		return fmt.Errorf("ERR_JOB_SAVE: править можно только работы, добавленные вручную")
+	allowManual := cur.Origin == "" || cur.Origin == "manual" || cur.Origin == "import" || cur.Origin == "moonraker"
+	if !allowManual {
+		return fmt.Errorf("ERR_JOB_SAVE: править можно только работы истории")
+	}
+	// Первая правка импортированной: фиксируем первозданное для отката.
+	if edited == 0 && cur.Origin != "" && cur.Origin != "manual" {
+		raw, _ := json.Marshal(map[string]any{
+			"filename": cur.Filename, "status": cur.Status,
+			"start_at": cur.StartAt, "end_at": cur.EndAt,
+			"print_sec": cur.PrintSec, "total_sec": cur.TotalSec,
+			"estimated_sec": cur.EstimatedSec, "size_bytes": cur.SizeBytes,
+			"weight_g": cur.WeightG, "length_m": cur.LengthM,
+			"slicer": cur.Slicer, "snapshot": cur.CostSnapshot,
+		})
+		orig = string(raw)
+		edited = 1
 	}
 	pricePerKg := 0.0
 	if material != "" {
@@ -176,25 +190,82 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string) error {
 			pricePerKg = m
 		}
 	}
-	tariff, powerKW, amortPerHour, opRate, prepH, postH := snapshotCtx(oldSnap)
+	copies := in.Copies
+	if copies < 1 {
+		copies = 1
+	}
 	res := calc.Calculate(calc.Input{
 		TotalSec: float64(j.TotalSec), WeightG: j.WeightG, PricePerKg: pricePerKg,
-		Tariff: tariff, PowerKW: powerKW, AmortPerHour: amortPerHour,
-		OpRate: opRate, PrepH: prepH, PostH: postH,
+		Tariff: in.Tariff, PowerKW: in.PowerKW, AmortPerHour: in.AmortPerHour,
+		MaintPerHour: in.MaintPerHour, PurgeWasteG: in.PurgeWasteG,
+		OpRate: in.OpRate, PrepH: in.PrepH, PostH: in.PostH,
+		DesignerRate: in.DesignerRate, ModelH: in.ModelH, ModelPrice: in.ModelPrice,
+		ExtraMat: in.ExtraMat, FailRate: in.FailRate,
+		MarginProfit: in.MarginProfit, MarginDev: in.MarginDev, Fees: in.Fees,
+		Copies: copies, VATRate: in.VATRate, RoundStep: in.RoundStep,
 	})
+	ctx := map[string]any{
+		"tariff": in.Tariff, "powerKW": in.PowerKW,
+		"amortPerHour": in.AmortPerHour, "opRate": in.OpRate,
+		"prepH": in.PrepH, "postH": in.PostH,
+		"designerRate": in.DesignerRate, "modelH": in.ModelH,
+		"modelPrice": in.ModelPrice, "extraMat": in.ExtraMat,
+		"failRate": in.FailRate, "marginProfit": in.MarginProfit,
+		"marginDev": in.MarginDev, "fees": in.Fees,
+		"maintPerHour": in.MaintPerHour, "purgeWasteG": in.PurgeWasteG,
+		"copies": copies, "vatRate": in.VATRate, "roundStep": in.RoundStep,
+	}
+	currency := snapshotCurrency(cur.CostSnapshot)
 	snap, _ := json.Marshal(map[string]any{
-		"v": 2, "material": material, "cost": res.Cost, "currency": "RUB",
-		"input": map[string]any{
-			"tariff": tariff, "powerKW": powerKW, "amortPerHour": amortPerHour,
-			"opRate": opRate, "prepH": prepH, "postH": postH,
-		},
+		"v": 2, "material": material, "cost": res.Cost, "price": res.PriceVAT, "currency": currency,
+		"input": ctx,
 	})
 	if _, err := r.db.Exec(`UPDATE jobs SET filename=?, status=?, start_at=?, end_at=?,
 		print_sec=?, total_sec=?, estimated_sec=?, size_bytes=?, weight_g=?, length_m=?,
-		slicer=?, cost_snapshot=? WHERE id=?`,
+		slicer=?, cost_snapshot=?, edited=?, orig_snapshot=? WHERE id=?`,
 		j.Filename, j.Status, j.StartAt, j.EndAt, j.PrintSec, j.TotalSec,
-		j.EstimatedSec, j.SizeBytes, j.WeightG, j.LengthM, j.Slicer, string(snap), j.ID); err != nil {
+		j.EstimatedSec, j.SizeBytes, j.WeightG, j.LengthM, j.Slicer, string(snap),
+		edited, orig, j.ID); err != nil {
 		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
+	}
+	return nil
+}
+
+// RevertJob откатывает изменённую импортированную работу к первозданному
+// состоянию (поля + снапшот), снимает флаг edited. Только edited=1.
+func (r *jobsRepo) RevertJob(id int64) error {
+	var edited int
+	var orig string
+	if err := r.db.QueryRow(`SELECT edited, orig_snapshot FROM jobs WHERE id=?`, id).
+		Scan(&edited, &orig); err != nil {
+		return fmt.Errorf("ERR_JOB_REVERT: %w", err)
+	}
+	if edited == 0 || orig == "" {
+		return fmt.Errorf("ERR_JOB_REVERT: нечего откатывать")
+	}
+	var o struct {
+		Filename     string  `json:"filename"`
+		Status       string  `json:"status"`
+		StartAt      string  `json:"start_at"`
+		EndAt        string  `json:"end_at"`
+		PrintSec     int64   `json:"print_sec"`
+		TotalSec     int64   `json:"total_sec"`
+		EstimatedSec int64   `json:"estimated_sec"`
+		SizeBytes    int64   `json:"size_bytes"`
+		WeightG      float64 `json:"weight_g"`
+		LengthM      float64 `json:"length_m"`
+		Slicer       string  `json:"slicer"`
+		Snapshot     string  `json:"snapshot"`
+	}
+	if err := json.Unmarshal([]byte(orig), &o); err != nil {
+		return fmt.Errorf("ERR_JOB_REVERT: битый orig_snapshot: %w", err)
+	}
+	if _, err := r.db.Exec(`UPDATE jobs SET filename=?, status=?, start_at=?, end_at=?,
+		print_sec=?, total_sec=?, estimated_sec=?, size_bytes=?, weight_g=?, length_m=?,
+		slicer=?, cost_snapshot=?, edited=0, orig_snapshot='' WHERE id=?`,
+		o.Filename, o.Status, o.StartAt, o.EndAt, o.PrintSec, o.TotalSec,
+		o.EstimatedSec, o.SizeBytes, o.WeightG, o.LengthM, o.Slicer, o.Snapshot, id); err != nil {
+		return fmt.Errorf("ERR_JOB_REVERT: %w", err)
 	}
 	return nil
 }

@@ -52,6 +52,7 @@ export interface MaterialDTO {
   note: string;
   density: number;
   diameter: number;
+  defaultWeightG: number;
   pricePerKg: number;
   currency: string;
   spoolId: number;
@@ -78,6 +79,7 @@ export interface Material {
   ColorHex: string;
   Density: number;
   Diameter: number;
+  DefaultSpoolWeightG: number;
   Note: string;
 }
 
@@ -125,6 +127,7 @@ export interface JobDTO {
   SpoolID: number;
   Status: string;
   Origin: string;
+  Edited: number;
   PrintSec: number;
   TotalSec: number;
   EstimatedSec: number;
@@ -154,6 +157,19 @@ export interface JobInput {
   opRate: number;
   prepH: number;
   postH: number;
+  designerRate: number;
+  modelH: number;
+  modelPrice: number;
+  extraMat: number;
+  failRate: number;
+  marginProfit: number;
+  marginDev: number;
+  fees: number;
+  maintPerHour: number;
+  purgeWasteG: number;
+  copies: number;
+  vatRate: number;
+  roundStep: number;
 }
 
 export interface JobEdit {
@@ -170,6 +186,25 @@ export interface JobEdit {
   lengthM: number;
   slicer: string;
   material: string;
+  tariff: number;
+  powerKW: number;
+  amortPerHour: number;
+  maintPerHour: number;
+  purgeWasteG: number;
+  opRate: number;
+  prepH: number;
+  postH: number;
+  designerRate: number;
+  modelH: number;
+  modelPrice: number;
+  extraMat: number;
+  failRate: number;
+  marginProfit: number;
+  marginDev: number;
+  fees: number;
+  copies: number;
+  vatRate: number;
+  roundStep: number;
 }
 
 export interface BackupManifest {
@@ -185,6 +220,7 @@ export interface ImportReport {
   existing: number;
   stubs: number;
   dryRun: boolean;
+  lifetimeTotal?: number;
 }
 
 export interface UserDTO {
@@ -212,6 +248,8 @@ export interface Order {
   MarginProfit: number;
   MarginDev: number;
   VAT: number;
+  DiscountPct: number;
+  DiscountFixed: number;
   Status: string;
   TotalBase: number;
   CreatedAt: string;
@@ -225,11 +263,13 @@ export interface OrderItem {
   Qty: number;
   Cost: number;
   Price: number;
+  PaidManual: boolean;
 }
 
 export interface Payment {
   ID: number;
   OrderID: number;
+  OrderItem: number;
   Amount: number;
   PaidAt: string;
   Note: string;
@@ -241,6 +281,13 @@ export interface OrderDetail {
   payments: Payment[];
   paid: number;
   balance: number;
+}
+
+export interface OrderRow {
+  order: Order;
+  paid: number;
+  balance: number;
+  payState: string;
 }
 
 export interface MonthRevenue {
@@ -260,16 +307,36 @@ export interface PrinterStat {
   name: string;
   jobs: number;
   totalSec: number;
+  lengthM: number;
+  weightG: number;
+  remainH: number;
 }
 
 export interface Debt {
   orderId: number;
+  orderNo: string;
   customer: string;
   title: string;
   total: number;
   paid: number;
   balance: number;
   status: string;
+}
+
+export interface SpoolStat {
+  code: string;
+  colorHex: string;
+  vendor: string;
+  jobs: number;
+  usedG: number;
+  initG: number;
+  leftG: number;
+}
+
+export interface FxRate {
+  currency: string;
+  rate: number;
+  day: string;
 }
 
 export interface PDFSection {
@@ -297,6 +364,10 @@ declare global {
           SetLocale(locale: string): Promise<void>;
           GetBaseCurrency(): Promise<string>;
           SetBaseCurrency(code: string): Promise<void>;
+          ListFxRates(): Promise<FxRate[]>;
+          SetFxRate(currency: string, rate: number): Promise<void>;
+          DeleteFxRate(currency: string, day: string): Promise<void>;
+          ConvertCurrency(target: string, rate: number): Promise<void>;
           ExportBackup(): Promise<string>;
           PreviewBackup(): Promise<BackupManifest>;
           ApplyBackup(): Promise<BackupManifest>;
@@ -315,6 +386,7 @@ declare global {
           SaveCustomer(c: Customer): Promise<number>;
           CreateOrder(customerId: number, currency: string, title: string): Promise<number>;
           ListOrders(): Promise<Order[]>;
+          ListOrderRows(): Promise<OrderRow[]>;
           GetOrderDetail(id: number): Promise<OrderDetail>;
           SetOrderStatus(id: number, status: string): Promise<void>;
           UpdateOrder(o: Order): Promise<void>;
@@ -326,16 +398,19 @@ declare global {
           PreviewOrderNumber(template: string): Promise<string>;
           OpenURL(url: string): Promise<void>;
           AddOrderItem(item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }): Promise<number>;
-          AddPayment(orderId: number, amount: number, note: string): Promise<number>;
+          DeleteOrderItem(id: number): Promise<void>;
+          ToggleItemPaid(id: number, paid: boolean): Promise<void>;
+          AddPayment(orderId: number, itemId: number, amount: number, note: string): Promise<number>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
           TopMaterials(): Promise<MaterialStat[]>;
           PrinterLoad(): Promise<PrinterStat[]>;
+          SpoolStats(): Promise<SpoolStat[]>;
           Debts(): Promise<Debt[]>;
           SetMoonrakerURL(printerId: number, url: string): Promise<void>;
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
           MoonrakerApply(): Promise<ImportReport>;
-          AddMaterial(code: string, matType: string, density: number, pricePerKg: number): Promise<number>;
+          AddMaterial(code: string, matType: string, density: number, pricePerKg: number, weightG: number): Promise<number>;
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
@@ -348,6 +423,12 @@ declare global {
           DeleteCustomer(id: number): Promise<void>;
           DeleteUser(id: number): Promise<void>;
           AppVersion(): Promise<Record<string, string>>;
+          UISettings(): Promise<{ theme: string; custom: Record<string, Record<string, string>> }>;
+          SetUITheme(name: string): Promise<void>;
+          SaveCustomTheme(name: string, vars: Record<string, string>): Promise<void>;
+          DeleteCustomTheme(name: string): Promise<void>;
+          ExportThemeFile(name: string): Promise<string>;
+          ImportThemeFile(): Promise<string>;
           GetHistoryColumns(): Promise<string[]>;
           SetHistoryColumns(cols: string[]): Promise<void>;
           ExportPDF(title: string, filename: string, sections: PDFSection[]): Promise<string>;
@@ -371,6 +452,10 @@ export const wails = {
   setLocale: (locale: string) => api().SetLocale(locale),
   getBaseCurrency: () => api().GetBaseCurrency(),
   setBaseCurrency: (code: string) => api().SetBaseCurrency(code),
+  listFxRates: () => api().ListFxRates(),
+  setFxRate: (currency: string, rate: number) => api().SetFxRate(currency, rate),
+  deleteFxRate: (currency: string, day: string) => api().DeleteFxRate(currency, day),
+  convertCurrency: (target: string, rate: number) => api().ConvertCurrency(target, rate),
   exportBackup: () => api().ExportBackup(),
   previewBackup: () => api().PreviewBackup(),
   applyBackup: () => api().ApplyBackup(),
@@ -390,6 +475,7 @@ export const wails = {
   createOrder: (customerId: number, currency: string, title: string) =>
     api().CreateOrder(customerId, currency, title),
   listOrders: () => api().ListOrders(),
+  listOrderRows: () => api().ListOrderRows(),
   orderDetail: (id: number) => api().GetOrderDetail(id),
   setOrderStatus: (id: number, status: string) => api().SetOrderStatus(id, status),
   updateOrder: (o: Order) => api().UpdateOrder(o),
@@ -402,17 +488,21 @@ export const wails = {
   openURL: (url: string) => api().OpenURL(url),
   addOrderItem: (item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }) =>
     api().AddOrderItem(item),
-  addPayment: (orderId: number, amount: number, note: string) => api().AddPayment(orderId, amount, note),
+  deleteOrderItem: (id: number) => api().DeleteOrderItem(id),
+  toggleItemPaid: (id: number, paid: boolean) => api().ToggleItemPaid(id, paid),
+  addPayment: (orderId: number, itemId: number, amount: number, note: string) =>
+    api().AddPayment(orderId, itemId, amount, note),
   revenueByMonth: () => api().RevenueByMonth(),
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
+  spoolStats: () => api().SpoolStats(),
   debts: () => api().Debts(),
   setMoonrakerURL: (printerId: number, url: string) => api().SetMoonrakerURL(printerId, url),
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
   moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
   moonrakerApply: () => api().MoonrakerApply(),
-  addMaterial: (code: string, matType: string, density: number, pricePerKg: number) =>
-    api().AddMaterial(code, matType, density, pricePerKg),
+  addMaterial: (code: string, matType: string, density: number, pricePerKg: number, weightG: number) =>
+    api().AddMaterial(code, matType, density, pricePerKg, weightG),
   updateMaterial: (m: Material) => api().UpdateMaterial(m),
   deleteMaterial: (id: number) => api().DeleteMaterial(id),
   updateSpool: (s: Spool) => api().UpdateSpool(s),
@@ -426,6 +516,12 @@ export const wails = {
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),
+  uiSettings: () => api().UISettings(),
+  setUITheme: (name: string) => api().SetUITheme(name),
+  saveCustomTheme: (name: string, vars: Record<string, string>) => api().SaveCustomTheme(name, vars),
+  deleteCustomTheme: (name: string) => api().DeleteCustomTheme(name),
+  exportThemeFile: (name: string) => api().ExportThemeFile(name),
+  importThemeFile: () => api().ImportThemeFile(),
   historyColumns: () => api().GetHistoryColumns(),
   setHistoryColumns: (cols: string[]) => api().SetHistoryColumns(cols),
   exportPDF: (title: string, filename: string, sections: PDFSection[]) =>

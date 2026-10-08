@@ -45,6 +45,7 @@ func New(baseURL string) *Client {
 
 // Job — одна работа из history/list.
 type Job struct {
+	JobID        string // uid с сервера (дедуп страниц)
 	Filename     string
 	Status       string
 	Start        time.Time
@@ -72,8 +73,9 @@ func (j Job) ToPrintJob() importers.PrintJob {
 
 type historyResponse struct {
 	Result struct {
-		Count int `json:"count"`
+		Count int `json:"count"` // размер ТЕКУЩЕЙ страницы, не всей базы!
 		Jobs  []struct {
+			JobID         string  `json:"job_id"`
 			Filename      string  `json:"filename"`
 			Status        string  `json:"status"`
 			StartTime     float64 `json:"start_time"`
@@ -122,13 +124,99 @@ func (c *Client) History(ctx context.Context, limit, start int64) ([]Job, int, e
 			slicer = "moonraker"
 		}
 		out = append(out, Job{
-			Filename: j.Filename, Status: j.Status,
+			JobID: j.JobID, Filename: j.Filename, Status: j.Status,
 			Start: unixToLocal(j.StartTime), End: unixToLocal(j.EndTime),
 			PrintSec: j.PrintDuration, TotalSec: j.TotalDuration,
 			EstimatedSec: est, FilamentUsed: j.FilamentUsed, Slicer: slicer,
 		})
 	}
 	return out, hr.Result.Count, nil
+}
+
+// HistoryAll забирает ВСЮ историю постранично (новые первыми).
+// pageSize — размер страницы (1..500, иначе 250). onPage вызывается после
+// каждой страницы (nil — молча).
+//
+// ВАЖНО: поле count в ответе — размер текущей страницы, НЕ всей базы,
+// поэтому стоп только по признакам конца данных:
+//   - пустая страница;
+//   - страница без новых job_id (сервер игнорирует start — защита от вечного цикла).
+//
+// Короткая страница концом НЕ считается: сервер может резать кэпом ниже
+// запрошенного limit при несчитанном остатке.
+// Плюс жёсткий предохранитель maxPages.
+func (c *Client) HistoryAll(ctx context.Context, pageSize int64, onPage func(fetched, total int)) ([]Job, error) {
+	if pageSize <= 0 || pageSize > 500 {
+		pageSize = 250
+	}
+	const maxPages = 2000 // 2000 × 500 = до 1 млн работ, дальше — точно зациклились
+	out := []Job{}
+	seen := map[string]bool{}
+	var start int64
+	for page := 0; page < maxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return out, fmt.Errorf("ERR_MOONRAKER: %w", err)
+		}
+		jobs, total, err := c.History(ctx, pageSize, start)
+		if err != nil {
+			return out, err
+		}
+		if len(jobs) == 0 {
+			if onPage != nil {
+				onPage(len(out), total)
+			}
+			return out, nil
+		}
+		fresh := 0
+		for _, j := range jobs {
+			key := j.JobID
+			if key == "" {
+				key = j.Filename + "\x00" + j.Start.Format(time.RFC3339)
+			}
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, j)
+				fresh++
+			}
+		}
+		if onPage != nil {
+			onPage(len(out), total)
+		}
+		if fresh == 0 {
+			return out, nil
+		}
+		start += int64(len(jobs))
+	}
+	return out, fmt.Errorf("ERR_MOONRAKER: превышен лимит страниц (%d)", maxPages)
+}
+
+// Totals возвращает lifetime-счётчики сервера (job_totals.total_jobs и др.).
+// total_jobs — число работ за всё время (переживает всё кроме сброса),
+// в отличие от count в history/list.
+func (c *Client) Totals(ctx context.Context) (totalJobs int, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/server/history/totals", nil)
+	if err != nil {
+		return 0, fmt.Errorf("ERR_MOONRAKER: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("ERR_MOONRAKER_CONN: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("ERR_MOONRAKER_HTTP: статус %d", resp.StatusCode)
+	}
+	var v struct {
+		Result struct {
+			JobTotals struct {
+				TotalJobs int `json:"total_jobs"`
+			} `json:"job_totals"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return 0, fmt.Errorf("ERR_MOONRAKER_PARSE: %w", err)
+	}
+	return v.Result.JobTotals.TotalJobs, nil
 }
 
 // Ping проверяет связь: GET {base}/server/info.

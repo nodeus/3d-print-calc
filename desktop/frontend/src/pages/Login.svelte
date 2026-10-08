@@ -35,10 +35,10 @@
 </div>
 
 <style>
-  .login { max-width: 320px; margin: 60px auto; border: 1px solid #ddd; border-radius: 8px; padding: 20px; }
+  .login { max-width: 320px; margin: 60px auto; border: 1px solid var(--card-border); border-radius: 8px; padding: 20px; }
   label { display: flex; flex-direction: column; margin-bottom: 8px; font-size: 13px; }
   input, button { padding: 8px; font-size: 14px; }
   button:disabled { opacity: 0.6; }
-  .note { color: #666; font-size: 13px; }
-  .err { color: #b00; }
+  .note { color: var(--muted); font-size: 13px; }
+  .err { color: var(--err); }
 </style>

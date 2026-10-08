@@ -10,13 +10,13 @@ table {
 th,
 td {
   padding: 4px 6px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--card-border);
   text-align: left;
   vertical-align: top;
 }
 th:not(:first-child),
 td:not(:first-child) {
-  border-left: 1px solid #e8e8e8;
+  border-left: 1px solid var(--card-border);
 }
 th.n,
 td.n {

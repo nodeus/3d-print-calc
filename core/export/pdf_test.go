@@ -23,3 +23,29 @@ func TestBuildPDF(t *testing.T) {
 		t.Fatalf("подозрительно маленький PDF: %d", len(data))
 	}
 }
+
+func TestParseHexColor(t *testing.T) {
+	r, g, b, ok := parseHexColor("#ff8000")
+	if !ok || r != 255 || g != 128 || b != 0 {
+		t.Fatalf("parse: %v %v %v %v", r, g, b, ok)
+	}
+	for _, s := range []string{"", "red", "#fff", "#gggggg", "123456"} {
+		if _, _, _, ok := parseHexColor(s); ok {
+			t.Fatalf("%q принят за цвет", s)
+		}
+	}
+}
+
+func TestBuildPDFColorCell(t *testing.T) {
+	data, err := BuildPDF("app", "Цвета", []Section{{
+		Title:   "",
+		Headers: []string{"Код", "Цвет"},
+		Rows:    [][]string{{"PETG-R", "#ff0000"}, {"PETG-B", "не цвет"}},
+	}})
+	if err != nil {
+		t.Fatalf("BuildPDF: %v", err)
+	}
+	if !bytes.HasPrefix(data, []byte("%PDF")) {
+		t.Fatal("не PDF")
+	}
+}

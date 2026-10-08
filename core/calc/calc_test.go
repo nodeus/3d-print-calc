@@ -80,12 +80,32 @@ func TestCalculate_FullCycle(t *testing.T) {
 	approx(got.Subtotal, 189.9)
 	approx(got.FailAdj, 9.495)
 	approx(got.Cost, 199.395)
-	// price=199.395*1.4=279.153 → round(10)=280 → VAT=336
+	// price=199.395*1.4=279.153 → round(10)=280 → VAT=336 → round(10)=340.
 	approx(got.Price, 279.153)
 	approx(got.PriceRounded, 280)
-	approx(got.PriceVAT, 336)
+	approx(got.PriceVAT, 340)
 	approx(got.CostPerCopy, 199.395/4)
-	approx(got.PricePerCopy, 84)
+	approx(got.PricePerCopy, 85)
+}
+
+func TestCalculate_RoundAfterVAT(t *testing.T) {
+	// НДС возвращает копейки (140 × 1.22 = 170.8): при включённом шаге
+	// округляем и финал.
+	in := Input{
+		TotalSec: 3600, WeightG: 100, PricePerKg: 1000,
+		RoundStep: 10, VATRate: 0.22,
+	}
+	got := Calculate(in)
+	// mat=100, fail=0 → cost=100 → price=100 → round=100 → VAT 122 → round=120.
+	if got.PriceVAT != 120 {
+		t.Fatalf("PriceVAT = %v, хочу 120", got.PriceVAT)
+	}
+	// Без шага копейки законны.
+	in.RoundStep = 0
+	got = Calculate(in)
+	if diff := got.PriceVAT - 122; diff > 1e-9 || diff < -1e-9 {
+		t.Fatalf("PriceVAT без шага = %v, хочу 122", got.PriceVAT)
+	}
 }
 
 func TestCalculate_LegacyDefaults(t *testing.T) {

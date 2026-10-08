@@ -101,5 +101,5 @@
   .row { display: flex; gap: 8px; margin-bottom: 10px; }
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
-  .err { color: #b00; }
+  .err { color: var(--err); }
 </style>
