@@ -59,7 +59,7 @@ func (a *App) CreateOrder(customerID int64, currency, title string) (int64, erro
 	}
 	return a.db.Orders().Create(models.Order{
 		CustomerID: customerID, Number: number, Title: title, Currency: currency,
-		CreatedAt: time.Now().Format("2006-01-02"),
+		CreatedAt: time.Now().Format("2006-01-02 15:04"),
 	})
 }
 
