@@ -282,17 +282,17 @@
         </select>
       </label>
       <label>{$t('calc.material')}<input bind:value={edit.material} placeholder="PETG-NIT-W4" /></label>
-      <label>{$t('hist.slicer')}<input bind:value={edit.slicer} /></label>
+      <label>{$t('hist.slicer')}<input bind:value={edit.slicer} placeholder="OrcaSlicer" /></label>
     </div>
     <div class="row">
       <label>{$t('hist.start')}<input bind:value={edit.startAt} placeholder="2026-10-08 10:00" /></label>
       <label>{$t('hist.end')}<input bind:value={edit.endAt} placeholder="2026-10-08 12:00" /></label>
-      <label>{$t('hist.print_sec')}<input type="number" min="0" bind:value={edit.printSec} /></label>
-      <label>{$t('hist.total_sec')}<input type="number" min="0" bind:value={edit.totalSec} /></label>
+      <label>{$t('hist.print_sec')}<input placeholder="3600" type="number" min="0" bind:value={edit.printSec} /></label>
+      <label>{$t('hist.total_sec')}<input placeholder="7200" type="number" min="0" bind:value={edit.totalSec} /></label>
     </div>
     <div class="row">
-      <label>{$t('hist.weight')}<input type="number" min="0" step="0.01" bind:value={edit.weightG} /></label>
-      <label>{$t('hist.length')}<input type="number" min="0" step="0.01" bind:value={edit.lengthM} /></label>
+      <label>{$t('hist.weight')}<input placeholder="135" type="number" min="0" step="0.01" bind:value={edit.weightG} /></label>
+      <label>{$t('hist.length')}<input placeholder="45" type="number" min="0" step="0.01" bind:value={edit.lengthM} /></label>
     </div>
     <p class="note">{$t('hist.edit_note')}</p>
     <div class="row">

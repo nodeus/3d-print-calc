@@ -95,9 +95,9 @@
     {#each list as c}
       {#if editId === c.ID}
         <tr>
-          <td><input bind:value={edit.Name} /></td>
-          <td><input bind:value={edit.Contact} /></td>
-          <td><input bind:value={edit.Note} /></td>
+          <td><input bind:value={edit.Name} placeholder={$t('cust.name')} /></td>
+          <td><input bind:value={edit.Contact} placeholder={$t('cust.contact')} /></td>
+          <td><input bind:value={edit.Note} placeholder={$t('cust.note')} /></td>
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}

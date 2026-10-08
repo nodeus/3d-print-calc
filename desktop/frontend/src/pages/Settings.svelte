@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type BackupManifest, type ImportReport } from '../lib/wails';
+  import { wails, type BackupManifest, type ImportReport, type FxRate } from '../lib/wails';
   import { t, locale, switchLocale } from '../lib/i18n';
+  import { setBaseSym } from '../lib/currency';
   import { user, isAdmin } from '../lib/session';
+  import { askConfirm } from '../lib/confirm';
   import { THEME_VARS, applyTheme, persistTheme, type ThemeVars } from '../lib/theme';
   import Users from './Users.svelte';
 
@@ -116,8 +118,10 @@
   onMount(async () => {
     try {
       currency = await wails.getBaseCurrency();
+      setBaseSym(currency);
       await loadNumbers();
       visibleColumns = await wails.historyColumns();
+      await loadRates();
       const ui = await wails.uiSettings();
       theme = ui.theme || 'light';
       customs = Object.keys(ui.custom ?? {});
@@ -190,10 +194,66 @@
 
   async function changeCurrency(code: string) {
     currency = code;
+    setBaseSym(code);
     try {
       await wails.setBaseCurrency(code);
     } catch (e) {
       console.error(e);
+    }
+  }
+
+  // Курсы и конвертация.
+  let rates: FxRate[] = $state([]);
+  let rateCur = $state('');
+  let rateVal = $state(0);
+  let convCur = $state('');
+  let convRate = $state(0);
+
+  async function loadRates() {
+    try {
+      rates = (await wails.listFxRates()) ?? [];
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function saveRate() {
+    error = '';
+    if (!rateCur.trim() || !(rateVal > 0)) return;
+    try {
+      await wails.setFxRate(rateCur.trim().toUpperCase(), rateVal);
+      rateCur = '';
+      rateVal = 0;
+      await loadRates();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function removeRate(r: FxRate) {
+    error = '';
+    try {
+      await wails.deleteFxRate(r.currency, r.day);
+      await loadRates();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function convertAll() {
+    error = '';
+    const target = convCur.trim().toUpperCase();
+    if (!target || !(convRate > 0)) return;
+    if (!(await askConfirm(`${$t('fx.convert_q')} ${target} @ ${convRate}? (${$t('fx.backup_warn')})`))) return;
+    try {
+      await wails.convertCurrency(target, convRate);
+      currency = target;
+      setBaseSym(target);
+      convCur = '';
+      convRate = 0;
+      await loadRates();
+    } catch (e) {
+      error = String(e);
     }
   }
 
@@ -238,6 +298,30 @@
     </select>
   </label>
   <p class="note">{$t('set.rates_note')}</p>
+</div>
+
+<div class="card">
+  <h3>{$t('fx.title')}</h3>
+  <table>
+    <thead><tr><th>{$t('fx.currency')}</th><th class="n">{$t('fx.rate')}</th><th>{$t('fx.day')}</th><th class="no-print"></th></tr></thead>
+    <tbody>
+      {#each rates as r}<tr><td>{r.currency}</td><td class="n">{r.rate}</td><td>{r.day}</td><td class="no-print"><button onclick={() => removeRate(r)}>✕</button></td></tr>{/each}
+    </tbody>
+  </table>
+  {#if canWrite($user)}
+    <div class="row">
+      <input placeholder="USD" bind:value={rateCur} />
+      <input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={rateVal} />
+      <button onclick={saveRate}>{$t('common.save')}</button>
+    </div>
+    <h3>{$t('fx.convert')}</h3>
+    <p class="note">{$t('fx.convert_note')}</p>
+    <div class="row">
+      <input placeholder="USD" bind:value={convCur} />
+      <input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={convRate} />
+      <button class="warn" onclick={convertAll}>{$t('fx.convert_go')}</button>
+    </div>
+  {/if}
 </div>
 
 <div class="card">
@@ -319,7 +403,7 @@
 <div class="card">
   <h3>{$t('set.ordnum')}</h3>
   <label>{$t('set.ordnum_tpl')}<input bind:value={numTemplate} oninput={previewNumbers} placeholder={'{YYYY}-{nnnn}'} /></label>
-  <label>{$t('set.ordnum_seq')}<input type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
+  <label>{$t('set.ordnum_seq')}<input placeholder="42" type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
   <p>{$t('set.ordnum_preview')}: <b>{numPreview}</b></p>
   <p class="note">{$t('set.ordnum_help')}</p>
   <div class="row"><button onclick={saveNumbers}>{$t('common.save')}</button></div>

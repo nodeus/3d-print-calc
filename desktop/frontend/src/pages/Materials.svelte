@@ -160,9 +160,9 @@
               </div>
             {/if}
           </td>
-          <td><input list="mat-types-edit" bind:value={edit.Type} /></td>
-          <td><input type="number" min="0" bind:value={editPrice} /></td>
-          <td><input type="number" step="0.01" bind:value={edit.Density} /></td>
+          <td><input list="mat-types-edit" bind:value={edit.Type} placeholder="PETG" /></td>
+          <td><input placeholder="869" type="number" min="0" bind:value={editPrice} /></td>
+          <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
           <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
           <td><input bind:value={edit.Vendor} /></td>
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>

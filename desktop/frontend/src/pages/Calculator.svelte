@@ -433,7 +433,7 @@
     <div class="row">
       <label>{$t('calc.material')}
         <select bind:value={matCode} onchange={recalc}>
-          {#each materials as m}<option value={m.code}>{m.code} — {m.pricePerKg}/кг</option>{/each}
+          {#each materials as m}<option value={m.code}>{m.code} — {money(m.pricePerKg, m.currency, $locale)}/кг</option>{/each}
         </select>
       </label>
       <label>{$t('calc.printer')}
@@ -443,40 +443,40 @@
       </label>
     </div>
     <div class="row">
-      <label>{$t('calc.time_h')}<input type="number" min="0" bind:value={timeH} oninput={recalc} /></label>
-      <label>{$t('calc.time_m')}<input type="number" min="0" max="59" bind:value={timeM} oninput={recalc} /></label>
-      <label>{$t('calc.copies')}<input type="number" min="1" bind:value={copies} oninput={recalc} /></label>
+      <label>{$t('calc.time_h')}<input placeholder="3" type="number" min="0" bind:value={timeH} oninput={recalc} /></label>
+      <label>{$t('calc.time_m')}<input placeholder="30" type="number" min="0" max="59" bind:value={timeM} oninput={recalc} /></label>
+      <label>{$t('calc.copies')}<input placeholder="1" type="number" min="1" bind:value={copies} oninput={recalc} /></label>
     </div>
     <div class="row">
-      <label>{$t('calc.weight')}<input type="number" min="0" step="0.01" bind:value={weightG} oninput={() => { filamentMM = null; recalc(); }} /></label>
-      <label>{$t('calc.filament')}<input type="number" min="0" step="0.01" bind:value={filamentMM} oninput={() => { syncWeightFromFilament().then(recalc); }} /></label>
-      <label>{$t('calc.purge')}<input type="number" min="0" step="0.1" bind:value={purgeG} oninput={recalc} /></label>
+      <label>{$t('calc.weight')}<input placeholder="135" type="number" min="0" step="0.01" bind:value={weightG} oninput={() => { filamentMM = null; recalc(); }} /></label>
+      <label>{$t('calc.filament')}<input placeholder="42000" type="number" min="0" step="0.01" bind:value={filamentMM} oninput={() => { syncWeightFromFilament().then(recalc); }} /></label>
+      <label>{$t('calc.purge')}<input placeholder="10" type="number" min="0" step="0.1" bind:value={purgeG} oninput={recalc} /></label>
     </div>
     <div class="row">
-      <label>{$t('calc.tariff')}<input type="number" min="0" step="0.01" bind:value={tariff} oninput={recalc} /></label>
-      <label>{$t('calc.power')}<input type="number" min="0" step="0.01" bind:value={powerKW} oninput={recalc} /></label>
-      <label>{$t('calc.amort')}<input type="number" min="0" step="0.01" bind:value={amortPerHour} oninput={recalc} /></label>
-      <label>{$t('calc.maint')}<input type="number" min="0" step="0.1" bind:value={maintPerHour} oninput={recalc} /></label>
+      <label>{$t('calc.tariff')}<input placeholder="7.08" type="number" min="0" step="0.01" bind:value={tariff} oninput={recalc} /></label>
+      <label>{$t('calc.power')}<input placeholder="0.35" type="number" min="0" step="0.01" bind:value={powerKW} oninput={recalc} /></label>
+      <label>{$t('calc.amort')}<input placeholder="5.41" type="number" min="0" step="0.01" bind:value={amortPerHour} oninput={recalc} /></label>
+      <label>{$t('calc.maint')}<input placeholder="0" type="number" min="0" step="0.1" bind:value={maintPerHour} oninput={recalc} /></label>
     </div>
     <div class="row">
-      <label>{$t('calc.op_rate')}<input type="number" min="0" bind:value={opRate} oninput={recalc} /></label>
-      <label>{$t('calc.prep')}<input type="number" min="0" step="0.1" bind:value={prepH} oninput={recalc} /></label>
-      <label>{$t('calc.post')}<input type="number" min="0" step="0.1" bind:value={postH} oninput={recalc} /></label>
+      <label>{$t('calc.op_rate')}<input placeholder="100" type="number" min="0" bind:value={opRate} oninput={recalc} /></label>
+      <label>{$t('calc.prep')}<input placeholder="0.2" type="number" min="0" step="0.1" bind:value={prepH} oninput={recalc} /></label>
+      <label>{$t('calc.post')}<input placeholder="0.5" type="number" min="0" step="0.1" bind:value={postH} oninput={recalc} /></label>
     </div>
     <div class="row">
-      <label>{$t('calc.designer_rate')}<input type="number" min="0" bind:value={designerRate} oninput={recalc} /></label>
-      <label>{$t('calc.model_h')}<input type="number" min="0" step="0.1" bind:value={modelH} oninput={recalc} /></label>
-      <label>{$t('calc.model_price')}<input type="number" min="0" bind:value={modelPrice} oninput={recalc} /></label>
-      <label>{$t('calc.extra')}<input type="number" min="0" bind:value={extraMat} oninput={recalc} /></label>
+      <label>{$t('calc.designer_rate')}<input placeholder="600" type="number" min="0" bind:value={designerRate} oninput={recalc} /></label>
+      <label>{$t('calc.model_h')}<input placeholder="0" type="number" min="0" step="0.1" bind:value={modelH} oninput={recalc} /></label>
+      <label>{$t('calc.model_price')}<input placeholder="0" type="number" min="0" bind:value={modelPrice} oninput={recalc} /></label>
+      <label>{$t('calc.extra')}<input placeholder="50" type="number" min="0" bind:value={extraMat} oninput={recalc} /></label>
     </div>
     <div class="row">
-      <label>{$t('calc.fail')}<input type="number" min="0" max="100" bind:value={failPct} oninput={recalc} /></label>
-      <label>{$t('calc.margin_profit')}<input type="number" min="0" bind:value={marginProfitPct} oninput={recalc} /></label>
-      <label>{$t('calc.margin_dev')}<input type="number" min="0" bind:value={marginDevPct} oninput={recalc} /></label>
-      <label>{$t('calc.fees')}<input type="number" min="0" bind:value={fees} oninput={recalc} /></label>
+      <label>{$t('calc.fail')}<input placeholder="5" type="number" min="0" max="100" bind:value={failPct} oninput={recalc} /></label>
+      <label>{$t('calc.margin_profit')}<input placeholder="80" type="number" min="0" bind:value={marginProfitPct} oninput={recalc} /></label>
+      <label>{$t('calc.margin_dev')}<input placeholder="35" type="number" min="0" bind:value={marginDevPct} oninput={recalc} /></label>
+      <label>{$t('calc.fees')}<input placeholder="100" type="number" min="0" bind:value={fees} oninput={recalc} /></label>
     </div>
     <div class="row">
-      <label>{$t('calc.vat')}<input type="number" min="0" bind:value={vatPct} oninput={recalc} /></label>
+      <label>{$t('calc.vat')}<input placeholder="20" type="number" min="0" bind:value={vatPct} oninput={recalc} /></label>
       <label>{$t('calc.round')}
         <select bind:value={roundStep} onchange={recalc}>
           <option value={0}>{$t('calc.round_none')}</option>
@@ -519,8 +519,8 @@
               {#each visibleOrders as o}<option value={o.ID}>{orderLabel(o)}</option>{/each}
             </select>
           </label>
-          <label>{$t('ord.item')}<input bind:value={orderTitle} /></label>
-          <label>{$t('ord.qty')}<input type="number" min="0.5" step="0.5" bind:value={orderQty} /></label>
+          <label>{$t('ord.item')}<input bind:value={orderTitle} placeholder={$t('ord.item_ph')} /></label>
+          <label>{$t('ord.qty')}<input placeholder="1" type="number" min="0.5" step="0.5" bind:value={orderQty} /></label>
           <button onclick={addToOrder}>{$t('ord.add')}</button>
         </div>
         {#if orderMsg}<p class="ok">{$t('ord.added')}</p>{/if}

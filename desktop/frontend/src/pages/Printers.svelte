@@ -159,12 +159,12 @@
     <div class="row">
       <label>{$t('printer.name')}<input bind:value={form.Name} /></label>
       <label>{$t('printer.model')}<input bind:value={form.Model} /></label>
-      <label>{$t('printer.price')}<input type="number" min="0" bind:value={form.PurchasePrice} /></label>
+      <label>{$t('printer.price')}<input placeholder="47454" type="number" min="0" bind:value={form.PurchasePrice} /></label>
     </div>
     <div class="row">
       <label>{$t('printer.date')}<input type="date" bind:value={form.CommissioningDate} /></label>
-      <label>{$t('printer.life')}<input type="number" min="1" bind:value={form.LifeYears} /></label>
-      <label>{$t('printer.hpd')}<input type="number" min="1" max="24" bind:value={form.HoursPerDay} /></label>
+      <label>{$t('printer.life')}<input placeholder="3" type="number" min="1" bind:value={form.LifeYears} /></label>
+      <label>{$t('printer.hpd')}<input placeholder="8" type="number" min="1" max="24" bind:value={form.HoursPerDay} /></label>
     </div>
     <div class="row">
       <label>{$t('printer.method')}
@@ -174,9 +174,9 @@
           <option value="resource">resource</option>
         </select>
       </label>
-      <label>{$t('printer.power')}<input type="number" min="0" step="0.01" bind:value={form.PowerKW} /></label>
-      <label>{$t('printer.maint')}<input type="number" min="0" bind:value={form.MaintPerHour} /></label>
-      <label>{$t('printer.resource')}<input type="number" min="0" bind:value={form.ResourceHours} /></label>
+      <label>{$t('printer.power')}<input placeholder="0.35" type="number" min="0" step="0.01" bind:value={form.PowerKW} /></label>
+      <label>{$t('printer.maint')}<input placeholder="0" type="number" min="0" bind:value={form.MaintPerHour} /></label>
+      <label>{$t('printer.resource')}<input placeholder="8000" type="number" min="0" bind:value={form.ResourceHours} /></label>
     </div>
     <div class="row">
       <button onclick={save}>{$t('common.save')}</button>

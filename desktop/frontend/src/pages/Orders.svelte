@@ -300,8 +300,8 @@
               </select>
             </label>
             <label>{$t('ord.title')}<input bind:value={editTitle} placeholder={$t('ord.title')} /></label>
-            <label>{$t('ord.discount_pct')}<input type="number" min="0" max="100" step="0.1" bind:value={editDiscountPct} /></label>
-            <label>{$t('ord.discount_fixed')}<input type="number" min="0" bind:value={editDiscountFixed} /></label>
+            <label>{$t('ord.discount_pct')}<input placeholder="10" type="number" min="0" max="100" step="0.1" bind:value={editDiscountPct} /></label>
+            <label>{$t('ord.discount_fixed')}<input placeholder="500" type="number" min="0" bind:value={editDiscountFixed} /></label>
             <button onclick={saveHead}>{$t('common.save')}</button>
             <button onclick={() => (editOpen = false)}>{$t('common.cancel')}</button>
           </div>
@@ -318,8 +318,8 @@
       </table>
       {#if canWrite($user)}
         <div class="row no-print">
-          <input placeholder={$t('ord.item')} bind:value={itemTitle} />
-          <input type="number" min="0" step="0.5" bind:value={itemQty} />
+          <input placeholder={$t('ord.item_ph')} bind:value={itemTitle} />
+          <input placeholder="1" type="number" min="0" step="0.5" bind:value={itemQty} />
           <input type="number" min="0" placeholder={$t('calc.cost')} bind:value={itemCost} />
           <input type="number" min="0" placeholder={$t('calc.price')} bind:value={itemPrice} />
           <button onclick={addItem}>+</button>

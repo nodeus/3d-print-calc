@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt, type SpoolStat } from '../lib/wails';
-  import { t } from '../lib/i18n';
+  import { t, locale } from '../lib/i18n';
   import { gotoOrder } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num, hms } from '../lib/format';
@@ -11,6 +11,7 @@
   let load: PrinterStat[] = $state([]);
   let debts: Debt[] = $state([]);
   let spools: SpoolStat[] = $state([]);
+  let baseCur = $state('RUB');
   let spoolSort: string = $state('code');
   let spoolDir: 1 | -1 = $state(1);
 
@@ -71,6 +72,7 @@
         wails.debts(),
       ]).then((r) => r.map((x) => x ?? []))) as [MonthRevenue[], MaterialStat[], PrinterStat[], Debt[]];
       spools = (await wails.spoolStats()) ?? [];
+      baseCur = await wails.getBaseCurrency();
     } catch (e) {
       console.error(e);
     }
@@ -81,12 +83,12 @@
       {
         Title: $t('rep.revenue'),
         Headers: [$t('rep.month'), $t('ord.total'), $t('rep.orders')],
-        Rows: revenue.map((r) => [r.month, money(r.total / 100, 'RUB', 'ru'), String(r.orders)]),
+        Rows: revenue.map((r) => [r.month, money(r.total / 100, baseCur, $locale), String(r.orders)]),
       },
       {
         Title: $t('rep.debts'),
         Headers: ['#', $t('ord.number'), $t('ord.title'), $t('cust.name'), $t('ord.balance'), $t('ord.status')],
-        Rows: debts.map((d) => [String(d.orderId), d.orderNo, debtTitle(d), d.customer, money(d.balance / 100, 'RUB', 'ru'), d.status]),
+        Rows: debts.map((d) => [String(d.orderId), d.orderNo, debtTitle(d), d.customer, money(d.balance / 100, baseCur, $locale), d.status]),
       },
       {
         Title: $t('rep.topmats'),
@@ -112,14 +114,14 @@
     <h3>{$t('rep.revenue')}</h3>
     <table>
       <thead><tr><th>{$t('rep.month')}</th><th>{$t('ord.total')}</th><th>{$t('rep.orders')}</th></tr></thead>
-      <tbody>{#each revenue as r}<tr><td>{r.month}</td><td class="n">{money(r.total / 100, 'RUB', 'ru')}</td><td class="n">{r.orders}</td></tr>{/each}</tbody>
+      <tbody>{#each revenue as r}<tr><td>{r.month}</td><td class="n">{money(r.total / 100, baseCur, $locale)}</td><td class="n">{r.orders}</td></tr>{/each}</tbody>
     </table>
   </section>
   <section class="card">
     <h3>{$t('rep.debts')}</h3>
     <table>
       <thead><tr><th>#</th><th>{$t('ord.number')}</th><th>{$t('ord.title')}</th><th>{$t('cust.name')}</th><th class="n">{$t('ord.balance')}</th><th>{$t('ord.status')}</th></tr></thead>
-      <tbody>{#each debts as d}<tr class="link" onclick={() => gotoOrder(d.orderId)}><td>{d.orderId}</td><td>{d.orderNo}</td><td>{debtTitle(d)}</td><td>{d.customer}</td><td class="n">{money(d.balance / 100, 'RUB', 'ru')}</td><td>{$t('st.' + d.status)}</td></tr>{/each}</tbody>
+      <tbody>{#each debts as d}<tr class="link" onclick={() => gotoOrder(d.orderId)}><td>{d.orderId}</td><td>{d.orderNo}</td><td>{debtTitle(d)}</td><td>{d.customer}</td><td class="n">{money(d.balance / 100, baseCur, $locale)}</td><td>{$t('st.' + d.status)}</td></tr>{/each}</tbody>
     </table>
   </section>
   <section class="card">

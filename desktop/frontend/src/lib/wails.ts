@@ -299,6 +299,12 @@ export interface SpoolStat {
   leftG: number;
 }
 
+export interface FxRate {
+  currency: string;
+  rate: number;
+  day: string;
+}
+
 export interface PDFSection {
   Title: string;
   Headers: string[];
@@ -324,6 +330,10 @@ declare global {
           SetLocale(locale: string): Promise<void>;
           GetBaseCurrency(): Promise<string>;
           SetBaseCurrency(code: string): Promise<void>;
+          ListFxRates(): Promise<FxRate[]>;
+          SetFxRate(currency: string, rate: number): Promise<void>;
+          DeleteFxRate(currency: string, day: string): Promise<void>;
+          ConvertCurrency(target: string, rate: number): Promise<void>;
           ExportBackup(): Promise<string>;
           PreviewBackup(): Promise<BackupManifest>;
           ApplyBackup(): Promise<BackupManifest>;
@@ -408,6 +418,10 @@ export const wails = {
   setLocale: (locale: string) => api().SetLocale(locale),
   getBaseCurrency: () => api().GetBaseCurrency(),
   setBaseCurrency: (code: string) => api().SetBaseCurrency(code),
+  listFxRates: () => api().ListFxRates(),
+  setFxRate: (currency: string, rate: number) => api().SetFxRate(currency, rate),
+  deleteFxRate: (currency: string, day: string) => api().DeleteFxRate(currency, day),
+  convertCurrency: (target: string, rate: number) => api().ConvertCurrency(target, rate),
   exportBackup: () => api().ExportBackup(),
   previewBackup: () => api().PreviewBackup(),
   applyBackup: () => api().ApplyBackup(),
