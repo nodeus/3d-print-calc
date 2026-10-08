@@ -23,6 +23,7 @@
   });
 </script>
 
+<div class="cols">
 <div class="card">
   <h2>{$t('app.title')} v{version} ({buildDate})</h2>
   <p>{$t('info.about')}</p>
@@ -56,9 +57,11 @@
   <p><img src={qrDonate} alt="QR" width="160" height="160" /></p>
   <p><button class="link" onclick={() => wails.openURL(DONATE)}>{DONATE}</button></p>
 </div>
+</div>
 
 <style>
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; max-width: 720px; }
+  .cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; align-items: start; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
   h2 { margin-top: 0; }
   li { margin-bottom: 6px; }
   button.link { background: none; border: none; color: #0645ad; cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }

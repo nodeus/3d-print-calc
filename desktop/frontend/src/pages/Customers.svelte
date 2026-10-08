@@ -101,7 +101,7 @@
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr><td>{c.Name}</td><td>{c.Contact}</td><td>{c.Note}</td>
+        <tr><td><button class="link" onclick={() => gotoCustomerOrders(c.ID)}>{c.Name}</button></td><td>{c.Contact}</td><td>{c.Note}</td>
           <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(c)}>✎</button> <button onclick={() => remove(c)}>✕</button>{/if}</td>
         </tr>
       {/if}
@@ -114,4 +114,5 @@
   input, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
   .err { color: #b00; }
+  button.link { background: none; border: none; color: #0645ad; cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
 </style>

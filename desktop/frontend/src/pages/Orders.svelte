@@ -4,7 +4,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
-  import { openOrderId } from '../lib/nav';
+  import { openOrderId, customerFilter } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
 
@@ -86,18 +86,28 @@
   onMount(() => {
     load();
     registerPdfExporter(toPDF);
-    // Переход из долгов: открыть заказ.
-    const unsub = openOrderId.subscribe((id) => {
+    // Переход из долгов: открыть заказ. Фильтр по заказчику — из вкладки заказчиков.
+    const unsub1 = openOrderId.subscribe((id) => {
       if (id) {
         openOrderId.set(null);
         openDetail(id);
       }
     });
+    const unsub2 = customerFilter.subscribe(() => {});
     return () => {
-      unsub();
+      unsub1();
+      unsub2();
       registerPdfExporter(null);
     };
   });
+
+  let visibleRows = $derived(
+    $customerFilter ? rows.filter((r) => r.order.CustomerID === $customerFilter) : rows,
+  );
+
+  function clearCustomerFilter() {
+    customerFilter.set(0);
+  }
 
   function custName(id: number): string {
     return customers.find((c) => c.ID === id)?.Name ?? `#${id}`;
@@ -235,7 +245,7 @@
         {
           Title: '',
           Headers: [$t('ord.number'), $t('ord.title'), $t('cust.name'), $t('ord.status'), $t('ord.total'), $t('ord.paid'), $t('ord.balance'), $t('ord.pay_state')],
-          Rows: rows.map((r) => [orderNo(r.order), orderTitle(r.order), custName(r.order.CustomerID), $t('st.' + r.order.Status), money(r.order.TotalBase / 100, r.order.Currency, 'ru'), money(r.paid / 100, r.order.Currency, 'ru'), money(r.balance / 100, r.order.Currency, 'ru'), payStateLabel(r.payState)]),
+          Rows: visibleRows.map((r) => [orderNo(r.order), orderTitle(r.order), custName(r.order.CustomerID), $t('st.' + r.order.Status), money(r.order.TotalBase / 100, r.order.Currency, 'ru'), money(r.paid / 100, r.order.Currency, 'ru'), money(r.balance / 100, r.order.Currency, 'ru'), payStateLabel(r.payState)]),
         },
       ]);
     }
@@ -243,6 +253,9 @@
 </script>
 
 {#if error}<p class="err">{error}</p>{/if}
+{#if $customerFilter}
+  <p class="filterchip no-print">{$t('ord.filtered_by')}: {custName($customerFilter)} <button onclick={clearCustomerFilter}>✕</button></p>
+{/if}
 <div class="cols">
   <section>
     {#if canWrite($user)}
@@ -258,7 +271,7 @@
     <table>
       <thead><tr><th>{$t('ord.number')}</th><th>{$t('ord.title')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th><th class="n">{$t('ord.paid')}</th><th class="n">{$t('ord.balance')}</th><th>{$t('ord.pay_state')}</th></tr></thead>
       <tbody>
-        {#each rows as r}
+        {#each visibleRows as r}
           <tr class:sel={detail?.order.ID === r.order.ID} onclick={() => openDetail(r.order.ID)}>
             <td>{orderNo(r.order)}</td><td>{orderTitle(r.order)}</td><td>{custName(r.order.CustomerID)}</td><td>{$t('st.' + r.order.Status)}</td><td class="n">{money(r.order.TotalBase / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.paid / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.balance / 100, r.order.Currency, 'ru')}</td><td>{payStateLabel(r.payState)}</td>
           </tr>
@@ -338,6 +351,7 @@
   table { font-size: 13px; }
   tr.sel td { background: #eef; }
   tbody tr { cursor: pointer; }
+  .filterchip { background: #eef; border-radius: 4px; padding: 4px 8px; display: inline-block; }
   .pay { color: #666; font-size: 13px; margin: 2px 0; }
   .err { color: #b00; }
 </style>

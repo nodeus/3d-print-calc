@@ -52,6 +52,7 @@ export interface MaterialDTO {
   note: string;
   density: number;
   diameter: number;
+  defaultWeightG: number;
   pricePerKg: number;
   currency: string;
   spoolId: number;
@@ -78,6 +79,7 @@ export interface Material {
   ColorHex: string;
   Density: number;
   Diameter: number;
+  DefaultSpoolWeightG: number;
   Note: string;
 }
 
@@ -271,16 +273,30 @@ export interface PrinterStat {
   name: string;
   jobs: number;
   totalSec: number;
+  lengthM: number;
+  weightG: number;
+  remainH: number;
 }
 
 export interface Debt {
   orderId: number;
+  orderNo: string;
   customer: string;
   title: string;
   total: number;
   paid: number;
   balance: number;
   status: string;
+}
+
+export interface SpoolStat {
+  code: string;
+  colorHex: string;
+  vendor: string;
+  jobs: number;
+  usedG: number;
+  initG: number;
+  leftG: number;
 }
 
 export interface PDFSection {
@@ -344,12 +360,13 @@ declare global {
           RevenueByMonth(): Promise<MonthRevenue[]>;
           TopMaterials(): Promise<MaterialStat[]>;
           PrinterLoad(): Promise<PrinterStat[]>;
+          SpoolStats(): Promise<SpoolStat[]>;
           Debts(): Promise<Debt[]>;
           SetMoonrakerURL(printerId: number, url: string): Promise<void>;
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
           MoonrakerApply(): Promise<ImportReport>;
-          AddMaterial(code: string, matType: string, density: number, pricePerKg: number): Promise<number>;
+          AddMaterial(code: string, matType: string, density: number, pricePerKg: number, weightG: number): Promise<number>;
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
@@ -424,13 +441,14 @@ export const wails = {
   revenueByMonth: () => api().RevenueByMonth(),
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
+  spoolStats: () => api().SpoolStats(),
   debts: () => api().Debts(),
   setMoonrakerURL: (printerId: number, url: string) => api().SetMoonrakerURL(printerId, url),
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
   moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
   moonrakerApply: () => api().MoonrakerApply(),
-  addMaterial: (code: string, matType: string, density: number, pricePerKg: number) =>
-    api().AddMaterial(code, matType, density, pricePerKg),
+  addMaterial: (code: string, matType: string, density: number, pricePerKg: number, weightG: number) =>
+    api().AddMaterial(code, matType, density, pricePerKg, weightG),
   updateMaterial: (m: Material) => api().UpdateMaterial(m),
   deleteMaterial: (id: number) => api().DeleteMaterial(id),
   updateSpool: (s: Spool) => api().UpdateSpool(s),

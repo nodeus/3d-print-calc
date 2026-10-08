@@ -255,6 +255,11 @@ func (a *App) PrinterLoad() ([]sqlite.PrinterStat, error) {
 	return a.db.PrinterLoad()
 }
 
+// SpoolStats — остатки катушек для отчётов.
+func (a *App) SpoolStats() ([]sqlite.SpoolStat, error) {
+	return a.db.SpoolStats()
+}
+
 // Debts — неоплаченные остатки.
 func (a *App) Debts() ([]sqlite.Debt, error) {
 	return a.db.Debts()

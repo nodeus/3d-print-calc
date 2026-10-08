@@ -14,10 +14,13 @@
   let newType = $state('PETG');
   let newDensity = $state(1.27);
   let newPrice = $state(0);
+  let newWeight = $state(1000);
   // Редактирование
   let editId = $state(0);
-  let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, Note: '' });
+  let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '' });
   let editPrice = $state(0);
+
+  let knownTypes = $derived([...new Set(materials.map((m) => m.type))].sort());
   // Цвета: пресеты + фавориты (settings).
   const presets = [
     '#000000', '#ffffff', '#808080', '#ff0000', '#ff8000', '#ffff00',
@@ -61,9 +64,10 @@
   async function add() {
     error = '';
     try {
-      await wails.addMaterial(newCode.trim(), newType, newDensity, newPrice);
+      await wails.addMaterial(newCode.trim(), newType.trim() || 'PETG', newDensity, newPrice, newWeight);
       newCode = '';
       newPrice = 0;
+      newWeight = 1000;
       await load();
     } catch (e) {
       error = String(e);
@@ -72,7 +76,7 @@
 
   function startEdit(m: MaterialDTO) {
     editId = m.id;
-    edit = { ID: m.id, Code: m.code, Type: m.type, Vendor: m.vendor, ColorHex: m.colorHex, Density: m.density, Diameter: m.diameter, Note: m.note };
+    edit = { ID: m.id, Code: m.code, Type: m.type, Vendor: m.vendor, ColorHex: m.colorHex, Density: m.density, Diameter: m.diameter, DefaultSpoolWeightG: m.defaultWeightG || 1000, Note: m.note };
     editPrice = m.pricePerKg;
   }
 
@@ -112,8 +116,8 @@
     await downloadPDF($t('nav.materials'), [
       {
         Title: '',
-        Headers: [$t('mat.code'), $t('mat.color'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.vendor')],
-        Rows: materials.map((m) => [m.code, m.colorHex, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), m.vendor]),
+        Headers: [$t('mat.code'), $t('mat.color'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.weight'), $t('mat.vendor')],
+        Rows: materials.map((m) => [m.code, m.colorHex, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), String(m.defaultWeightG || 1000), m.vendor]),
       },
     ]);
   }
@@ -122,18 +126,20 @@
 {#if canWrite($user)}
   <div class="row no-print">
     <input placeholder="PETG-NIT-W4" bind:value={newCode} />
-    <select bind:value={newType}>
-      {#each ['PETG', 'PLA', 'ABS', 'ASA', 'TPU', 'NYLON'] as tp}<option value={tp}>{tp}</option>{/each}
-    </select>
+    <input list="mat-types" bind:value={newType} placeholder={$t('mat.type')} />
+    <datalist id="mat-types">
+      {#each knownTypes as tp}<option value={tp} />{/each}
+    </datalist>
     <input type="number" step="0.01" bind:value={newDensity} title={$t('mat.density')} />
     <input type="number" min="0" bind:value={newPrice} title={$t('mat.price')} />
+    <input type="number" min="0" bind:value={newWeight} title={$t('mat.weight')} />
     <button onclick={add}>{$t('common.save')}</button>
   </div>
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
 
 <table>
-  <thead><tr><th>{$t('mat.code')}</th><th>{$t('mat.color')}</th><th>{$t('mat.type')}</th><th>{$t('mat.price')}</th><th>{$t('mat.density')}</th><th>{$t('mat.vendor')}</th><th class="no-print"></th></tr></thead>
+  <thead><tr><th>{$t('mat.code')}</th><th>{$t('mat.color')}</th><th>{$t('mat.type')}</th><th>{$t('mat.price')}</th><th>{$t('mat.density')}</th><th class="n">{$t('mat.weight')}</th><th>{$t('mat.vendor')}</th><th class="no-print"></th></tr></thead>
   <tbody>
     {#each materials as m}
       {#if editId === m.id}
@@ -154,14 +160,18 @@
               </div>
             {/if}
           </td>
-          <td><select bind:value={edit.Type}>{#each ['PETG', 'PLA', 'ABS', 'ASA', 'TPU', 'NYLON'] as tp}<option value={tp}>{tp}</option>{/each}</select></td>
+          <td><input list="mat-types-edit" bind:value={edit.Type} /></td>
           <td><input type="number" min="0" bind:value={editPrice} /></td>
           <td><input type="number" step="0.01" bind:value={edit.Density} /></td>
+          <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
           <td><input bind:value={edit.Vendor} /></td>
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
+        <datalist id="mat-types-edit">
+          {#each knownTypes as tp}<option value={tp} />{/each}
+        </datalist>
       {:else}
-        <tr><td>{m.code}</td><td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td>{m.vendor}</td>
+        <tr><td>{m.code}</td><td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td class="n">{m.defaultWeightG || 1000}</td><td>{m.vendor}</td>
           <td class="no-print">
             {#if canWrite($user)}<button onclick={() => startEdit(m)}>✎</button> <button onclick={() => remove(m)}>✕</button>{/if}
           </td>

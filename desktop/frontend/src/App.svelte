@@ -35,6 +35,11 @@
   });
   onDestroy(unsubGoTab);
 
+  // Текущая вкладка на body — для альбомной печати заказов/отчётов.
+  $effect(() => {
+    document.body.dataset.tab = tab;
+  });
+
   const tabs: { id: Tab; key: string }[] = [
     { id: 'calc', key: 'nav.calculator' },
     { id: 'history', key: 'nav.history' },
@@ -115,5 +120,11 @@
     main { padding: 0; }
     :global(body) { background: white; }
     @page { size: A4; margin: 12mm; }
+    @page ordersLandscape { size: A4 landscape; margin: 10mm; }
+    @page reportsLandscape { size: A4 landscape; margin: 10mm; }
+  }
+  @media print {
+    :global(body[data-tab='orders'] main) { page: ordersLandscape; }
+    :global(body[data-tab='reports'] main) { page: reportsLandscape; }
   }
 </style>
