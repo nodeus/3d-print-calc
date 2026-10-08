@@ -5,6 +5,7 @@
   import { money } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
+  import { calcForm } from '../lib/calcform';
   import { get } from 'svelte/store';
 
   let materials: MaterialDTO[] = $state([]);
@@ -69,6 +70,19 @@
     opRate?: number;
     prepH?: number;
     postH?: number;
+    designerRate?: number;
+    modelH?: number;
+    modelPrice?: number;
+    extraMat?: number;
+    failRate?: number;
+    marginProfit?: number;
+    marginDev?: number;
+    fees?: number;
+    maintPerHour?: number;
+    purgeWasteG?: number;
+    copies?: number;
+    vatRate?: number;
+    roundStep?: number;
   }
 
   function snapInput(j: JobDTO): SnapInput {
@@ -111,11 +125,26 @@
     if (inp.opRate != null) opRate = inp.opRate;
     if (inp.prepH != null) prepH = inp.prepH;
     if (inp.postH != null) postH = inp.postH;
+    if (inp.designerRate != null) designerRate = inp.designerRate;
+    if (inp.modelH != null) modelH = inp.modelH;
+    if (inp.modelPrice != null) modelPrice = inp.modelPrice;
+    if (inp.extraMat != null) extraMat = inp.extraMat;
+    if (inp.failRate != null) failPct = inp.failRate * 100;
+    if (inp.marginProfit != null) marginProfitPct = inp.marginProfit * 100;
+    if (inp.marginDev != null) marginDevPct = inp.marginDev * 100;
+    if (inp.fees != null) fees = inp.fees;
+    if (inp.maintPerHour != null) maintPerHour = inp.maintPerHour;
+    if (inp.purgeWasteG != null) purgeG = inp.purgeWasteG;
+    if (inp.copies != null && inp.copies >= 1) copies = Math.round(inp.copies);
+    if (inp.vatRate != null) vatPct = inp.vatRate * 100;
+    if (inp.roundStep != null) roundStep = inp.roundStep;
     weightG = Math.round(j.WeightG * 100) / 100;
     filamentMM = Math.round(j.LengthM * 1000 * 100) / 100 || null;
     timeH = Math.floor(j.TotalSec / 3600);
     timeM = Math.round((j.TotalSec % 3600) / 60);
     filename = j.Filename;
+    // Название позиции для заказа — из имени файла без расширения.
+    orderTitle = j.Filename.replace(/\.gcode$/i, '');
     recalc();
   }
 
@@ -142,6 +171,38 @@
 
   async function loadAll() {
     try {
+      // Восстановить форму с прошлого визита вкладки.
+      const saved = get(calcForm);
+      matCode = saved.matCode;
+      timeH = saved.timeH;
+      timeM = saved.timeM;
+      weightG = saved.weightG;
+      filamentMM = saved.filamentMM;
+      tariff = saved.tariff;
+      powerKW = saved.powerKW;
+      amortPerHour = saved.amortPerHour;
+      opRate = saved.opRate;
+      prepH = saved.prepH;
+      postH = saved.postH;
+      designerRate = saved.designerRate;
+      modelH = saved.modelH;
+      modelPrice = saved.modelPrice;
+      extraMat = saved.extraMat;
+      failPct = saved.failPct;
+      marginProfitPct = saved.marginProfitPct;
+      marginDevPct = saved.marginDevPct;
+      copies = saved.copies;
+      vatPct = saved.vatPct;
+      roundStep = saved.roundStep;
+      fees = saved.fees;
+      maintPerHour = saved.maintPerHour;
+      purgeG = saved.purgeG;
+      filename = saved.filename;
+      customerId = saved.customerId;
+      orderId = saved.orderId;
+      orderTitle = saved.orderTitle;
+      orderQty = saved.orderQty;
+      historyId = saved.historyId;
       materials = (await wails.materials()) ?? [];
       printers = (await wails.printers()) ?? [];
       currency = await wails.getBaseCurrency();
@@ -150,7 +211,13 @@
       if (orders.length) orderId = orders[0].ID;
       historyJobs = (await wails.jobs(0)) ?? [];
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
-      if (printers.length) selectPrinter(printers[0].ID);
+      if (!printers.some((p) => p.ID === printerId)) {
+        printerId = 0;
+        if (printers.length) selectPrinter(printers[0].ID);
+      }
+      if (!customers.some((c) => c.ID === customerId)) customerId = 0;
+      if (!orders.some((o) => o.ID === orderId)) orderId = orders.length ? orders[0].ID : 0;
+      if (!historyJobs.some((j) => j.ID === historyId)) historyId = 0;
       calcReady = true;
       // Висящий prefill: разовый из монтирования или ранний из подписки.
       const pre = pendingJob ?? get(prefillJob);
@@ -212,11 +279,25 @@
   }
 
   let timer: number | undefined;
+
+  // persist сохраняет форму в стор вкладки (переживёт переключение).
+  function persist() {
+    calcForm.set({
+      matCode, printerId, timeH, timeM, weightG, filamentMM,
+      tariff, powerKW, amortPerHour, opRate, prepH, postH,
+      designerRate, modelH, modelPrice, extraMat, failPct,
+      marginProfitPct, marginDevPct, copies, vatPct, roundStep, fees,
+      maintPerHour, purgeG, filename, customerId, orderId,
+      orderTitle, orderQty, historyId,
+    });
+  }
+
   async function recalc() {
     window.clearTimeout(timer);
     timer = window.setTimeout(async () => {
       try {
         result = await wails.calc(buildInput());
+        persist();
       } catch (e) {
         console.error(e);
       }
@@ -242,6 +323,7 @@
     customerId = id;
     const first = orders.filter((o) => !id || o.CustomerID === id)[0];
     orderId = first ? first.ID : 0;
+    persist();
   }
 
   async function save() {
@@ -265,7 +347,21 @@
         opRate,
         prepH,
         postH,
+        designerRate,
+        modelH,
+        modelPrice,
+        extraMat,
+        failRate: failPct / 100,
+        marginProfit: marginProfitPct / 100,
+        marginDev: marginDevPct / 100,
+        fees,
+        maintPerHour,
+        purgeWasteG: purgeG,
+        copies,
+        vatRate: vatPct / 100,
+        roundStep,
       });
+      persist();
       savedMsg = true;
       setTimeout(() => (savedMsg = false), 2500);
     } catch (e) {
@@ -282,6 +378,7 @@
       });
       orderMsg = true;
       setTimeout(() => (orderMsg = false), 2500);
+      persist();
     } catch (e) {
       console.error(e);
     }

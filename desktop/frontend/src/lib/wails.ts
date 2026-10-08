@@ -125,6 +125,7 @@ export interface JobDTO {
   SpoolID: number;
   Status: string;
   Origin: string;
+  Edited: number;
   PrintSec: number;
   TotalSec: number;
   EstimatedSec: number;
