@@ -32,8 +32,9 @@ type Printers interface {
 type Jobs interface {
 	Upsert(j models.Job) (int64, error)
 	List(limit int) ([]models.Job, error)
-	DeleteJob(id int64) error                         // только origin=manual
-	UpdateManual(j models.Job, material string) error // правка + автопересчёт, только manual
+	DeleteJob(id int64) error                         // manual — удалить; edited import — откат; чистый import — блок
+	UpdateManual(j models.Job, material string) error // правка + автопересчёт (manual и import)
+	RevertJob(id int64) error                         // откат изменённой к импорту
 }
 
 // Users — локальные пользователи и роли.
@@ -64,6 +65,7 @@ type Orders interface {
 	SetStatus(id int64, status string) error
 	AddItem(it models.OrderItem) (int64, error)
 	Items(orderID int64) ([]models.OrderItem, error)
+	DeleteOrderItem(id int64) error
 	AddPayment(p models.Payment) (int64, error)
 	Payments(orderID int64) ([]models.Payment, error)
 	PaidTotal(orderID int64) (int64, error)

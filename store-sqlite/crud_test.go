@@ -170,11 +170,7 @@ func TestUpdateManualReprice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// import править нельзя.
-	imp, _ := jobs.Upsert(models.Job{Filename: "i.gcode", StartAt: "2026-01-01 10:00", Origin: "import"})
-	if err := jobs.UpdateManual(models.Job{ID: imp}, "PETG-R"); err == nil {
-		t.Fatal("правка import обязана блокироваться")
-	}
+	// import теперь тоже правится (с флагом edited), а не блокируется.
 	// Правка веса 10→20г: мат составит 20₽ (плюс свет/амортизация/труд по контексту).
 	if err := jobs.UpdateManual(models.Job{
 		ID: id, Filename: "r.gcode", StartAt: "2026-01-01 10:00", Status: "completed",

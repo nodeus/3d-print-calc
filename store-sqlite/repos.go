@@ -176,10 +176,10 @@ func (r *ordersRepo) Create(o models.Order) (int64, error) {
 		o.Currency = "RUB"
 	}
 	res, err := r.db.Exec(`INSERT INTO orders (customer_id, number, title, currency, fx_rate, margin_profit,
-		margin_dev, vat, status, total_base, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+		margin_dev, vat, discount_pct, discount_fixed, status, total_base, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
 		nullInt(o.CustomerID), o.Number, o.Title, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev,
-		o.VAT, o.Status, o.CreatedAt)
+		o.VAT, o.DiscountPct, o.DiscountFixed, o.Status, o.CreatedAt)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_ORDER_CREATE: %w", err)
 	}
@@ -192,9 +192,9 @@ func (r *ordersRepo) Get(id int64) (models.Order, error) {
 	var o models.Order
 	var custID sql.NullInt64
 	err := r.db.QueryRow(`SELECT id, customer_id, number, title, currency, fx_rate, margin_profit,
-		margin_dev, vat, status, total_base, created_at FROM orders WHERE id=?`, id).
+		margin_dev, vat, discount_pct, discount_fixed, status, total_base, created_at FROM orders WHERE id=?`, id).
 		Scan(&o.ID, &custID, &o.Number, &o.Title, &o.Currency, &o.FxRate, &o.MarginProfit,
-			&o.MarginDev, &o.VAT, &o.Status, &o.TotalBase, &o.CreatedAt)
+			&o.MarginDev, &o.VAT, &o.DiscountPct, &o.DiscountFixed, &o.Status, &o.TotalBase, &o.CreatedAt)
 	if err != nil {
 		return o, fmt.Errorf("ERR_ORDER_GET: %w", err)
 	}
@@ -205,7 +205,7 @@ func (r *ordersRepo) Get(id int64) (models.Order, error) {
 // List возвращает все заказы (новые первыми).
 func (r *ordersRepo) List() ([]models.Order, error) {
 	rows, err := r.db.Query(`SELECT id, customer_id, number, title, currency, fx_rate, margin_profit,
-		margin_dev, vat, status, total_base, created_at FROM orders ORDER BY id DESC`)
+		margin_dev, vat, discount_pct, discount_fixed, status, total_base, created_at FROM orders ORDER BY id DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_ORDER_LIST: %w", err)
 	}
@@ -215,7 +215,7 @@ func (r *ordersRepo) List() ([]models.Order, error) {
 		var o models.Order
 		var custID sql.NullInt64
 		if err := rows.Scan(&o.ID, &custID, &o.Number, &o.Title, &o.Currency, &o.FxRate, &o.MarginProfit,
-			&o.MarginDev, &o.VAT, &o.Status, &o.TotalBase, &o.CreatedAt); err != nil {
+			&o.MarginDev, &o.VAT, &o.DiscountPct, &o.DiscountFixed, &o.Status, &o.TotalBase, &o.CreatedAt); err != nil {
 			return nil, fmt.Errorf("ERR_ORDER_LIST: %w", err)
 		}
 		o.CustomerID = custID.Int64
@@ -224,17 +224,20 @@ func (r *ordersRepo) List() ([]models.Order, error) {
 	return out, rows.Err()
 }
 
-// Update правит шапку заказа (статус — только через SetStatus).
+// Update правит шапку заказа (статус — только через SetStatus;
+// наценки/НДС — legacy, читаются, но UI правит скидки).
 func (r *ordersRepo) Update(o models.Order) error {
 	if o.ID == 0 {
 		return fmt.Errorf("ERR_ORDER_SAVE: пустой id")
 	}
 	if _, err := r.db.Exec(`UPDATE orders SET customer_id=?, title=?, currency=?, fx_rate=?,
-		margin_profit=?, margin_dev=?, vat=? WHERE id=?`,
-		nullInt(o.CustomerID), o.Title, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev, o.VAT, o.ID); err != nil {
+		margin_profit=?, margin_dev=?, vat=?, discount_pct=?, discount_fixed=? WHERE id=?`,
+		nullInt(o.CustomerID), o.Title, o.Currency, o.FxRate, o.MarginProfit, o.MarginDev, o.VAT,
+		o.DiscountPct, o.DiscountFixed, o.ID); err != nil {
 		return fmt.Errorf("ERR_ORDER_SAVE: %w", err)
 	}
-	return nil
+	_, err := r.RecalcTotal(o.ID)
+	return err
 }
 
 // Delete удаляет заказ каскадом: позиции + оплаты. Подтверждение — в UI.
@@ -306,13 +309,23 @@ func (r *ordersRepo) Items(orderID int64) ([]models.OrderItem, error) {
 	return out, rows.Err()
 }
 
-// AddPayment фиксирует оплату.
+// AddPayment фиксирует оплату (всего заказа или позиции).
 func (r *ordersRepo) AddPayment(p models.Payment) (int64, error) {
 	if p.Amount <= 0 {
 		return 0, fmt.Errorf("ERR_PAYMENT: сумма обязана быть положительной")
 	}
-	res, err := r.db.Exec(`INSERT INTO payments (order_id, amount, paid_at, note) VALUES (?, ?, ?, ?)`,
-		p.OrderID, p.Amount, p.PaidAt, p.Note)
+	if p.OrderItem > 0 {
+		var n int
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM order_items WHERE id=? AND order_id=?`,
+			p.OrderItem, p.OrderID).Scan(&n); err != nil {
+			return 0, fmt.Errorf("ERR_PAYMENT: %w", err)
+		}
+		if n == 0 {
+			return 0, fmt.Errorf("ERR_PAYMENT: позиция не из этого заказа")
+		}
+	}
+	res, err := r.db.Exec(`INSERT INTO payments (order_id, order_item_id, amount, paid_at, note) VALUES (?, ?, ?, ?, ?)`,
+		p.OrderID, nullInt(p.OrderItem), p.Amount, p.PaidAt, p.Note)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_PAYMENT: %w", err)
 	}
@@ -322,7 +335,7 @@ func (r *ordersRepo) AddPayment(p models.Payment) (int64, error) {
 
 // Payments возвращает оплаты заказа.
 func (r *ordersRepo) Payments(orderID int64) ([]models.Payment, error) {
-	rows, err := r.db.Query(`SELECT id, order_id, amount, paid_at, note FROM payments
+	rows, err := r.db.Query(`SELECT id, order_id, order_item_id, amount, paid_at, note FROM payments
 		WHERE order_id=? ORDER BY id`, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_PAYMENT: %w", err)
@@ -331,9 +344,11 @@ func (r *ordersRepo) Payments(orderID int64) ([]models.Payment, error) {
 	out := []models.Payment{}
 	for rows.Next() {
 		var p models.Payment
-		if err := rows.Scan(&p.ID, &p.OrderID, &p.Amount, &p.PaidAt, &p.Note); err != nil {
+		var itemID sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.OrderID, &itemID, &p.Amount, &p.PaidAt, &p.Note); err != nil {
 			return nil, fmt.Errorf("ERR_PAYMENT: %w", err)
 		}
+		p.OrderItem = itemID.Int64
 		out = append(out, p)
 	}
 	return out, rows.Err()
@@ -348,15 +363,50 @@ func (r *ordersRepo) PaidTotal(orderID int64) (int64, error) {
 	return sum.Int64, nil
 }
 
-// RecalcTotal пересчитывает total_base как SUM(price*qty) и возвращает его.
+// RecalcTotal пересчитывает total_base: сначала % от суммы позиций,
+// затем −фикс, пол — ноль. Возвращает итог.
 func (r *ordersRepo) RecalcTotal(orderID int64) (int64, error) {
-	var total sql.NullFloat64
-	if err := r.db.QueryRow(`SELECT SUM(price*qty) FROM order_items WHERE order_id=?`, orderID).Scan(&total); err != nil {
+	var subtotal sql.NullFloat64
+	if err := r.db.QueryRow(`SELECT SUM(price*qty) FROM order_items WHERE order_id=?`, orderID).Scan(&subtotal); err != nil {
 		return 0, fmt.Errorf("ERR_ORDER_TOTAL: %w", err)
 	}
-	t := int64(total.Float64 + 0.5)
-	if _, err := r.db.Exec(`UPDATE orders SET total_base=? WHERE id=?`, t, orderID); err != nil {
+	var pct sql.NullFloat64
+	var fixed sql.NullInt64
+	if err := r.db.QueryRow(`SELECT discount_pct, discount_fixed FROM orders WHERE id=?`, orderID).Scan(&pct, &fixed); err != nil {
 		return 0, fmt.Errorf("ERR_ORDER_TOTAL: %w", err)
 	}
-	return t, nil
+	t := subtotal.Float64*(1-pct.Float64/100) - float64(fixed.Int64)
+	if t < 0 {
+		t = 0
+	}
+	total := int64(t + 0.5)
+	if _, err := r.db.Exec(`UPDATE orders SET total_base=? WHERE id=?`, total, orderID); err != nil {
+		return 0, fmt.Errorf("ERR_ORDER_TOTAL: %w", err)
+	}
+	return total, nil
+}
+
+// DeleteOrderItem удаляет позицию с пересчётом итога.
+func (r *ordersRepo) DeleteOrderItem(id int64) error {
+	var orderID int64
+	if err := r.db.QueryRow(`SELECT order_id FROM order_items WHERE id=?`, id).Scan(&orderID); err != nil {
+		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
+	}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
+	}
+	defer tx.Rollback()
+	// Оплаты позиции обнуляем (становятся оплатами всего заказа), позицию удаляем.
+	if _, err := tx.Exec(`UPDATE payments SET order_item_id=NULL WHERE order_item_id=?`, id); err != nil {
+		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM order_items WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
+	}
+	_, err = r.RecalcTotal(orderID)
+	return err
 }

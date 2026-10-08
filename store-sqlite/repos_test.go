@@ -211,9 +211,31 @@ func TestDeleteJobOriginGuard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Нетронутый import — блок.
 	if err := db.Jobs().DeleteJob(imp); err == nil {
-		t.Fatal("удаление import обязано блокироваться")
+		t.Fatal("удаление чистого import обязано блокироваться")
 	}
+	// Правим import → edited=1 → удаление = откат, строка остаётся.
+	if err := db.Jobs().UpdateManual(models.Job{ID: imp, Filename: "i.gcode", StartAt: "2026-01-01 10:00", WeightG: 999}, ""); err != nil {
+		t.Fatalf("правка import: %v", err)
+	}
+	if err := db.Jobs().DeleteJob(imp); err != nil {
+		t.Fatalf("откат изменённого: %v", err)
+	}
+	list, _ := db.Jobs().List(0)
+	found := false
+	for _, j := range list {
+		if j.ID == imp {
+			found = true
+			if j.Edited != 0 || j.WeightG == 999 {
+				t.Fatalf("откат не восстановил: %+v", j)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("строка исчезла при откате")
+	}
+	// Ручная — полное удаление.
 	if err := db.Jobs().DeleteJob(manual); err != nil {
 		t.Fatalf("DeleteJob manual: %v", err)
 	}

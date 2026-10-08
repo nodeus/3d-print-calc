@@ -11,6 +11,7 @@ import (
 
 	"3dprint-calc/core/calc"
 	"3dprint-calc/core/models"
+	sqlite "3dprint-calc/store-sqlite"
 )
 
 //go:embed all:assets/migrations
@@ -18,18 +19,19 @@ var migrationsFS embed.FS
 
 // MaterialDTO — материал с ценой первой катушки для калькулятора.
 type MaterialDTO struct {
-	ID         int64   `json:"id"`
-	Code       string  `json:"code"`
-	Type       string  `json:"type"`
-	Vendor     string  `json:"vendor"`
-	ColorHex   string  `json:"colorHex"`
-	Note       string  `json:"note"`
-	Density    float64 `json:"density"`
-	Diameter   float64 `json:"diameter"`
-	PricePerKg float64 `json:"pricePerKg"`
-	Currency   string  `json:"currency"`
-	SpoolID    int64   `json:"spoolId"`
-	SpoolLeftG float64 `json:"spoolLeftG"`
+	ID             int64   `json:"id"`
+	Code           string  `json:"code"`
+	Type           string  `json:"type"`
+	Vendor         string  `json:"vendor"`
+	ColorHex       string  `json:"colorHex"`
+	Note           string  `json:"note"`
+	Density        float64 `json:"density"`
+	Diameter       float64 `json:"diameter"`
+	DefaultWeightG float64 `json:"defaultWeightG"`
+	PricePerKg     float64 `json:"pricePerKg"`
+	Currency       string  `json:"currency"`
+	SpoolID        int64   `json:"spoolId"`
+	SpoolLeftG     float64 `json:"spoolLeftG"`
 }
 
 // GetMaterials возвращает справочник с ценами.
@@ -42,7 +44,7 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 	for _, m := range mats {
 		dto := MaterialDTO{
 			ID: m.ID, Code: m.Code, Type: m.Type, Vendor: m.Vendor,
-			ColorHex: m.ColorHex, Note: m.Note,
+			ColorHex: m.ColorHex, Note: m.Note, DefaultWeightG: m.DefaultSpoolWeightG,
 			Density: m.Density, Diameter: m.Diameter, Currency: "RUB",
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
@@ -84,7 +86,7 @@ func (a *App) UpdateMaterial(m models.Material) error {
 }
 
 // AddMaterial создаёт материал с катушкой (manager+). Цена ₽/кг.
-func (a *App) AddMaterial(code, matType string, density, pricePerKg float64) (int64, error) {
+func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG float64) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
 		return 0, err
 	}
@@ -97,16 +99,29 @@ func (a *App) AddMaterial(code, matType string, density, pricePerKg float64) (in
 	if density <= 0 {
 		density = 1.27
 	}
+	if weightG <= 0 {
+		weightG = 1000
+	}
 	id, err := a.db.Materials().UpsertByCode(models.Material{
 		Code: code, Type: matType, Density: density, Diameter: 1.75,
+		DefaultSpoolWeightG: weightG,
 	})
 	if err != nil {
+		return 0, err
+	}
+	// UpsertByCode вес по умолчанию не трогает — выставляем явно.
+	m, err := a.db.Materials().GetByCode(code)
+	if err != nil {
+		return 0, err
+	}
+	m.DefaultSpoolWeightG = weightG
+	if err := a.db.Materials().Update(m); err != nil {
 		return 0, err
 	}
 	if pricePerKg > 0 {
 		if _, err := a.db.Materials().AddSpool(models.Spool{
 			MaterialID: id, Price: int64(pricePerKg*100 + 0.5),
-			Currency: "RUB", FxRate: 1, WeightInitG: 1000, WeightLeftG: 1000,
+			Currency: "RUB", FxRate: 1, WeightInitG: weightG, WeightLeftG: weightG,
 		}); err != nil {
 			return 0, err
 		}
@@ -272,6 +287,19 @@ type JobInput struct {
 	OpRate       float64 `json:"opRate"`
 	PrepH        float64 `json:"prepH"`
 	PostH        float64 `json:"postH"`
+	DesignerRate float64 `json:"designerRate"`
+	ModelH       float64 `json:"modelH"`
+	ModelPrice   float64 `json:"modelPrice"`
+	ExtraMat     float64 `json:"extraMat"`
+	FailRate     float64 `json:"failRate"`
+	MarginProfit float64 `json:"marginProfit"`
+	MarginDev    float64 `json:"marginDev"`
+	Fees         float64 `json:"fees"`
+	MaintPerHour float64 `json:"maintPerHour"`
+	PurgeWasteG  float64 `json:"purgeWasteG"`
+	Copies       int     `json:"copies"`
+	VATRate      float64 `json:"vatRate"`
+	RoundStep    float64 `json:"roundStep"`
 }
 
 // SaveJob сохраняет расчёт (manager+). StartAt — сейчас (импорт истории — через CSV).
@@ -301,6 +329,12 @@ func (a *App) SaveJob(in JobInput) (int64, error) {
 			"tariff": in.Tariff, "powerKW": in.PowerKW,
 			"amortPerHour": in.AmortPerHour, "opRate": in.OpRate,
 			"prepH": in.PrepH, "postH": in.PostH,
+			"designerRate": in.DesignerRate, "modelH": in.ModelH,
+			"modelPrice": in.ModelPrice, "extraMat": in.ExtraMat,
+			"failRate": in.FailRate, "marginProfit": in.MarginProfit,
+			"marginDev": in.MarginDev, "fees": in.Fees,
+			"maintPerHour": in.MaintPerHour, "purgeWasteG": in.PurgeWasteG,
+			"copies": in.Copies, "vatRate": in.VATRate, "roundStep": in.RoundStep,
 		},
 	})
 	return a.db.Jobs().Upsert(models.Job{
@@ -390,6 +424,35 @@ func (a *App) SetBaseCurrency(code string) error {
 		code = "RUB"
 	}
 	return a.db.SetSetting("base_currency", code)
+}
+
+// ListFxRates — курсы валют.
+func (a *App) ListFxRates() ([]sqlite.FxRate, error) {
+	return a.db.ListFxRates()
+}
+
+// SetFxRate задаёт курс валюты на сегодня (manager+).
+func (a *App) SetFxRate(currency string, rate float64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.SetFxRate(currency, rate)
+}
+
+// DeleteFxRate удаляет курс (manager+).
+func (a *App) DeleteFxRate(currency, day string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.DeleteFxRate(currency, day)
+}
+
+// ConvertCurrency пересчитывает все суммы в target и переключает базу (manager+).
+func (a *App) ConvertCurrency(target string, rate float64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.ConvertCurrency(target, rate)
 }
 
 // HistoryColumns — все колонки истории печати (порядок фиксирован).

@@ -198,14 +198,22 @@
   }
 
   function originBadge(j: JobDTO): string {
-    if (j.Origin === 'manual') return $t('hist.manual');
-    if (j.Origin === 'moonraker') return 'Moonraker';
-    return 'CSV';
+    let s = '';
+    if (j.Origin === 'manual') s = $t('hist.manual');
+    else if (j.Origin === 'moonraker') s = 'Moonraker';
+    else s = 'CSV';
+    if (j.Edited) s += ` · ${$t('hist.edited')}`;
+    return s;
   }
 
   async function remove(j: JobDTO) {
     error = '';
-    if (!(await askConfirm(`${$t('common.delete_q')} «${j.Filename}»?`))) return;
+    // Изменённая импортированная: удаление = откат к импорту (строка остаётся).
+    const revert = j.Origin !== 'manual';
+    const q = revert
+      ? `${$t('common.revert_q')} «${j.Filename}»?`
+      : `${$t('common.delete_q')} «${j.Filename}»?`;
+    if (!(await askConfirm(q))) return;
     try {
       await wails.deleteJob(j.ID);
       await load();
@@ -274,17 +282,17 @@
         </select>
       </label>
       <label>{$t('calc.material')}<input bind:value={edit.material} placeholder="PETG-NIT-W4" /></label>
-      <label>{$t('hist.slicer')}<input bind:value={edit.slicer} /></label>
+      <label>{$t('hist.slicer')}<input bind:value={edit.slicer} placeholder="OrcaSlicer" /></label>
     </div>
     <div class="row">
       <label>{$t('hist.start')}<input bind:value={edit.startAt} placeholder="2026-10-08 10:00" /></label>
       <label>{$t('hist.end')}<input bind:value={edit.endAt} placeholder="2026-10-08 12:00" /></label>
-      <label>{$t('hist.print_sec')}<input type="number" min="0" bind:value={edit.printSec} /></label>
-      <label>{$t('hist.total_sec')}<input type="number" min="0" bind:value={edit.totalSec} /></label>
+      <label>{$t('hist.print_sec')}<input placeholder="3600" type="number" min="0" bind:value={edit.printSec} /></label>
+      <label>{$t('hist.total_sec')}<input placeholder="7200" type="number" min="0" bind:value={edit.totalSec} /></label>
     </div>
     <div class="row">
-      <label>{$t('hist.weight')}<input type="number" min="0" step="0.01" bind:value={edit.weightG} /></label>
-      <label>{$t('hist.length')}<input type="number" min="0" step="0.01" bind:value={edit.lengthM} /></label>
+      <label>{$t('hist.weight')}<input placeholder="135" type="number" min="0" step="0.01" bind:value={edit.weightG} /></label>
+      <label>{$t('hist.length')}<input placeholder="45" type="number" min="0" step="0.01" bind:value={edit.lengthM} /></label>
     </div>
     <p class="note">{$t('hist.edit_note')}</p>
     <div class="row">
@@ -326,9 +334,11 @@
         {/each}
         <td class="no-print">
           <button onclick={() => toCalc(j)}>{$t('hist.to_calc')}</button>
-          {#if canWrite($user) && j.Origin === 'manual'}
-            <button onclick={() => startEdit(j)}>✎</button>
-            <button onclick={() => remove(j)}>✕</button>
+          {#if canWrite($user)}
+            <button onclick={() => startEdit(j)} title={$t('hist.edit_title')}>✎</button>
+            {#if j.Origin === 'manual' || j.Edited}
+              <button onclick={() => remove(j)} title={j.Origin === 'manual' ? $t('common.delete_q') : $t('common.revert_q')}>{j.Origin === 'manual' ? '✕' : '↩'}</button>
+            {/if}
           {/if}
         </td>
       </tr>
@@ -338,15 +348,15 @@
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-  .note { color: #666; }
+  .note { color: var(--muted); }
   input, select, button { padding: 6px; font-size: 14px; }
-  .count { color: #666; font-size: 13px; }
+  .count { color: var(--muted); font-size: 13px; }
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
   table { font-size: 13px; }
   td.file { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
-  .err { color: #b00; }
-  .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .err { color: var(--err); }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
   .card h3 { margin: 0 0 8px; font-size: 15px; }
   .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 130px; }

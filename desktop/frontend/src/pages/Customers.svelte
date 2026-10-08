@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { gotoCustomerOrders } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let list: Customer[] = $state([]);
@@ -95,13 +96,13 @@
     {#each list as c}
       {#if editId === c.ID}
         <tr>
-          <td><input bind:value={edit.Name} /></td>
-          <td><input bind:value={edit.Contact} /></td>
-          <td><input bind:value={edit.Note} /></td>
+          <td><input bind:value={edit.Name} placeholder={$t('cust.name')} /></td>
+          <td><input bind:value={edit.Contact} placeholder={$t('cust.contact')} /></td>
+          <td><input bind:value={edit.Note} placeholder={$t('cust.note')} /></td>
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr><td>{c.Name}</td><td>{c.Contact}</td><td>{c.Note}</td>
+        <tr><td><button class="link" onclick={() => gotoCustomerOrders(c.ID)}>{c.Name}</button></td><td>{c.Contact}</td><td>{c.Note}</td>
           <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(c)}>✎</button> <button onclick={() => remove(c)}>✕</button>{/if}</td>
         </tr>
       {/if}
@@ -113,5 +114,6 @@
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   input, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
-  .err { color: #b00; }
+  .err { color: var(--err); }
+  button.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
 </style>

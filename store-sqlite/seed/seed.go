@@ -171,7 +171,11 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 			"input": map[string]any{
 				"tariff": DefaultTariff, "powerKW": DefaultPower,
 				"amortPerHour": amortHour, "opRate": DefaultOpRate,
-				"prepH": 0, "postH": 0,
+				"prepH": 0, "postH": 0, "designerRate": 0, "modelH": 0,
+				"modelPrice": 0, "extraMat": 0, "failRate": 0,
+				"marginProfit": 0, "marginDev": 0, "fees": 0,
+				"maintPerHour": 0, "purgeWasteG": 0, "copies": 1,
+				"vatRate": 0, "roundStep": 0,
 			},
 		})
 		if _, err := jobs.Upsert(models.Job{
