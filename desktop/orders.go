@@ -181,15 +181,24 @@ func (a *App) AddOrderItem(in OrderItemInput) (int64, error) {
 	})
 }
 
-// AddPayment — оплата (manager+).
-func (a *App) AddPayment(orderID, amount int64, note string) (int64, error) {
+// AddPayment — оплата всего заказа (itemID=0) или позиции (manager+).
+func (a *App) AddPayment(orderID, itemID, amount int64, note string) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
 		return 0, err
 	}
 	return a.db.Orders().AddPayment(models.Payment{
-		OrderID: orderID, Amount: amount,
+		OrderID: orderID, OrderItem: itemID, Amount: amount,
 		PaidAt: time.Now().Format("2006-01-02"), Note: note,
 	})
+}
+
+// DeleteOrderItem — удалить позицию с пересчётом (manager+).
+// Оплаты позиции сохраняются как оплаты всего заказа.
+func (a *App) DeleteOrderItem(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().DeleteOrderItem(id)
 }
 
 // RevenueByMonth — выручка по месяцам.
