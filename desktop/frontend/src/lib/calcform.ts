@@ -71,3 +71,25 @@ export const calcFormDefaults: CalcForm = {
 };
 
 export const calcForm = writable<CalcForm>({ ...calcFormDefaults });
+
+const LS_KEY = 'calcform.v1';
+
+// Загрузка сохранённого (пережить перезапуск приложения).
+try {
+  const raw = localStorage.getItem(LS_KEY);
+  if (raw) {
+    const saved = { ...calcFormDefaults, ...JSON.parse(raw) };
+    calcForm.set(saved);
+  }
+} catch {
+  // битый localStorage — остаёмся на дефолтах
+}
+
+// Каждое изменение формы — сразу в localStorage.
+calcForm.subscribe((v) => {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(v));
+  } catch {
+    // переполнен/запрещён — молча пропускаем
+  }
+});

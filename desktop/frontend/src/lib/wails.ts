@@ -186,6 +186,25 @@ export interface JobEdit {
   lengthM: number;
   slicer: string;
   material: string;
+  tariff: number;
+  powerKW: number;
+  amortPerHour: number;
+  maintPerHour: number;
+  purgeWasteG: number;
+  opRate: number;
+  prepH: number;
+  postH: number;
+  designerRate: number;
+  modelH: number;
+  modelPrice: number;
+  extraMat: number;
+  failRate: number;
+  marginProfit: number;
+  marginDev: number;
+  fees: number;
+  copies: number;
+  vatRate: number;
+  roundStep: number;
 }
 
 export interface BackupManifest {

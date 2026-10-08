@@ -32,9 +32,34 @@ type Printers interface {
 type Jobs interface {
 	Upsert(j models.Job) (int64, error)
 	List(limit int) ([]models.Job, error)
-	DeleteJob(id int64) error                         // manual — удалить; edited import — откат; чистый import — блок
-	UpdateManual(j models.Job, material string) error // правка + автопересчёт (manual и import)
-	RevertJob(id int64) error                         // откат изменённой к импорту
+	DeleteJob(id int64) error                                          // manual — удалить; edited import — откат; чистый import — блок
+	UpdateManual(j models.Job, material string, in JobCalcInput) error // правка + автопересчёт (manual и import)
+	RevertJob(id int64) error                                          // откат изменённой к импорту
+}
+
+// JobCalcInput — расчётный контекст правки работы.
+// Ключи/единицы совпадают с полями input снапшота v2 (failRate/vatRate — доли,
+// marginProfit/marginDev — доли, copies — штук). Фронт шлёт полный набор.
+type JobCalcInput struct {
+	Tariff       float64
+	PowerKW      float64
+	AmortPerHour float64
+	MaintPerHour float64
+	PurgeWasteG  float64
+	OpRate       float64
+	PrepH        float64
+	PostH        float64
+	DesignerRate float64
+	ModelH       float64
+	ModelPrice   float64
+	ExtraMat     float64
+	FailRate     float64
+	MarginProfit float64
+	MarginDev    float64
+	Fees         float64
+	Copies       int
+	VATRate      float64
+	RoundStep    float64
 }
 
 // Users — локальные пользователи и роли.

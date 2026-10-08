@@ -7,6 +7,7 @@
   import { askConfirm } from '../lib/confirm';
   import { prefillJob } from '../lib/prefill';
   import { goTab } from '../lib/nav';
+  import { calcFormDefaults } from '../lib/calcform';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let jobs: JobDTO[] = $state([]);
@@ -224,20 +225,47 @@
     }
   }
 
-  // Правка ручной работы (с автопересчётом на бэкенде).
+  // Правка работы истории (manual и import) с автопересчётом на бэкенде.
+  // Расчётные поля — как в Калькуляторе (проценты — %, в snapshot уйдут долями).
   let editId = $state(0);
   let edit = $state({
     filename: '', status: 'completed', startAt: '', endAt: '',
     printSec: 0, totalSec: 0, weightG: 0, lengthM: 0, slicer: '', material: '',
+    tariff: 0, powerKW: 0, amortPerHour: 0, maintPerHour: 0, purgeG: 0,
+    opRate: 0, prepH: 0, postH: 0, designerRate: 0, modelH: 0, modelPrice: 0,
+    extraMat: 0, failPct: 0, marginProfitPct: 0, marginDevPct: 0, fees: 0,
+    copies: 1, vatPct: 0, roundStep: 0,
   });
 
   function startEdit(j: JobDTO) {
     error = '';
     editId = j.ID;
+    // Вход из снапшота; чего нет (импорт) — дефолты Калькулятора.
+    const d = calcFormDefaults;
+    let inp: Record<string, number> = {};
+    try {
+      inp = JSON.parse(j.CostSnapshot)?.input ?? {};
+    } catch {
+      inp = {};
+    }
+    const pick = (k: string, fb: number) => (inp[k] != null ? inp[k] : fb);
     edit = {
       filename: j.Filename, status: j.Status, startAt: j.StartAt, endAt: j.EndAt,
       printSec: j.PrintSec, totalSec: j.TotalSec, weightG: j.WeightG,
       lengthM: j.LengthM, slicer: j.Slicer, material: snapMaterial(j),
+      tariff: pick('tariff', d.tariff), powerKW: pick('powerKW', d.powerKW),
+      amortPerHour: pick('amortPerHour', d.amortPerHour),
+      maintPerHour: pick('maintPerHour', d.maintPerHour),
+      purgeG: pick('purgeWasteG', d.purgeG),
+      opRate: pick('opRate', d.opRate), prepH: pick('prepH', d.prepH), postH: pick('postH', d.postH),
+      designerRate: pick('designerRate', d.designerRate),
+      modelH: pick('modelH', d.modelH), modelPrice: pick('modelPrice', d.modelPrice),
+      extraMat: pick('extraMat', d.extraMat),
+      failPct: pick('failRate', 0) * 100,
+      marginProfitPct: pick('marginProfit', d.marginProfitPct / 100) * 100,
+      marginDevPct: pick('marginDev', d.marginDevPct / 100) * 100,
+      fees: pick('fees', d.fees), copies: Math.max(1, Math.round(pick('copies', 1))),
+      vatPct: pick('vatRate', 0) * 100, roundStep: pick('roundStep', 0),
     };
   }
 
@@ -260,6 +288,15 @@
         estimatedSec: 0, sizeBytes: 0,
         weightG: edit.weightG, lengthM: edit.lengthM,
         slicer: edit.slicer, material: edit.material.trim(),
+        tariff: edit.tariff, powerKW: edit.powerKW,
+        amortPerHour: edit.amortPerHour, maintPerHour: edit.maintPerHour,
+        purgeWasteG: edit.purgeG,
+        opRate: edit.opRate, prepH: edit.prepH, postH: edit.postH,
+        designerRate: edit.designerRate, modelH: edit.modelH, modelPrice: edit.modelPrice,
+        extraMat: edit.extraMat, failRate: edit.failPct / 100,
+        marginProfit: edit.marginProfitPct / 100, marginDev: edit.marginDevPct / 100,
+        fees: edit.fees, copies: Math.max(1, Math.round(edit.copies)),
+        vatRate: edit.vatPct / 100, roundStep: edit.roundStep,
       });
       editId = 0;
       await load();
@@ -300,6 +337,29 @@
     <div class="row">
       <label>{$t('hist.weight')}<input placeholder="135" type="number" min="0" step="0.01" bind:value={edit.weightG} /></label>
       <label>{$t('hist.length')}<input placeholder="45" type="number" min="0" step="0.01" bind:value={edit.lengthM} /></label>
+      <label>{$t('calc.tariff')}<input type="number" min="0" step="0.01" bind:value={edit.tariff} /></label>
+      <label>{$t('calc.power')}<input type="number" min="0" step="0.01" bind:value={edit.powerKW} /></label>
+      <label>{$t('calc.amort')}<input type="number" min="0" step="0.01" bind:value={edit.amortPerHour} /></label>
+      <label>{$t('calc.maint')}<input type="number" min="0" step="0.01" bind:value={edit.maintPerHour} /></label>
+      <label>{$t('calc.purge')}<input type="number" min="0" step="0.1" bind:value={edit.purgeG} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('calc.op_rate')}<input type="number" min="0" bind:value={edit.opRate} /></label>
+      <label>{$t('calc.prep')}<input type="number" min="0" step="0.1" bind:value={edit.prepH} /></label>
+      <label>{$t('calc.post')}<input type="number" min="0" step="0.1" bind:value={edit.postH} /></label>
+      <label>{$t('calc.designer_rate')}<input type="number" min="0" bind:value={edit.designerRate} /></label>
+      <label>{$t('calc.model_h')}<input type="number" min="0" step="0.1" bind:value={edit.modelH} /></label>
+      <label>{$t('calc.model_price')}<input type="number" min="0" bind:value={edit.modelPrice} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('calc.extra')}<input type="number" min="0" bind:value={edit.extraMat} /></label>
+      <label>{$t('calc.fees')}<input type="number" min="0" bind:value={edit.fees} /></label>
+      <label>{$t('calc.fail')}<input type="number" min="0" step="0.1" bind:value={edit.failPct} /></label>
+      <label>{$t('calc.margin_profit')}<input type="number" min="0" step="1" bind:value={edit.marginProfitPct} /></label>
+      <label>{$t('calc.margin_dev')}<input type="number" min="0" step="1" bind:value={edit.marginDevPct} /></label>
+      <label>{$t('calc.copies')}<input type="number" min="1" step="1" bind:value={edit.copies} /></label>
+      <label>{$t('calc.vat')}<input type="number" min="0" step="1" bind:value={edit.vatPct} /></label>
+      <label>{$t('calc.round')}<input type="number" min="0" step="1" bind:value={edit.roundStep} /></label>
     </div>
     <p class="note">{$t('hist.edit_note')}</p>
     <div class="row">

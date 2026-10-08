@@ -6,6 +6,7 @@ import (
 
 	"3dprint-calc/core/calc"
 	"3dprint-calc/core/models"
+	"3dprint-calc/core/store"
 )
 
 // CRUD справочников: правки и удаления с блокировкой при живых связях.
@@ -134,43 +135,23 @@ func (r *printersRepo) Delete(id int64) error {
 	return nil
 }
 
-// legacy-тарифы сида/импорта для пересчёта старых снапшотов v1.
-const (
-	legacyTariff = 7.08
-	legacyPower  = 0.35
-	legacyOpRate = 100.0
-)
-
-// snapshotCtx вытаскивает контекст тарифов из снапшота (v2) или legacy-дефолты.
-// Ключи совпадают с именами полей снапшота input (см. seed + SaveJob).
-func snapshotCtx(raw string) map[string]float64 {
-	ctx := map[string]float64{
-		"tariff": legacyTariff, "powerKW": legacyPower,
-		"amortPerHour": calc.AmortCalendarHour(47454, 1096, 8),
-		"opRate":       legacyOpRate, "prepH": 0, "postH": 0,
-		"designerRate": 0, "modelH": 0, "modelPrice": 0, "extraMat": 0,
-		"failRate": 0, "marginProfit": 0, "marginDev": 0, "fees": 0,
-		"maintPerHour": 0, "purgeWasteG": 0, "copies": 1,
-		"vatRate": 0, "roundStep": 0,
-	}
+// snapshotCurrency вытаскивает валюту из снапшота (v2), иначе RUB.
+func snapshotCurrency(raw string) string {
 	var snap struct {
-		Input map[string]float64 `json:"input"`
+		Currency string `json:"currency"`
 	}
-	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
-		return ctx
+	if err := json.Unmarshal([]byte(raw), &snap); err != nil || snap.Currency == "" {
+		return "RUB"
 	}
-	for k, v := range snap.Input {
-		if _, ok := ctx[k]; ok {
-			ctx[k] = v
-		}
-	}
-	return ctx
+	return snap.Currency
 }
 
-// UpdateManual правит ручную работу (origin=manual) и АВТОМАТИЧЕСКИ пересчитывает
-// себестоимость И цену по полному контексту снапшота: цена материала — текущая
-// (первая катушка), тарифы — из контекста (v1 → legacy-дефолты). Снапшот — v2.
-func (r *jobsRepo) UpdateManual(j models.Job, material string) error {
+// UpdateManual правит работу истории (manual и import) и пересчитывает
+// себестоимость И цену строго по переданному расчётному контексту in.
+// Цена материала — текущая (первая катушка). Снапшот — v2, валюта — из
+// старого снапшота (RUB по умолчанию). Первая правка импортированной
+// фиксирует первозданное в orig_snapshot для отката (edited=1).
+func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcInput) error {
 	if j.ID == 0 {
 		return fmt.Errorf("ERR_JOB_SAVE: пустой id")
 	}
@@ -209,19 +190,34 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string) error {
 			pricePerKg = m
 		}
 	}
-	ctx := snapshotCtx(cur.CostSnapshot)
+	copies := in.Copies
+	if copies < 1 {
+		copies = 1
+	}
 	res := calc.Calculate(calc.Input{
 		TotalSec: float64(j.TotalSec), WeightG: j.WeightG, PricePerKg: pricePerKg,
-		Tariff: ctx["tariff"], PowerKW: ctx["powerKW"], AmortPerHour: ctx["amortPerHour"],
-		MaintPerHour: ctx["maintPerHour"], PurgeWasteG: ctx["purgeWasteG"],
-		OpRate: ctx["opRate"], PrepH: ctx["prepH"], PostH: ctx["postH"],
-		DesignerRate: ctx["designerRate"], ModelH: ctx["modelH"], ModelPrice: ctx["modelPrice"],
-		ExtraMat: ctx["extraMat"], FailRate: ctx["failRate"],
-		MarginProfit: ctx["marginProfit"], MarginDev: ctx["marginDev"], Fees: ctx["fees"],
-		Copies: int(ctx["copies"] + 0.5), VATRate: ctx["vatRate"], RoundStep: ctx["roundStep"],
+		Tariff: in.Tariff, PowerKW: in.PowerKW, AmortPerHour: in.AmortPerHour,
+		MaintPerHour: in.MaintPerHour, PurgeWasteG: in.PurgeWasteG,
+		OpRate: in.OpRate, PrepH: in.PrepH, PostH: in.PostH,
+		DesignerRate: in.DesignerRate, ModelH: in.ModelH, ModelPrice: in.ModelPrice,
+		ExtraMat: in.ExtraMat, FailRate: in.FailRate,
+		MarginProfit: in.MarginProfit, MarginDev: in.MarginDev, Fees: in.Fees,
+		Copies: copies, VATRate: in.VATRate, RoundStep: in.RoundStep,
 	})
+	ctx := map[string]any{
+		"tariff": in.Tariff, "powerKW": in.PowerKW,
+		"amortPerHour": in.AmortPerHour, "opRate": in.OpRate,
+		"prepH": in.PrepH, "postH": in.PostH,
+		"designerRate": in.DesignerRate, "modelH": in.ModelH,
+		"modelPrice": in.ModelPrice, "extraMat": in.ExtraMat,
+		"failRate": in.FailRate, "marginProfit": in.MarginProfit,
+		"marginDev": in.MarginDev, "fees": in.Fees,
+		"maintPerHour": in.MaintPerHour, "purgeWasteG": in.PurgeWasteG,
+		"copies": copies, "vatRate": in.VATRate, "roundStep": in.RoundStep,
+	}
+	currency := snapshotCurrency(cur.CostSnapshot)
 	snap, _ := json.Marshal(map[string]any{
-		"v": 2, "material": material, "cost": res.Cost, "price": res.PriceVAT, "currency": "RUB",
+		"v": 2, "material": material, "cost": res.Cost, "price": res.PriceVAT, "currency": currency,
 		"input": ctx,
 	})
 	if _, err := r.db.Exec(`UPDATE jobs SET filename=?, status=?, start_at=?, end_at=?,
