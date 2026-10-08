@@ -244,6 +244,7 @@ export interface OrderItem {
   Qty: number;
   Cost: number;
   Price: number;
+  PaidManual: boolean;
 }
 
 export interface Payment {
@@ -379,6 +380,7 @@ declare global {
           OpenURL(url: string): Promise<void>;
           AddOrderItem(item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }): Promise<number>;
           DeleteOrderItem(id: number): Promise<void>;
+          ToggleItemPaid(id: number, paid: boolean): Promise<void>;
           AddPayment(orderId: number, itemId: number, amount: number, note: string): Promise<number>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
           TopMaterials(): Promise<MaterialStat[]>;
@@ -468,6 +470,7 @@ export const wails = {
   addOrderItem: (item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }) =>
     api().AddOrderItem(item),
   deleteOrderItem: (id: number) => api().DeleteOrderItem(id),
+  toggleItemPaid: (id: number, paid: boolean) => api().ToggleItemPaid(id, paid),
   addPayment: (orderId: number, itemId: number, amount: number, note: string) =>
     api().AddPayment(orderId, itemId, amount, note),
   revenueByMonth: () => api().RevenueByMonth(),

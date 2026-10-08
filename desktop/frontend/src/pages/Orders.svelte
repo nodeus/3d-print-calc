@@ -63,11 +63,22 @@
   }
 
   function itemState(it: OrderItem): string {
+    if (it.PaidManual) return 'paid';
     const total = Math.round(it.Price * it.Qty);
     const paid = itemPaid(it.ID);
     if (paid >= total) return 'paid';
     if (paid <= 0) return 'unpaid';
     return 'partial';
+  }
+
+  async function togglePaid(it: OrderItem) {
+    error = '';
+    try {
+      await wails.toggleItemPaid(it.ID, !it.PaidManual);
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
   }
 
   function itemTitleOf(id: number): string {
@@ -313,7 +324,7 @@
       <table>
         <thead><tr><th>№</th><th>{$t('ord.item')}</th><th class="n">{$t('ord.qty')}</th><th class="n">{$t('calc.cost')}</th><th class="n">{$t('calc.price')}</th><th class="n">{$t('ord.paid')}</th><th>{$t('ord.pay_state')}</th><th class="no-print"></th></tr></thead>
         <tbody>
-          {#each detail.items as it, i}<tr><td>{i + 1}</td><td>{it.Title}</td><td class="n">{it.Qty}</td><td class="n">{money(it.Cost / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(it.Price / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(itemPaid(it.ID) / 100, detail.order.Currency, 'ru')}</td><td>{payStateLabel(itemState(it))}</td><td class="no-print">{#if canWrite($user)}<button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td></tr>{/each}
+          {#each detail.items as it, i}<tr><td>{i + 1}</td><td>{it.Title}</td><td class="n">{it.Qty}</td><td class="n">{money(it.Cost / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(it.Price / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(itemPaid(it.ID) / 100, detail.order.Currency, 'ru')}</td><td>{payStateLabel(itemState(it))}{#if it.PaidManual} ✓{/if}</td><td class="no-print">{#if canWrite($user)}<button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td></tr>{/each}
         </tbody>
       </table>
       {#if canWrite($user)}

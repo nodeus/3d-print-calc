@@ -164,6 +164,8 @@
   "ord.pay": "Сумма оплаты",
   "ord.note": "Примечание",
   "ord.pay_add": "Оплатить",
+  "ord.mark_paid": "Отметить оплаченной",
+  "ord.unmark_paid": "Снять отметку",
   "ord.filtered_by": "Заказчик",
   "ord.item_ph": "напр. Крюк",
   "hist.datetime_ph": "ГГГГ-ММ-ДД чч:мм",

@@ -164,6 +164,8 @@
   "ord.pay": "Payment amount",
   "ord.note": "Note",
   "ord.pay_add": "Pay",
+  "ord.mark_paid": "Mark paid",
+  "ord.unmark_paid": "Unmark",
   "ord.filtered_by": "Customer",
   "ord.item_ph": "e.g. Hook",
   "hist.datetime_ph": "YYYY-MM-DD HH:MM",
