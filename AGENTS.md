@@ -19,6 +19,7 @@
   либо через `backup.zip`. Офлайн-first сохраняется.
 - **Принтер в парке:** Creality K1C + Moonraker. CSV-импорт и Moonraker `history/list`
   работают (dry-run + прогресс). Адрес Moonraker вводится **со схемой** (`http://IP:7125`).
+  Импорт забирает **всю** историю постранично (`core/moonraker.HistoryAll`).
 - **Три режима:** (1) для себя — себестоимость, (2) заказ — клиент+позиции+статусы,
   (3) поток — очередь/отчёты/долги/НДС.
 - **Номера заказов** — по шаблону (`core/ordnum`): `{YYYY} {YY} {MM} {DD} {HH} {mm} {ss}`,
@@ -56,7 +57,10 @@ core/                       # чистый Go, ноль UI/ОС-зависимо
   store/                    # Repository-ИНТЕРФЕЙСЫ (без SQL)
   importers/                # csv_history (толерантен к пустым/"null"), filename_parser, gcode_meta
   export/                   # backup.zip, csv, pdf.go (gofpdf + DejaVu) + fonts/
-  moonraker/                # клиент K1C (NormalizeBase добавляет http://)
+  moonraker/                # клиент K1C (NormalizeBase добавляет http://).
+                            # ВАЖНО: count в history/list = размер СТРАНИЦЫ, не базы!
+                            # Стоп только: пустая страница / нет новых job_id (+ maxPages).
+                            # totals.total_jobs — lifetime-счётчик для сверки.
   ordnum/                   # шаблон номеров заказов
   auth/                     # argon2id (PHC без v=, 5 частей)
   i18n/                     # ru/en словари ядра (только коды ошибок)
@@ -142,6 +146,9 @@ orders(+number, +title), order_items, payments, fx_rates, settings`. Импор�
   промежуточных kWh/часов, итог — округление по правилу.
 - PowerShell пишет редиректы в UTF-16 и не знает `&&`/`||`: инлайн-скрипты — только через
   файлы (`Write` → `C:\Temp\*.py` → запуск → удалить), heredoc-синтаксиса нет.
+- Moonraker `count` не использовать как тотал БД. Постраничные обходы — только
+  с дедупом по серверным id и предохранителем от вечного цикла; тест обязан
+  эмулировать кэп страницы и `count=len(page)` (регресс v1.0.2 → v1.0.3).
 
 ## 6. Сборка и запуск (цели)
 
