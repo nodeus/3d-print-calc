@@ -201,6 +201,7 @@ export interface ImportReport {
   existing: number;
   stubs: number;
   dryRun: boolean;
+  serverTotal?: number;
 }
 
 export interface UserDTO {

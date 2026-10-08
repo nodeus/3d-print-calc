@@ -36,11 +36,11 @@ func (a *App) MoonrakerStatus(printerID int64) (string, error) {
 	return moonraker.New(p.MoonrakerURL).Ping(ctx)
 }
 
-// MoonrakerPreview забирает историю и считает dry-run отчёт.
+// MoonrakerPreview забирает ВСЮ историю и считает dry-run отчёт.
 func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
 	rep.DryRun = true
-	rows, err := a.fetchMoonraker(printerID, limit)
+	rows, serverTotal, err := a.fetchMoonraker(printerID, limit)
 	if err != nil {
 		return rep, err
 	}
@@ -49,6 +49,7 @@ func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport,
 		return rep, err
 	}
 	rep.Total, rep.New, rep.Existing = len(rows), fresh, exist
+	rep.ServerTotal = serverTotal
 	a.pendingMoonraker = rows
 	a.pendingPrinterID = printerID
 	a.pendingNew, a.pendingExisting = fresh, exist
@@ -87,25 +88,34 @@ func (a *App) findPrinter(id int64) (models.Printer, error) {
 	return models.Printer{}, errPrinterNotFound
 }
 
-func (a *App) fetchMoonraker(printerID int64, limit int) ([]importers.PrintJob, error) {
+func (a *App) fetchMoonraker(printerID int64, limit int) ([]importers.PrintJob, int, error) {
 	p, err := a.findPrinter(printerID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if p.MoonrakerURL == "" {
-		return nil, errMoonrakerUnset
+		return nil, 0, errMoonrakerUnset
 	}
-	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
+	page := int64(limit)
+	if page <= 0 || page > 500 {
+		page = 250
+	}
+	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Minute)
 	defer cancel()
-	jobs, _, err := moonraker.New(p.MoonrakerURL).History(ctx, int64(limit), 0)
+	var serverTotal int
+	jobs, err := moonraker.New(p.MoonrakerURL).HistoryAll(ctx, page,
+		func(fetched, total int) {
+			serverTotal = total
+			a.emitProgress(fetched, total)
+		})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]importers.PrintJob, 0, len(jobs))
 	for _, j := range jobs {
 		out = append(out, j.ToPrintJob())
 	}
-	return out, nil
+	return out, serverTotal, nil
 }
 
 var (

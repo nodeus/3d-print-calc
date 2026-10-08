@@ -194,6 +194,7 @@
   "moon.title": "Moonraker (K1C)",
   "moon.check": "Check connection",
   "moon.import": "Import history (dry-run)",
+  "moon.server_total": "total on printer",
   "nav.info": "Info",
   "common.print": "Print",
   "common.pdf": "PDF",
