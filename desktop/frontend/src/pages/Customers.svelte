@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { gotoCustomerOrders } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
 
   let list: Customer[] = $state([]);

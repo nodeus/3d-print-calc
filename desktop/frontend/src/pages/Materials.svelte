@@ -128,7 +128,7 @@
     <input placeholder="PETG-NIT-W4" bind:value={newCode} />
     <input list="mat-types" bind:value={newType} placeholder={$t('mat.type')} />
     <datalist id="mat-types">
-      {#each knownTypes as tp}<option value={tp} />{/each}
+      {#each knownTypes as tp}<option value={tp}></option>{/each}
     </datalist>
     <input type="number" step="0.01" bind:value={newDensity} title={$t('mat.density')} />
     <input type="number" min="0" bind:value={newPrice} title={$t('mat.price')} />
@@ -167,9 +167,6 @@
           <td><input bind:value={edit.Vendor} /></td>
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
-        <datalist id="mat-types-edit">
-          {#each knownTypes as tp}<option value={tp} />{/each}
-        </datalist>
       {:else}
         <tr><td>{m.code}</td><td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td class="n">{m.defaultWeightG || 1000}</td><td>{m.vendor}</td>
           <td class="no-print">
@@ -180,10 +177,13 @@
     {/each}
   </tbody>
 </table>
+<datalist id="mat-types-edit">
+  {#each knownTypes as tp}<option value={tp}></option>{/each}
+</datalist>
 
 <style>
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-  input, select, button { padding: 6px; font-size: 14px; }
+  input, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
   .err { color: var(--err); }
   .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; padding: 0; vertical-align: middle; }

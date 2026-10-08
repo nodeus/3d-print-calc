@@ -307,8 +307,8 @@
           </div>
         {/if}
       {/if}
-      {#if detail.DiscountPct || detail.DiscountFixed}
-        <p>{$t('ord.discount')}: {detail.DiscountPct}% + {money(detail.DiscountFixed / 100, detail.order.Currency, 'ru')}</p>
+      {#if detail.order.DiscountPct || detail.order.DiscountFixed}
+        <p>{$t('ord.discount')}: {detail.order.DiscountPct}% + {money(detail.order.DiscountFixed / 100, detail.order.Currency, 'ru')}</p>
       {/if}
       <table>
         <thead><tr><th>№</th><th>{$t('ord.item')}</th><th class="n">{$t('ord.qty')}</th><th class="n">{$t('calc.cost')}</th><th class="n">{$t('calc.price')}</th><th class="n">{$t('ord.paid')}</th><th>{$t('ord.pay_state')}</th><th class="no-print"></th></tr></thead>

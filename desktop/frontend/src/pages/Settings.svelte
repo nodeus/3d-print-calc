@@ -3,7 +3,7 @@
   import { wails, type BackupManifest, type ImportReport, type FxRate } from '../lib/wails';
   import { t, locale, switchLocale } from '../lib/i18n';
   import { setBaseSym } from '../lib/currency';
-  import { user, isAdmin } from '../lib/session';
+  import { user, isAdmin, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
   import { THEME_VARS, applyTheme, persistTheme, type ThemeVars } from '../lib/theme';
   import Users from './Users.svelte';

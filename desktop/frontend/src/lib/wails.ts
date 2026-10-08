@@ -157,6 +157,19 @@ export interface JobInput {
   opRate: number;
   prepH: number;
   postH: number;
+  designerRate: number;
+  modelH: number;
+  modelPrice: number;
+  extraMat: number;
+  failRate: number;
+  marginProfit: number;
+  marginDev: number;
+  fees: number;
+  maintPerHour: number;
+  purgeWasteG: number;
+  copies: number;
+  vatRate: number;
+  roundStep: number;
 }
 
 export interface JobEdit {
@@ -365,7 +378,6 @@ declare global {
           OpenURL(url: string): Promise<void>;
           AddOrderItem(item: { orderId: number; jobId: number; title: string; qty: number; cost: number; price: number }): Promise<number>;
           DeleteOrderItem(id: number): Promise<void>;
-          DeleteOrderItem(id: number): Promise<void>;
           AddPayment(orderId: number, itemId: number, amount: number, note: string): Promise<number>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
           TopMaterials(): Promise<MaterialStat[]>;
@@ -457,7 +469,6 @@ export const wails = {
   deleteOrderItem: (id: number) => api().DeleteOrderItem(id),
   addPayment: (orderId: number, itemId: number, amount: number, note: string) =>
     api().AddPayment(orderId, itemId, amount, note),
-  deleteOrderItem: (id: number) => api().DeleteOrderItem(id),
   revenueByMonth: () => api().RevenueByMonth(),
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
