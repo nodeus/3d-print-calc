@@ -12,6 +12,7 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { myHistoryColumns, saveMySettingsPatch } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { startColDrag } from '../lib/coldrag';
 
   let jobs: JobDTO[] = $state([]);
   let materials: MaterialDTO[] = $state([]);
@@ -344,55 +345,7 @@
 
   function gripDown(e: PointerEvent, col: string) {
     if (!canWrite(get(user))) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const grip = e.currentTarget as HTMLElement;
-    const startX = e.clientX;
-    let dragging = false;
-    const ths = () =>
-      [...(wrapEl?.querySelectorAll('thead th[data-col]') ?? [])] as HTMLElement[];
-    const onMove = (ev: PointerEvent) => {
-      if (!dragging) {
-        if (Math.abs(ev.clientX - startX) < 4) return;
-        dragging = true;
-        dragCol = col;
-      }
-      // Позиция вставки: первый th, чья середина правее курсора.
-      const list = ths();
-      let idx = list.length;
-      let lineX: number | null = null;
-      const wrapR = wrapEl?.getBoundingClientRect();
-      for (let i = 0; i < list.length; i++) {
-        const r = list[i].getBoundingClientRect();
-        if (ev.clientX < r.left + r.width / 2) {
-          idx = i;
-          lineX = wrapR ? r.left - wrapR.left : null;
-          break;
-        }
-        lineX = wrapR ? r.right - wrapR.left : null;
-      }
-      (grip as HTMLElement & { __dropIdx?: number }).__dropIdx = idx;
-      dropX = lineX;
-    };
-    const onUp = async () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      const idx = (grip as HTMLElement & { __dropIdx?: number }).__dropIdx;
-      const from = columns.indexOf(col);
-      dragCol = null;
-      dropX = null;
-      if (dragging && idx != null && from >= 0) {
-        // Индекс вставки считался со строкой-источником: после удаления сдвиг.
-        let to = idx > from ? idx - 1 : idx;
-        const next = columns.filter((c) => c !== col);
-        to = Math.max(0, Math.min(next.length, to));
-        next.splice(to, 0, col);
-        if (next.join() !== columns.join()) await persistColumns(next);
-      }
-      dragging = false;
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    startColDrag(e, wrapEl, col, columns, (k, x) => { dragCol = k; dropX = x; }, persistColumns);
   }
 
   function toCalc(j: JobDTO) {
@@ -631,15 +584,6 @@
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-  .twrap { position: relative; }
-  table.dragging { user-select: none; }
-  th.dragsrc { opacity: 0.5; }
-  .grip { cursor: grab; opacity: 0.45; margin-right: 4px; font-size: 12px; }
-  .grip:active { cursor: grabbing; }
-  .drop-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); z-index: 2; pointer-events: none; }
-  @media print {
-    .grip, .drop-line { display: none; }
-  }
   .note { color: var(--muted); }
   input, select, button { padding: 6px; font-size: 14px; }
   .count { color: var(--muted); font-size: 13px; }

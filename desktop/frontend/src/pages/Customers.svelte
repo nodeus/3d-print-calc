@@ -7,6 +7,9 @@
   import { gotoCustomerOrders } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { mySettings } from '../lib/usersettings';
+  import { orderFor, saveTableOrder } from '../lib/colorder';
+  import { startColDrag } from '../lib/coldrag';
 
   let list: Customer[] = $state([]);
   let error = $state('');
@@ -36,6 +39,32 @@
     { key: 'name', label: 'cust.name' }, { key: 'contact', label: 'cust.contact' },
     { key: 'note', label: 'cust.note' },
   ];
+  const custKeys = custCols.map((c) => c.key);
+  const custLabel = (k: string) => custCols.find((c) => c.key === k)?.label ?? k;
+
+  let custOrd = $derived(orderFor($mySettings.colOrder, 'customers', custKeys));
+
+  function custText(c: Customer, k: string): string {
+    switch (k) {
+      case 'name': return c.Name;
+      case 'contact': return c.Contact;
+      case 'note': return c.Note;
+      default: return '';
+    }
+  }
+
+  let dragKey: string | null = $state(null);
+  let dropX: number | null = $state(null);
+  let wrapEl: HTMLDivElement | null = $state(null);
+
+  async function dropCols(next: string[]) {
+    error = '';
+    try {
+      await saveTableOrder('customers', next);
+    } catch (e) {
+      error = String(e);
+    }
+  }
   let name = $state('');
   let contact = $state('');
   let note = $state('');
@@ -100,8 +129,8 @@
     await downloadPDF($t('nav.customers'), [
       {
         Title: '',
-        Headers: [$t('cust.name'), $t('cust.contact'), $t('cust.note')],
-        Rows: list.map((c) => [c.Name, c.Contact, c.Note]),
+        Headers: custOrd.map((k) => $t(custLabel(k))),
+        Rows: shown.map((c) => custOrd.map((k) => custText(c, k))),
       },
     ]);
   }
@@ -117,12 +146,15 @@
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
 
-<table class="tw">
+<div class="twrap" bind:this={wrapEl}>
+{#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+<table class="tw" class:dragging={dragKey != null}>
   <thead><tr>
-    {#each custCols as c}
-      <th style={thWidth('customers', c.key)}>
-        <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
-        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'customers', c.key)} ondblclick={() => resetColWidth('customers', c.key)}></span>
+    {#each custOrd as k}
+      <th style={thWidth('customers', k)} data-col={k} class:dragsrc={dragKey === k}>
+        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, custOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }}>⋮⋮</span>{/if}
+        <button class="th" onclick={() => toggleSort(k)}>{$t(custLabel(k))}{arrow(k)}</button>
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'customers', k)} ondblclick={() => resetColWidth('customers', k)}></span>
       </th>
     {/each}
     <th class="no-print"></th>
@@ -131,19 +163,33 @@
     {#each shown as c}
       {#if editId === c.ID}
         <tr>
-          <td><input bind:value={edit.Name} placeholder={$t('cust.name')} /></td>
-          <td><input bind:value={edit.Contact} placeholder={$t('cust.contact')} /></td>
-          <td><input bind:value={edit.Note} placeholder={$t('cust.note')} /></td>
+          {#each custOrd as k}
+            {#if k === 'name'}
+              <td><input bind:value={edit.Name} placeholder={$t('cust.name')} /></td>
+            {:else if k === 'contact'}
+              <td><input bind:value={edit.Contact} placeholder={$t('cust.contact')} /></td>
+            {:else if k === 'note'}
+              <td><input bind:value={edit.Note} placeholder={$t('cust.note')} /></td>
+            {/if}
+          {/each}
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr><td><button class="link" onclick={() => gotoCustomerOrders(c.ID)}>{c.Name}</button></td><td>{c.Contact}</td><td>{c.Note}</td>
+        <tr>
+          {#each custOrd as k}
+            {#if k === 'name'}
+              <td><button class="link" onclick={() => gotoCustomerOrders(c.ID)}>{c.Name}</button></td>
+            {:else}
+              <td>{custText(c, k)}</td>
+            {/if}
+          {/each}
           <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(c)}>✎</button> <button onclick={() => remove(c)}>✕</button>{/if}</td>
         </tr>
       {/if}
     {/each}
   </tbody>
 </table>
+</div>
 
 <style>
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }

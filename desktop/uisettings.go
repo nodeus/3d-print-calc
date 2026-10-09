@@ -25,7 +25,8 @@ type UserUISettings struct {
 	Theme          string                        `json:"theme"`
 	Locale         string                        `json:"locale"`
 	HistoryColumns []string                      `json:"historyColumns"`
-	Widths         map[string]map[string]float64 `json:"widths"` // таблица → колонка → px
+	Widths         map[string]map[string]float64 `json:"widths"`   // таблица → колонка → px
+	ColOrder       map[string][]string           `json:"colOrder"` // таблица → порядок ключей колонок
 	CalcDefaults   map[string]any                `json:"calcDefaults"`
 }
 
@@ -61,8 +62,14 @@ func (a *App) loadSettingsFile() *SettingsFile {
 		parsed.Users = map[string]*UserUISettings{}
 	}
 	for _, u := range parsed.Users {
-		if u != nil && u.Widths == nil {
+		if u == nil {
+			continue
+		}
+		if u.Widths == nil {
 			u.Widths = map[string]map[string]float64{}
+		}
+		if u.ColOrder == nil {
+			u.ColOrder = map[string][]string{}
 		}
 	}
 	parsed.Version = settingsFileVersion
@@ -105,6 +112,9 @@ func (a *App) GetMyUISettings() (UserUISettings, error) {
 			if out.Widths == nil {
 				out.Widths = map[string]map[string]float64{}
 			}
+			if out.ColOrder == nil {
+				out.ColOrder = map[string][]string{}
+			}
 		}
 	}
 	return out, nil
@@ -122,6 +132,9 @@ func (a *App) SaveMyUISettings(in UserUISettings) error {
 	f := a.loadSettingsFile()
 	if in.Widths == nil {
 		in.Widths = map[string]map[string]float64{}
+	}
+	if in.ColOrder == nil {
+		in.ColOrder = map[string][]string{}
 	}
 	cp := in
 	f.Users[login] = &cp

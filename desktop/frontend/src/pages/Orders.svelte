@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { wails, type OrderRow, type OrderDetail, type Customer, type OrderItem } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
@@ -8,6 +9,9 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { mySettings } from '../lib/usersettings';
+  import { orderFor, saveTableOrder } from '../lib/colorder';
+  import { startColDrag } from '../lib/coldrag';
 
   let rows: OrderRow[] = $state([]);
   let sortKey = $state('created');
@@ -40,10 +44,30 @@
   const orderCols = [
     { key: 'number', label: 'ord.number' }, { key: 'created', label: 'ord.created' },
     { key: 'title', label: 'ord.title' }, { key: 'customer', label: 'cust.name' },
-    { key: 'status', label: 'ord.status' }, { key: 'total', label: 'ord.total' },
-    { key: 'paid', label: 'ord.paid' }, { key: 'balance', label: 'ord.balance' },
+    { key: 'status', label: 'ord.status' }, { key: 'total', label: 'ord.total', num: true },
+    { key: 'paid', label: 'ord.paid', num: true }, { key: 'balance', label: 'ord.balance', num: true },
     { key: 'paystate', label: 'ord.pay_state' },
   ];
+  const orderKeys = orderCols.map((c) => c.key);
+  const orderNum = (k: string) => orderCols.some((c) => c.key === k && c.num);
+  const orderLabel = (k: string) => orderCols.find((c) => c.key === k)?.label ?? k;
+
+  let listOrd = $derived(orderFor($mySettings.colOrder, 'orders', orderKeys));
+
+  function orderText(r: OrderRow, k: string): string {
+    switch (k) {
+      case 'number': return orderNo(r.order);
+      case 'created': return r.order.CreatedAt;
+      case 'title': return orderTitle(r.order);
+      case 'customer': return custName(r.order.CustomerID);
+      case 'status': return $t('st.' + r.order.Status);
+      case 'total': return money(r.order.TotalBase / 100, r.order.Currency, 'ru');
+      case 'paid': return money(r.paid / 100, r.order.Currency, 'ru');
+      case 'balance': return money(r.balance / 100, r.order.Currency, 'ru');
+      case 'paystate': return payStateLabel(r.payState);
+      default: return '';
+    }
+  }
 
   // Сортировка позиций в деталях.
   let itemSortKey = $state('n');
@@ -59,10 +83,50 @@
   }
 
   const itemCols = [
-    { key: 'title', label: 'ord.item' }, { key: 'qty', label: 'ord.qty' },
-    { key: 'cost', label: 'calc.cost' }, { key: 'price', label: 'calc.price' },
-    { key: 'paid', label: 'ord.paid' }, { key: 'state', label: 'ord.pay_state' },
+    { key: 'title', label: 'ord.item' }, { key: 'qty', label: 'ord.qty', num: true },
+    { key: 'cost', label: 'calc.cost', num: true }, { key: 'price', label: 'calc.price', num: true },
+    { key: 'paid', label: 'ord.paid', num: true }, { key: 'state', label: 'ord.pay_state' },
   ];
+  const itemKeys = itemCols.map((c) => c.key);
+  const itemNum = (k: string) => itemCols.some((c) => c.key === k && c.num);
+  const itemLabel = (k: string) => itemCols.find((c) => c.key === k)?.label ?? k;
+
+  let itemOrd = $derived(orderFor($mySettings.colOrder, 'orderItems', itemKeys));
+
+  function itemText(it: OrderItem, k: string): string {
+    const cur = detail?.order.Currency ?? 'RUB';
+    switch (k) {
+      case 'title': return it.Title;
+      case 'qty': return String(it.Qty);
+      case 'cost': return money(it.Cost / 100, cur, 'ru');
+      case 'price': return money(it.Price / 100, cur, 'ru');
+      case 'paid': return money(itemPaid(it.ID) / 100, cur, 'ru');
+      case 'state': return payStateLabel(itemState(it)) + (it.PaidManual ? ' ✓' : '');
+      default: return '';
+    }
+  }
+
+  // Drag-перестановка за грип (обе таблицы).
+  let dragKey: string | null = $state(null);
+  let dragTable = $state('');
+  let dropX: number | null = $state(null);
+  let wrapEl: HTMLDivElement | null = $state(null);
+  let itemWrapEl: HTMLDivElement | null = $state(null);
+
+  async function dropCols(table: string, next: string[]) {
+    error = '';
+    try {
+      await saveTableOrder(table, next);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function gripDown(e: PointerEvent, table: string, wrap: HTMLDivElement | null, k: string, ord: string[]) {
+    if (!canWrite(get(user))) return;
+    dragTable = table;
+    startColDrag(e, wrap, k, ord, (dk, x) => { dragKey = dk; dropX = x; }, (next) => dropCols(table, next));
+  }
 
   function shownItems(items: OrderItem[]): OrderItem[] {
     if (!items) return [];
@@ -316,11 +380,9 @@
       await downloadPDF(`${$t('ord.number')}: ${orderNo(detail.order)} · ${detail.order.CreatedAt}`, [
         {
           Title: orderTitle(detail.order),
-          Headers: ['№', $t('ord.item'), $t('ord.qty'), $t('calc.price'), $t('ord.paid'), $t('ord.pay_state')],
-          Rows: detail.items.map((it, i) => [
-            String(i + 1), it.Title, String(it.Qty),
-            money(Math.round(it.Price * it.Qty) / 100, cur, 'ru'),
-            money(itemPaid(it.ID) / 100, cur, 'ru'), payStateLabel(itemState(it)),
+          Headers: ['№', ...itemOrd.map((k) => $t(itemLabel(k)))],
+          Rows: shownItems(detail.items).map((it, i) => [
+            String(i + 1), ...itemOrd.map((k) => itemText(it, k)),
           ]),
         },
         {
@@ -336,8 +398,8 @@
       await downloadPDF($t('nav.orders'), [
         {
           Title: '',
-          Headers: [$t('ord.number'), $t('ord.created'), $t('ord.title'), $t('cust.name'), $t('ord.status'), $t('ord.total'), $t('ord.paid'), $t('ord.balance'), $t('ord.pay_state')],
-          Rows: visibleRows.map((r) => [orderNo(r.order), r.order.CreatedAt, orderTitle(r.order), custName(r.order.CustomerID), $t('st.' + r.order.Status), money(r.order.TotalBase / 100, r.order.Currency, 'ru'), money(r.paid / 100, r.order.Currency, 'ru'), money(r.balance / 100, r.order.Currency, 'ru'), payStateLabel(r.payState)]),
+          Headers: listOrd.map((k) => $t(orderLabel(k))),
+          Rows: visibleRows.map((r) => listOrd.map((k) => orderText(r, k))),
         },
       ]);
     }
@@ -360,23 +422,27 @@
         <button onclick={create}>{$t('ord.new')}</button>
       </div>
     {/if}
-    <table class="tw">
+    <div class="twrap" bind:this={wrapEl}>
+    {#if dragTable === 'orders' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+    <table class="tw" class:dragging={dragTable === 'orders' && dragKey != null}>
       <thead><tr>
-        {#each orderCols as c}
-          <th class:n={['total', 'paid', 'balance'].includes(c.key)} style={thWidth('orders', c.key)}>
-            <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
-            <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orders', c.key)} ondblclick={() => resetColWidth('orders', c.key)}></span>
+        {#each listOrd as k}
+          <th class:n={orderNum(k)} style={thWidth('orders', k)} data-col={k} class:dragsrc={dragTable === 'orders' && dragKey === k}>
+            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'orders', wrapEl, k, listOrd)}>⋮⋮</span>{/if}
+            <button class="th" onclick={() => toggleSort(k)}>{$t(orderLabel(k))}{arrow(k)}</button>
+            <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orders', k)} ondblclick={() => resetColWidth('orders', k)}></span>
           </th>
         {/each}
       </tr></thead>
       <tbody>
         {#each visibleRows as r}
           <tr class:sel={detail?.order.ID === r.order.ID} onclick={() => openDetail(r.order.ID)}>
-            <td>{orderNo(r.order)}</td><td>{r.order.CreatedAt}</td><td>{orderTitle(r.order)}</td><td>{custName(r.order.CustomerID)}</td><td>{$t('st.' + r.order.Status)}</td><td class="n">{money(r.order.TotalBase / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.paid / 100, r.order.Currency, 'ru')}</td><td class="n">{money(r.balance / 100, r.order.Currency, 'ru')}</td><td>{payStateLabel(r.payState)}</td>
+            {#each listOrd as k}<td class:n={orderNum(k)}>{orderText(r, k)}</td>{/each}
           </tr>
         {/each}
       </tbody>
     </table>
+    </div>
   </section>
 
   {#if detail}
@@ -409,20 +475,28 @@
       {#if detail.order.DiscountPct || detail.order.DiscountFixed}
         <p>{$t('ord.discount')}: {detail.order.DiscountPct}% + {money(detail.order.DiscountFixed / 100, detail.order.Currency, 'ru')}</p>
       {/if}
-      <table class="tw">
+      <div class="twrap" bind:this={itemWrapEl}>
+      {#if dragTable === 'orderItems' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+      <table class="tw" class:dragging={dragTable === 'orderItems' && dragKey != null}>
         <thead><tr><th class="no-print" style="width:34px;">№</th>
-          {#each itemCols as c}
-            <th class:n={c.key !== 'title' && c.key !== 'state'} style={thWidth('orderItems', c.key)}>
-              <button class="th" onclick={() => toggleItemSort(c.key)}>{$t(c.label)}{itemArrow(c.key)}</button>
-              <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orderItems', c.key)} ondblclick={() => resetColWidth('orderItems', c.key)}></span>
+          {#each itemOrd as k}
+            <th class:n={itemNum(k)} style={thWidth('orderItems', k)} data-col={k} class:dragsrc={dragTable === 'orderItems' && dragKey === k}>
+              {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'orderItems', itemWrapEl, k, itemOrd)}>⋮⋮</span>{/if}
+              <button class="th" onclick={() => toggleItemSort(k)}>{$t(itemLabel(k))}{itemArrow(k)}</button>
+              <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orderItems', k)} ondblclick={() => resetColWidth('orderItems', k)}></span>
             </th>
           {/each}
           <th class="no-print"></th>
         </tr></thead>
         <tbody>
-          {#each shownItems(detail.items) as it, i}<tr><td>{i + 1}</td><td>{it.Title}</td><td class="n">{it.Qty}</td><td class="n">{money(it.Cost / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(it.Price / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(itemPaid(it.ID) / 100, detail.order.Currency, 'ru')}</td><td>{payStateLabel(itemState(it))}{#if it.PaidManual} ✓{/if}</td><td class="no-print">{#if canWrite($user)}<button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td></tr>{/each}
+          {#each shownItems(detail.items) as it, i}<tr>
+            <td>{i + 1}</td>
+            {#each itemOrd as k}<td class:n={itemNum(k)}>{itemText(it, k)}</td>{/each}
+            <td class="no-print">{#if canWrite($user)}<button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td>
+          </tr>{/each}
         </tbody>
       </table>
+      </div>
       {#if canWrite($user)}
         <div class="row no-print">
           <input placeholder={$t('ord.item_ph')} bind:value={itemTitle} />

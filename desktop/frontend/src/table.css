@@ -34,7 +34,40 @@ td.n {
   }
 }
 
-/* Таблицы с настраиваемыми ширинами (ручка span.rz в th). */
+/* Перестановка колонок за грип (см. lib/coldrag.ts). */
+.twrap {
+  position: relative;
+}
+table.dragging {
+  user-select: none;
+}
+th.dragsrc {
+  opacity: 0.5;
+}
+.grip {
+  cursor: grab;
+  opacity: 0.45;
+  margin-right: 4px;
+  font-size: 12px;
+}
+.grip:active {
+  cursor: grabbing;
+}
+.drop-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  z-index: 2;
+  pointer-events: none;
+}
+@media print {
+  .grip,
+  .drop-line {
+    display: none;
+  }
+}
 table.tw {
   table-layout: fixed;
 }

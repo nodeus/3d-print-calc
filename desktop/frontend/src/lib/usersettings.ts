@@ -11,6 +11,7 @@ export const mySettings = writable<UserUISettings>({
   locale: '',
   historyColumns: [],
   widths: {},
+  colOrder: {},
   calcDefaults: {},
 });
 
@@ -31,7 +32,7 @@ export async function applyMySettings(): Promise<void> {
   } catch {
     return;
   }
-  mySettings.set({ ...s, widths: s.widths ?? {}, calcDefaults: s.calcDefaults ?? {} });
+  mySettings.set({ ...s, widths: s.widths ?? {}, colOrder: s.colOrder ?? {}, calcDefaults: s.calcDefaults ?? {} });
   // Язык: файл важнее глобальной БД.
   if (s.locale === 'ru' || s.locale === 'en') {
     locale.set(s.locale);
