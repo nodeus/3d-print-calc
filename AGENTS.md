@@ -103,7 +103,9 @@ weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
 amortPerHour,opRate,prepH,postH}, cost, price, currency}` (v1 читается с фолбэком).
 Правка работы (`UpdateManual`) пересчитывает строго по полям формы правки
 (полный `input`: тарифы, ставки, наценки, НДС, копии...), цена материала — текущая
-(первая катушка). Перенос «В калькулятор»: физика (вес/время/материал) — всегда;
+(первая неархивная катушка по id — `materialPrice`, UI её метит «расчётная»).
+Катушки правятся только своим UI (Materials ▸); логика цены не менялась.
+Перенос «В калькулятор»: физика (вес/время/материал) — всегда;
 ставки — только из настоящих данных (`manual` или `edited=1`), чистый импорт
 пользовательские ставки не затирает. Форма калькулятора живёт в `calcForm`
 + `localStorage` (`calcform.v1`) — переживает вкладки и перезапуск.
@@ -133,6 +135,7 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 +bought_at, +archived — архивные скрыты из остатков и селекта калькулятора),
 +part_purchases(printer_id, bought_at, price, qty — сумма вычисляется),
 spools(material_id, price, currency, bought_at, weight_left_g), printers(...,
+calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),
 orders(+number, +title), order_items, payments, fx_rates, settings`. Импорт идемпотентен
