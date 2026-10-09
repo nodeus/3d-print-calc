@@ -87,7 +87,7 @@
       { key: 'failPct', label: 'calc.fail' },
       { key: 'marginProfitPct', label: 'calc.margin_profit' },
       { key: 'marginDevPct', label: 'calc.margin_dev' },
-      { key: 'copies', label: 'calc.copies' }, { key: 'vatPct', label: 'calc.vat' },
+      { key: 'vatPct', label: 'calc.vat' },
       { key: 'roundStep', label: 'calc.round' },
     ] },
   ];

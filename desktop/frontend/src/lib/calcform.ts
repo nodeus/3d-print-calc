@@ -22,7 +22,6 @@ export interface CalcForm {
   failPct: number | null;
   marginProfitPct: number | null;
   marginDevPct: number | null;
-  copies: number | null;
   vatPct: number | null;
   roundStep: number | null;
   fees: number | null;
@@ -56,7 +55,6 @@ export const calcFormDefaults: CalcForm = {
   failPct: 0,
   marginProfitPct: 80,
   marginDevPct: 35,
-  copies: 1,
   vatPct: 0,
   roundStep: 0,
   fees: 100,

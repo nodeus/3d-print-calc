@@ -12,6 +12,7 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { myHistoryColumns, saveMySettingsPatch, mySettings } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { splitHours, joinHours } from '../lib/hm';
   import { startColDrag } from '../lib/coldrag';
 
   let jobs: JobDTO[] = $state([]);
@@ -457,7 +458,7 @@
     filename: '', status: 'completed', startAt: '', endAt: '',
     printSec: 0, totalSec: 0, weightG: 0, lengthM: 0, slicer: '', material: '',
     tariff: 0, powerKW: 0, amortPerHour: 0, maintPerHour: 0, purgeG: 0,
-    opRate: 0, prepH: 0, postH: 0, designerRate: 0, modelH: 0, modelPrice: 0,
+    opRate: 0, designerRate: 0, modelPrice: 0,
     extraMat: 0, failPct: 0, marginProfitPct: 0, marginDevPct: 0, fees: 0,
     copies: 1, vatPct: 0, roundStep: 0,
   });
@@ -482,9 +483,8 @@
       amortPerHour: pick('amortPerHour', d.amortPerHour),
       maintPerHour: pick('maintPerHour', d.maintPerHour),
       purgeG: pick('purgeWasteG', d.purgeG),
-      opRate: pick('opRate', d.opRate), prepH: pick('prepH', d.prepH), postH: pick('postH', d.postH),
-      designerRate: pick('designerRate', d.designerRate),
-      modelH: pick('modelH', d.modelH), modelPrice: pick('modelPrice', d.modelPrice),
+      opRate: pick('opRate', d.opRate), designerRate: pick('designerRate', d.designerRate),
+      modelPrice: pick('modelPrice', d.modelPrice),
       extraMat: pick('extraMat', d.extraMat),
       failPct: pick('failRate', 0) * 100,
       marginProfitPct: pick('marginProfit', (d.marginProfitPct ?? 0) / 100) * 100,
@@ -492,7 +492,15 @@
       fees: pick('fees', d.fees), copies: Math.max(1, Math.round(pick('copies', 1))),
       vatPct: pick('vatRate', 0) * 100, roundStep: pick('roundStep', 0),
     };
+    editPrep = splitHours(pick('prepH', d.prepH ?? 0));
+    editPost = splitHours(pick('postH', d.postH ?? 0));
+    editModel = splitHours(pick('modelH', d.modelH ?? 0));
   }
+
+  // Время работ в правке — парами часы+минуты (в снапшот — десятичные часы).
+  let editPrep = $state({ h: null as number | null, m: null as number | null });
+  let editPost = $state({ h: null as number | null, m: null as number | null });
+  let editModel = $state({ h: null as number | null, m: null as number | null });
 
   function snapMaterial(j: JobDTO): string {
     try {
@@ -516,8 +524,8 @@
         tariff: edit.tariff ?? 0, powerKW: edit.powerKW ?? 0,
         amortPerHour: edit.amortPerHour ?? 0, maintPerHour: edit.maintPerHour ?? 0,
         purgeWasteG: edit.purgeG ?? 0,
-        opRate: edit.opRate ?? 0, prepH: edit.prepH ?? 0, postH: edit.postH ?? 0,
-        designerRate: edit.designerRate ?? 0, modelH: edit.modelH ?? 0, modelPrice: edit.modelPrice ?? 0,
+        opRate: edit.opRate ?? 0, prepH: joinHours(editPrep.h, editPrep.m), postH: joinHours(editPost.h, editPost.m),
+        designerRate: edit.designerRate ?? 0, modelH: joinHours(editModel.h, editModel.m), modelPrice: edit.modelPrice ?? 0,
         extraMat: edit.extraMat ?? 0, failRate: (edit.failPct ?? 0) / 100,
         marginProfit: (edit.marginProfitPct ?? 0) / 100, marginDev: (edit.marginDevPct ?? 0) / 100,
         fees: edit.fees ?? 0, copies: Math.max(1, Math.round(edit.copies ?? 1)),
@@ -570,10 +578,13 @@
     </div>
     <div class="row">
       <label>{$t('calc.op_rate')}<input type="number" min="0" bind:value={edit.opRate} /></label>
-      <label>{$t('calc.prep')}<input type="number" min="0" step="0.1" bind:value={edit.prepH} /></label>
-      <label>{$t('calc.post')}<input type="number" min="0" step="0.1" bind:value={edit.postH} /></label>
+      <label>{$t('calc.prep_h')}<input type="number" min="0" bind:value={editPrep.h} /></label>
+      <label>{$t('calc.prep_m')}<input type="number" min="0" bind:value={editPrep.m} /></label>
+      <label>{$t('calc.post_h')}<input type="number" min="0" bind:value={editPost.h} /></label>
+      <label>{$t('calc.post_m')}<input type="number" min="0" bind:value={editPost.m} /></label>
       <label>{$t('calc.designer_rate')}<input type="number" min="0" bind:value={edit.designerRate} /></label>
-      <label>{$t('calc.model_h')}<input type="number" min="0" step="0.1" bind:value={edit.modelH} /></label>
+      <label>{$t('calc.model_h')}<input type="number" min="0" bind:value={editModel.h} /></label>
+      <label>{$t('calc.model_m')}<input type="number" min="0" bind:value={editModel.m} /></label>
       <label>{$t('calc.model_price')}<input type="number" min="0" bind:value={edit.modelPrice} /></label>
     </div>
     <div class="row">
