@@ -326,6 +326,53 @@
     goTab.set('settings');
   }
 
+  // Суммы по выборке: только аддитивные колонки (сырьё, не строки ячеек).
+  const summable = ['duration', 'weight', 'length', 'size', 'filament', 'cost', 'price'];
+
+  function rawVal(j: JobDTO, key: string): number {
+    switch (key) {
+      case 'duration': return j.TotalSec;
+      case 'weight': return j.WeightG;
+      case 'length': return j.LengthM;
+      case 'size': return j.SizeBytes;
+      case 'filament': return j.FilamentTotalMm;
+      case 'cost': return snap(j).cost;
+      case 'price': return snap(j).price;
+      default: return 0;
+    }
+  }
+
+  let totals: Record<string, number> | null = $state(null);
+  let totalsN = $state(0);
+
+  function calcTotals() {
+    const t: Record<string, number> = {};
+    for (const k of summable) {
+      let s = 0;
+      for (const j of filtered) s += rawVal(j, k) || 0;
+      t[k] = Math.round(s * 100) / 100;
+    }
+    totals = t;
+    totalsN = filtered.length;
+  }
+
+  // Выборка изменилась — суммы прячем до повторного подсчёта.
+  $effect(() => {
+    void filtered.length;
+    void columns.length;
+    if (totals) totals = null;
+  });
+
+  function footText(k: string): string {
+    if (!totals) return '';
+    const labelCol = columns.includes('filename') ? 'filename' : columns[0];
+    if (k === labelCol) return `${$t('hist.total')} · ${totalsN}`;
+    if (!(k in totals)) return '';
+    const v = totals[k];
+    if (k === 'duration') return hms(Math.round(v));
+    return num(v);
+  }
+
   // Drag-перестановка колонок за грип (manager+). Порог 4px отделяет
   // перетаскивание от клика; линия показывает место вставки.
   let dragCol: string | null = $state(null);
@@ -354,11 +401,13 @@
   }
 
   async function toPDF() {
+    const rows = filtered.map((j) => columns.map((c) => cell(j, c)));
+    if (totals) rows.push(columns.map((c) => footText(c)));
     await downloadPDF($t('nav.history'), [
       {
         Title: '',
         Headers: columns.map(colLabel),
-        Rows: filtered.map((j) => columns.map((c) => cell(j, c))),
+        Rows: rows,
       },
     ]);
   }
@@ -538,6 +587,7 @@
     {#each statuses as s}<option value={s}>{s}</option>{/each}
   </select>
   <span class="count">{$t('hist.shown')}: {visible.length} / {filtered.length} / {jobs.length}</span>
+  <button onclick={calcTotals}>{$t('hist.sums_btn')}</button>
   <button onclick={openColumns}>{$t('hist.columns_btn')}: {columns.length}/{allColumns.length}</button>
   <span class="pager">
     <button disabled={page === 0} onclick={() => page--}>‹</button>
@@ -579,6 +629,12 @@
       </tr>
     {/each}
   </tbody>
+  {#if totals}
+    <tfoot><tr>
+      {#each columns as c}<td class:n={isNum(c)}><b>{footText(c)}</b></td>{/each}
+      <td class="no-print"></td>
+    </tr></tfoot>
+  {/if}
 </table>
 </div>
 
