@@ -42,14 +42,18 @@ export async function resetColWidth(table: string, col: string): Promise<void> {
 
 // startColResize — перетаскивание правого края th. Вешаем на span.rz:
 // onmousedown={(e) => startColResize(e, 'history', c)}.
+// Ширина пишется напрямую в DOM th (thWidth() нереактивен: читает стор через
+// get(), и шаблон без этого не перерендеривается). Стор обновляем живьём,
+// в файл коммитим на mouseup.
 export function startColResize(e: MouseEvent, table: string, col: string): void {
   e.preventDefault();
   e.stopPropagation();
-  const th = (e.currentTarget as HTMLElement).closest('th');
+  const th = (e.currentTarget as HTMLElement).closest('th') as HTMLElement | null;
   const startX = e.clientX;
   const startW = widthOf(table, col) ?? th?.getBoundingClientRect().width ?? 100;
   const onMove = (ev: MouseEvent) => {
     const w = Math.max(MIN_W, Math.round(startW + ev.clientX - startX));
+    if (th) th.style.width = `${w}px`;
     const all = { ...get(colWidths), [table]: { ...get(colWidths)[table], [col]: w } };
     colWidths.set(all); // живьём, без записи на каждое движение
   };

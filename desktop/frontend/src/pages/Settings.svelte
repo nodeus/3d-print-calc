@@ -17,6 +17,8 @@
   // Тема: базовые light/dark + 32 пресета. Выбранный пресет хранится
   // в БД как обычная кастомная тема (переживает перезапуск).
   let theme = $state('light');
+  // Таб: main | data | look.
+  let setTab = $state('main');
 
   let backupPath = $state('');
   let backupManifest: BackupManifest | null = $state(null);
@@ -60,24 +62,34 @@
   }
 
   // Дефолты калькулятора (редактор): значения из файла настроек поверх заводских.
-  const defKeys: { key: keyof CalcForm; label: string; text?: boolean }[] = [
-    { key: 'matCode', label: 'calc.material', text: true },
-    { key: 'timeH', label: 'calc.time_h' }, { key: 'timeM', label: 'calc.time_m' },
-    { key: 'weightG', label: 'calc.weight' }, { key: 'filamentMM', label: 'calc.filament' },
-    { key: 'tariff', label: 'calc.tariff' }, { key: 'powerKW', label: 'calc.power' },
-    { key: 'amortPerHour', label: 'calc.amort' }, { key: 'maintPerHour', label: 'calc.maint' },
-    { key: 'purgeG', label: 'calc.purge' },
-    { key: 'opRate', label: 'calc.op_rate' }, { key: 'prepH', label: 'calc.prep' },
-    { key: 'postH', label: 'calc.post' },
-    { key: 'designerRate', label: 'calc.designer_rate' }, { key: 'modelH', label: 'calc.model_h' },
-    { key: 'modelPrice', label: 'calc.model_price' },
-    { key: 'extraMat', label: 'calc.extra' }, { key: 'fees', label: 'calc.fees' },
-    { key: 'failPct', label: 'calc.fail' },
-    { key: 'marginProfitPct', label: 'calc.margin_profit' },
-    { key: 'marginDevPct', label: 'calc.margin_dev' },
-    { key: 'copies', label: 'calc.copies' }, { key: 'vatPct', label: 'calc.vat' },
-    { key: 'roundStep', label: 'calc.round' },
+  // Группы для аккордеонов: материал/время, станок, работа, итоги.
+  const defGroups: { id: string; label: string; keys: { key: keyof CalcForm; label: string; text?: boolean }[] }[] = [
+    { id: 'mat', label: 'set.defgroup_mat', keys: [
+      { key: 'matCode', label: 'calc.material', text: true },
+      { key: 'timeH', label: 'calc.time_h' }, { key: 'timeM', label: 'calc.time_m' },
+      { key: 'weightG', label: 'calc.weight' }, { key: 'filamentMM', label: 'calc.filament' },
+    ] },
+    { id: 'machine', label: 'set.defgroup_machine', keys: [
+      { key: 'tariff', label: 'calc.tariff' }, { key: 'powerKW', label: 'calc.power' },
+      { key: 'amortPerHour', label: 'calc.amort' }, { key: 'maintPerHour', label: 'calc.maint' },
+      { key: 'purgeG', label: 'calc.purge' },
+    ] },
+    { id: 'labor', label: 'set.defgroup_labor', keys: [
+      { key: 'opRate', label: 'calc.op_rate' }, { key: 'prepH', label: 'calc.prep' },
+      { key: 'postH', label: 'calc.post' },
+      { key: 'designerRate', label: 'calc.designer_rate' }, { key: 'modelH', label: 'calc.model_h' },
+      { key: 'modelPrice', label: 'calc.model_price' },
+      { key: 'extraMat', label: 'calc.extra' }, { key: 'fees', label: 'calc.fees' },
+    ] },
+    { id: 'totals', label: 'set.defgroup_totals', keys: [
+      { key: 'failPct', label: 'calc.fail' },
+      { key: 'marginProfitPct', label: 'calc.margin_profit' },
+      { key: 'marginDevPct', label: 'calc.margin_dev' },
+      { key: 'copies', label: 'calc.copies' }, { key: 'vatPct', label: 'calc.vat' },
+      { key: 'roundStep', label: 'calc.round' },
+    ] },
   ];
+  const defKeys = defGroups.flatMap((g) => g.keys);
   let defVals: Record<string, string> = $state({});
   let defMsg = $state(false);
 
@@ -125,6 +137,68 @@
     }
   }
 
+  // Колонки истории: группы-аккордеоны, выбор локально, применение кнопкой.
+  const DEFAULT_COLS = ['filename', 'start', 'status', 'duration', 'weight', 'cost', 'price', 'origin'];
+  const colGroups: { id: string; label: string; keys: string[] }[] = [
+    { id: 'main', label: 'set.colgroup_main', keys: ['filename', 'start', 'status', 'material', 'slicer', 'origin'] },
+    { id: 'files', label: 'set.colgroup_files', keys: ['end', 'duration', 'weight', 'length', 'size', 'filament'] },
+    { id: 'calc', label: 'set.colgroup_calc', keys: ['cost', 'price', 'tariff', 'power', 'amort', 'maint', 'purge', 'oprate', 'prep', 'post', 'designer', 'modelh', 'modelprice', 'extra', 'fees'] },
+    { id: 'totals', label: 'set.colgroup_totals', keys: ['fail', 'marginprofit', 'margindev', 'copies', 'vat', 'round'] },
+  ];
+  const allColKeys = colGroups.flatMap((g) => g.keys);
+  let colSel: string[] = $state([...DEFAULT_COLS]);
+  let colMsg = $state(false);
+
+  function colLabel(key: string): string {
+    const map: Record<string, string> = {
+      filename: $t('hist.filename'), start: $t('hist.start'), end: $t('hist.end'),
+      status: $t('hist.status'), duration: $t('hist.duration'), weight: $t('hist.weight'),
+      length: $t('hist.length'), size: $t('hist.size'), filament: $t('hist.filament'),
+      slicer: $t('hist.slicer'), cost: $t('hist.cost'), price: $t('calc.price'),
+      origin: $t('hist.origin'), material: $t('calc.material'), tariff: $t('calc.tariff'),
+      power: $t('calc.power'), amort: $t('calc.amort'), maint: $t('calc.maint'),
+      purge: $t('calc.purge'), oprate: $t('calc.op_rate'), prep: $t('calc.prep'),
+      post: $t('calc.post'), designer: $t('calc.designer_rate'), modelh: $t('calc.model_h'),
+      modelprice: $t('calc.model_price'), extra: $t('calc.extra'), fail: $t('calc.fail'),
+      marginprofit: $t('calc.margin_profit'), margindev: $t('calc.margin_dev'),
+      fees: $t('calc.fees'), copies: $t('calc.copies'), vat: $t('calc.vat'),
+      round: $t('calc.round'),
+    };
+    return map[key] ?? key;
+  }
+
+  async function loadColSel() {
+    try {
+      const s = get(mySettings);
+      if (s.historyColumns && s.historyColumns.length) {
+        colSel = allColKeys.filter((c) => s.historyColumns.includes(c));
+        if (colSel.length) return;
+      }
+      colSel = (await wails.historyColumns()) ?? [...DEFAULT_COLS];
+    } catch {
+      colSel = [...DEFAULT_COLS];
+    }
+  }
+
+  function toggleColSel(key: string) {
+    colSel = colSel.includes(key) ? colSel.filter((c) => c !== key) : [...colSel, key];
+  }
+
+  async function saveColSel() {
+    error = '';
+    const ordered = allColKeys.filter((c) => colSel.includes(c));
+    if (!ordered.length) return;
+    try {
+      await wails.setHistoryColumns(ordered);
+      await saveMySettingsPatch({ historyColumns: ordered });
+      colSel = ordered;
+      colMsg = true;
+      setTimeout(() => (colMsg = false), 2500);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   // Свой пароль.
   let oldPw = $state('');
   let newPw = $state('');
@@ -150,6 +224,7 @@
       await loadNumbers();
       await loadRates();
       await loadCalcDefaults();
+      await loadColSel();
       const ui = await wails.uiSettings();
       theme = ui.theme || 'light';
     } catch (e) {
@@ -313,8 +388,13 @@
 
 {#if error}<p class="err">{error}</p>{/if}
 
-<div class="panels">
-<div class="panel">
+<div class="tabs no-print">
+  {#each [{ id: 'main', label: 'set.tab_main' }, { id: 'data', label: 'set.tab_data' }, { id: 'look', label: 'set.tab_look' }] as tb}
+    <button class:on={setTab === tb.id} onclick={() => (setTab = tb.id)}>{$t(tb.label)}</button>
+  {/each}
+</div>
+
+{#if setTab === 'main'}
 <div class="card">
   <label>{$t('set.language')}
     <select value={$locale} onchange={(e) => { switchLocale(e.currentTarget.value); saveMySettingsPatch({ locale: e.currentTarget.value }); }}>
@@ -374,25 +454,51 @@
 <div class="card">
   <h3>{$t('set.calcdef')}</h3>
   <p class="note">{$t('set.calcdef_note')}</p>
-  <div class="defs">
-    {#each defKeys as d}
-      <label class="def">{$t(d.label)}
-        {#if d.text}
-          <input bind:value={defVals[d.key]} />
-        {:else}
-          <input type="number" step="any" bind:value={defVals[d.key]} />
-        {/if}
-      </label>
-    {/each}
-  </div>
+  {#each defGroups as g, gi}
+    <details open={gi === 0}>
+      <summary>{$t(g.label)}</summary>
+      <div class="defs">
+        {#each g.keys as d}
+          <label class="def">{$t(d.label)}
+            {#if d.text}
+              <input bind:value={defVals[d.key]} />
+            {:else}
+              <input type="number" step="any" bind:value={defVals[d.key]} />
+            {/if}
+          </label>
+        {/each}
+      </div>
+    </details>
+  {/each}
   <div class="row">
     <button onclick={saveCalcDefaults}>{$t('common.save')}</button>
     <button onclick={resetCalcDefaults}>{$t('set.calcdef_reset')}</button>
   </div>
   {#if defMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
 </div>
+
+<div class="card">
+  <h3>{$t('set.columns')} · {colSel.length}/{allColKeys.length}</h3>
+  {#each colGroups as g, gi}
+    <details open={gi === 0}>
+      <summary>{$t(g.label)} · {g.keys.filter((k) => colSel.includes(k)).length}/{g.keys.length}</summary>
+      <div class="checks">
+        {#each g.keys as k}
+          <label class="check"><input type="checkbox" checked={colSel.includes(k)} disabled={!canWrite($user)} onchange={() => toggleColSel(k)} /> {colLabel(k)}</label>
+        {/each}
+      </div>
+    </details>
+  {/each}
+  {#if canWrite($user)}
+    <div class="row">
+      <button onclick={saveColSel}>{$t('common.save')}</button>
+      <button onclick={() => { colSel = [...allColKeys]; }}>{$t('set.col_all')}</button>
+      <button onclick={() => { colSel = [...DEFAULT_COLS]; }}>{$t('set.col_reset')}</button>
+    </div>
+  {/if}
+  {#if colMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
 </div>
-<div class="panel">
+{:else if setTab === 'data'}
 <div class="card">
   <h3>{$t('set.backup')}</h3>
   <div class="row">
@@ -433,40 +539,45 @@
     <Users />
   </div>
 {/if}
-</div>
-<div class="panel">
+{:else}
 <div class="card">
   <h3>{$t('set.theme')}</h3>
   <p class="note">{$t('set.theme_current')}: <b>{theme}</b></p>
   <h4>{$t('set.theme_base')}</h4>
   <div class="swatches">
-    <button class="sw" class:on={theme === 'light'} onclick={() => pickTheme('light')} title={$t('set.theme_light')}>
+    <button class="sw" class:on={theme === 'light'} disabled={!canWrite($user)} onclick={() => pickTheme('light')} title={$t('set.theme_light')}>
       <span class="dots"><i style="background:#fafafa"></i><i style="background:#222222"></i><i style="background:#0645ad"></i><i style="background:#ffffff"></i></span>
       {$t('set.theme_light')}
     </button>
-    <button class="sw" class:on={theme === 'dark'} onclick={() => pickTheme('dark')} title={$t('set.theme_dark')}>
+    <button class="sw" class:on={theme === 'dark'} disabled={!canWrite($user)} onclick={() => pickTheme('dark')} title={$t('set.theme_dark')}>
       <span class="dots"><i style="background:#1a1d21"></i><i style="background:#e6e6e6"></i><i style="background:#7aa2ff"></i><i style="background:#2a2e34"></i></span>
       {$t('set.theme_dark')}
     </button>
   </div>
   <h4>{$t('set.theme_dark_presets')} ({THEME_PRESET_DARK.length})</h4>
+  <details>
+    <summary>{$t('set.theme_show')}</summary>
   <div class="swatches">
     {#each THEME_PRESET_DARK as p}
-      <button class="sw" class:on={theme === p.name} onclick={() => pickPreset(p.name, p.vars)} title={p.name}>
+      <button class="sw" class:on={theme === p.name} disabled={!canWrite($user)} onclick={() => pickPreset(p.name, p.vars)} title={p.name}>
         <span class="dots"><i style="background:{p.vars.bg}"></i><i style="background:{p.vars.fg}"></i><i style="background:{p.vars.accent}"></i><i style="background:{p.vars['btn-bg']}"></i></span>
         {p.name}
       </button>
     {/each}
   </div>
+  </details>
   <h4>{$t('set.theme_light_presets')} ({THEME_PRESET_LIGHT.length})</h4>
+  <details>
+    <summary>{$t('set.theme_show')}</summary>
   <div class="swatches">
     {#each THEME_PRESET_LIGHT as p}
-      <button class="sw" class:on={theme === p.name} onclick={() => pickPreset(p.name, p.vars)} title={p.name}>
+      <button class="sw" class:on={theme === p.name} disabled={!canWrite($user)} onclick={() => pickPreset(p.name, p.vars)} title={p.name}>
         <span class="dots"><i style="background:{p.vars.bg}"></i><i style="background:{p.vars.fg}"></i><i style="background:{p.vars.accent}"></i><i style="background:{p.vars['btn-bg']}"></i></span>
         {p.name}
       </button>
     {/each}
   </div>
+  </details>
 {#if canWrite($user)}
   <div class="row">
     <button onclick={() => exportCustom(theme)}>{$t('set.theme_save')}</button>
@@ -474,13 +585,17 @@
   </div>
 {/if}
 </div>
-
-</div>
-</div>
+{/if}
 
 <style>
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tabs button.on { outline: 2px solid var(--accent); font-weight: bold; }
+  details { margin-bottom: 8px; }
+  summary { cursor: pointer; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
+  label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; line-height: 1.4; white-space: nowrap; }
+  label.check input { margin: 0; width: 16px; height: 16px; flex: none; }
   .defs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 8px; }
   label.def input { width: 100%; box-sizing: border-box; }
   .card.wide { max-width: none; }
