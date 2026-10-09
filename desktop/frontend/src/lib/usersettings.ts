@@ -13,6 +13,7 @@ export const mySettings = writable<UserUISettings>({
   widths: {},
   colOrder: {},
   ordersPerPage: 0,
+  historyPerPage: 0,
   calcDefaults: {},
 });
 

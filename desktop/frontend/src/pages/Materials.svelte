@@ -13,12 +13,12 @@
 
   let materials: MaterialDTO[] = $state([]);
   let error = $state('');
-  // Форма добавления
+  // Форма добавления: null — пусто, виден плейсхолдер/title.
   let newCode = $state('');
   let newType = $state('PETG');
-  let newDensity = $state(1.27);
-  let newPrice = $state(0);
-  let newWeight = $state(1000);
+  let newDensity: number | null = $state(null);
+  let newPrice: number | null = $state(null);
+  let newWeight: number | null = $state(null);
   // Редактирование
   let editId = $state(0);
   let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '', BoughtAt: '', Archived: false });
@@ -143,10 +143,9 @@
   async function add() {
     error = '';
     try {
-      await wails.addMaterial(newCode.trim(), newType.trim() || 'PETG', newDensity, newPrice, newWeight);
+      await wails.addMaterial(newCode.trim(), newType.trim() || 'PETG', newDensity ?? 1.27, newPrice ?? 0, newWeight ?? 1000);
       newCode = '';
-      newPrice = 0;
-      newWeight = 1000;
+      newPrice = null;
       await load();
     } catch (e) {
       error = String(e);
@@ -209,9 +208,9 @@
     <datalist id="mat-types">
       {#each knownTypes as tp}<option value={tp}></option>{/each}
     </datalist>
-    <input type="number" step="0.01" bind:value={newDensity} title={$t('mat.density')} />
-    <input type="number" min="0" bind:value={newPrice} title={$t('mat.price')} />
-    <input type="number" min="0" bind:value={newWeight} title={$t('mat.weight')} />
+    <input type="number" step="0.01" bind:value={newDensity} title={$t('mat.density')} placeholder="1.27" />
+    <input type="number" min="0" bind:value={newPrice} title={$t('mat.price')} placeholder="869" />
+    <input type="number" min="0" bind:value={newWeight} title={$t('mat.weight')} placeholder="1000" />
     <button onclick={add}>{$t('common.save')}</button>
   </div>
 {/if}

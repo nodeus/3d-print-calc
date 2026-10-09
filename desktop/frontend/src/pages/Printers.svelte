@@ -78,7 +78,12 @@
       error = String(e);
     }
   }
-  let form: Printer = $state(blank());
+  // Форма: числа nullable (пусто — виден плейсхолдер, в payload — ?? дефолт).
+  type PrinterForm = Omit<Printer, 'PurchasePrice' | 'LifeYears' | 'HoursPerDay' | 'PowerKW' | 'MaintPerHour' | 'ResourceHours'> & {
+    PurchasePrice: number | null; LifeYears: number | null; HoursPerDay: number | null;
+    PowerKW: number | null; MaintPerHour: number | null; ResourceHours: number | null;
+  };
+  let form: PrinterForm = $state(blank());
   let isNew = $state(false);
 
   // Moonraker
@@ -89,12 +94,12 @@
   let importing = $state(false);
   let progress = $state({ done: 0, total: 0 });
 
-  function blank(): Printer {
+  function blank(): PrinterForm {
     return {
-      ID: 0, Name: '', Model: '', PurchasePrice: 0, Currency: 'RUB',
-      CommissioningDate: '', LifeYears: 3, HoursPerDay: 8,
-      CalendarMode: 'calendar', AmortMethod: 'calendar', PowerKW: 0.35,
-      MaintPerHour: 0, ResourceHours: 0, MoonrakerURL: '',
+      ID: 0, Name: '', Model: '', PurchasePrice: null, Currency: 'RUB',
+      CommissioningDate: '', LifeYears: null, HoursPerDay: null,
+      CalendarMode: 'calendar', AmortMethod: 'calendar', PowerKW: null,
+      MaintPerHour: null, ResourceHours: null, MoonrakerURL: '',
     };
   }
 
@@ -132,10 +137,14 @@
   async function save() {
     error = '';
     try {
-      const payload = {
+      const payload: Printer = {
         ...form,
-        PurchasePrice: Math.round(form.PurchasePrice * 100),
-        MaintPerHour: Math.round(form.MaintPerHour * 100),
+        PurchasePrice: Math.round((form.PurchasePrice ?? 0) * 100),
+        LifeYears: form.LifeYears ?? 3,
+        HoursPerDay: form.HoursPerDay ?? 8,
+        PowerKW: form.PowerKW ?? 0.35,
+        MaintPerHour: Math.round((form.MaintPerHour ?? 0) * 100),
+        ResourceHours: form.ResourceHours ?? 0,
       };
       if (isNew) await wails.addPrinter(payload);
       else await wails.updatePrinter(payload);

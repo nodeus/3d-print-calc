@@ -13,32 +13,33 @@
   let printers: PrinterDTO[] = $state([]);
   let currency = $state('RUB');
 
-  // Форма
+  // Форма: числа nullable — пустое поле показывает плейсхолдер,
+  // в расчёт идёт ?? дефолт (0, копии — 1).
   let matCode = $state('PETG-NIT-W4');
   let printerId = $state(0);
-  let timeH = $state(3);
-  let timeM = $state(54);
+  let timeH: number | null = $state(3);
+  let timeM: number | null = $state(54);
   let weightG: number | null = $state(134.94);
   let filamentMM: number | null = $state(null);
-  let tariff = $state(7.08);
-  let powerKW = $state(0.35);
-  let amortPerHour = $state(5.41);
-  let opRate = $state(100);
-  let prepH = $state(0);
-  let postH = $state(0);
-  let designerRate = $state(600);
-  let modelH = $state(0);
-  let modelPrice = $state(0);
-  let extraMat = $state(50);
-  let failPct = $state(0);
-  let marginProfitPct = $state(80);
-  let marginDevPct = $state(35);
-  let copies = $state(1);
-  let vatPct = $state(0);
-  let roundStep = $state(0);
-  let fees = $state(100);
-  let maintPerHour = $state(0);
-  let purgeG = $state(0);
+  let tariff: number | null = $state(7.08);
+  let powerKW: number | null = $state(0.35);
+  let amortPerHour: number | null = $state(5.41);
+  let opRate: number | null = $state(100);
+  let prepH: number | null = $state(0);
+  let postH: number | null = $state(0);
+  let designerRate: number | null = $state(600);
+  let modelH: number | null = $state(0);
+  let modelPrice: number | null = $state(0);
+  let extraMat: number | null = $state(50);
+  let failPct: number | null = $state(0);
+  let marginProfitPct: number | null = $state(80);
+  let marginDevPct: number | null = $state(35);
+  let copies: number | null = $state(1);
+  let vatPct: number | null = $state(0);
+  let roundStep: number | null = $state(0);
+  let fees: number | null = $state(100);
+  let maintPerHour: number | null = $state(0);
+  let purgeG: number | null = $state(0);
   let filename = $state('');
   let savedMsg = $state(false);
   let orders: Order[] = $state([]);
@@ -299,28 +300,28 @@
 
   function buildInput(): CalcInput {
     return {
-      TotalSec: timeH * 3600 + timeM * 60,
+      TotalSec: (timeH ?? 0) * 3600 + (timeM ?? 0) * 60,
       WeightG: weightG ?? 0,
       PricePerKg: pricePerKg,
-      Tariff: tariff,
-      PowerKW: powerKW,
-      AmortPerHour: amortPerHour,
-      OpRate: opRate,
-      PrepH: prepH,
-      PostH: postH,
-      DesignerRate: designerRate,
-      ModelH: modelH,
-      ModelPrice: modelPrice,
-      ExtraMat: extraMat,
-      FailRate: failPct / 100,
-      MarginProfit: marginProfitPct / 100,
-      MarginDev: marginDevPct / 100,
-      Fees: fees,
-      MaintPerHour: maintPerHour,
-      PurgeWasteG: purgeG,
-      Copies: copies,
-      VATRate: vatPct / 100,
-      RoundStep: roundStep,
+      Tariff: tariff ?? 0,
+      PowerKW: powerKW ?? 0,
+      AmortPerHour: amortPerHour ?? 0,
+      OpRate: opRate ?? 0,
+      PrepH: prepH ?? 0,
+      PostH: postH ?? 0,
+      DesignerRate: designerRate ?? 0,
+      ModelH: modelH ?? 0,
+      ModelPrice: modelPrice ?? 0,
+      ExtraMat: extraMat ?? 0,
+      FailRate: (failPct ?? 0) / 100,
+      MarginProfit: (marginProfitPct ?? 0) / 100,
+      MarginDev: (marginDevPct ?? 0) / 100,
+      Fees: fees ?? 0,
+      MaintPerHour: maintPerHour ?? 0,
+      PurgeWasteG: purgeG ?? 0,
+      Copies: copies ?? 1,
+      VATRate: (vatPct ?? 0) / 100,
+      RoundStep: roundStep ?? 0,
     };
   }
 
@@ -380,32 +381,32 @@
         printerId,
         spoolId: 0, // резолвится бэкендом по материалу
         status: 'completed',
-        totalSec: Math.round(timeH * 3600 + timeM * 60),
+        totalSec: Math.round((timeH ?? 0) * 3600 + (timeM ?? 0) * 60),
         weightG: weightG ?? 0,
         lengthM: (filamentMM ?? 0) / 1000,
         cost: result.Cost,
         price: result.PriceVAT,
         currency,
         material: matCode,
-        tariff,
-        powerKW,
-        amortPerHour,
-        opRate,
-        prepH,
-        postH,
-        designerRate,
-        modelH,
-        modelPrice,
-        extraMat,
-        failRate: failPct / 100,
-        marginProfit: marginProfitPct / 100,
-        marginDev: marginDevPct / 100,
-        fees,
-        maintPerHour,
-        purgeWasteG: purgeG,
-        copies,
-        vatRate: vatPct / 100,
-        roundStep,
+        tariff: tariff ?? 0,
+        powerKW: powerKW ?? 0,
+        amortPerHour: amortPerHour ?? 0,
+        opRate: opRate ?? 0,
+        prepH: prepH ?? 0,
+        postH: postH ?? 0,
+        designerRate: designerRate ?? 0,
+        modelH: modelH ?? 0,
+        modelPrice: modelPrice ?? 0,
+        extraMat: extraMat ?? 0,
+        failRate: (failPct ?? 0) / 100,
+        marginProfit: (marginProfitPct ?? 0) / 100,
+        marginDev: (marginDevPct ?? 0) / 100,
+        fees: fees ?? 0,
+        maintPerHour: maintPerHour ?? 0,
+        purgeWasteG: purgeG ?? 0,
+        copies: copies ?? 1,
+        vatRate: (vatPct ?? 0) / 100,
+        roundStep: roundStep ?? 0,
       });
       persist();
       savedMsg = true;
@@ -435,6 +436,7 @@
   async function toPDF() {
     if (!result) return;
     const fmt = (v: number) => money(v, currency, $locale);
+    const nv = (v: number | null) => (v == null ? '—' : String(v));
     const mat = materials.find((x) => x.code === matCode);
     const printer = printers.find((x) => x.ID === printerId);
     await downloadPDF($t('nav.calculator'), [
@@ -444,19 +446,19 @@
         Rows: [
           [$t('calc.material'), `${matCode} (${fmt(mat?.pricePerKg ?? 0)})`],
           [$t('calc.printer'), printer ? `${printer.Name} (${printer.Model})` : '—'],
-          [$t('calc.time'), `${timeH}h ${timeM}m`],
+          [$t('calc.time'), `${timeH ?? 0}h ${timeM ?? 0}m`],
           [$t('calc.weight'), `${weightG ?? 0} г`],
-          [$t('calc.tariff'), String(tariff)],
-          [$t('calc.power'), String(powerKW)],
-          [$t('calc.amort'), String(amortPerHour)],
-          [$t('calc.op_rate'), `${opRate} / ${prepH}h + ${postH}h`],
-          [$t('calc.designer_rate'), `${designerRate} / ${modelH}h + ${modelPrice}`],
-          [$t('calc.extra'), String(extraMat)],
-          [$t('calc.fail'), `${failPct}%`],
-          [$t('calc.margin_profit'), `${marginProfitPct}%`],
-          [$t('calc.margin_dev'), `${marginDevPct}%`],
-          [$t('calc.copies'), String(copies)],
-          [$t('calc.vat'), `${vatPct}%`],
+          [$t('calc.tariff'), nv(tariff)],
+          [$t('calc.power'), nv(powerKW)],
+          [$t('calc.amort'), nv(amortPerHour)],
+          [$t('calc.op_rate'), `${nv(opRate)} / ${nv(prepH)}h + ${nv(postH)}h`],
+          [$t('calc.designer_rate'), `${nv(designerRate)} / ${nv(modelH)}h + ${nv(modelPrice)}`],
+          [$t('calc.extra'), nv(extraMat)],
+          [$t('calc.fail'), `${nv(failPct)}%`],
+          [$t('calc.margin_profit'), `${nv(marginProfitPct)}%`],
+          [$t('calc.margin_dev'), `${nv(marginDevPct)}%`],
+          [$t('calc.copies'), nv(copies)],
+          [$t('calc.vat'), `${nv(vatPct)}%`],
         ],
       },
       {
