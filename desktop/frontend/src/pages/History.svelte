@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { wails, type JobDTO, type MaterialDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
@@ -357,10 +357,14 @@
   }
 
   // Выборка изменилась — суммы прячем до повторного подсчёта.
+  // untrack обязателен: чтение totals подписало бы эффект на него же,
+  // и подсчёт тут же гасился бы (баг v1.2.1).
   $effect(() => {
     void filtered.length;
     void columns.length;
-    if (totals) totals = null;
+    untrack(() => {
+      totals = null;
+    });
   });
 
   function footText(k: string): string {
