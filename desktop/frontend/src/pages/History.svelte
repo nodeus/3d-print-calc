@@ -9,7 +9,7 @@
   import { goTab } from '../lib/nav';
   import { calcFormDefaults } from '../lib/calcform';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
-  import { myHistoryColumns, saveMySettingsPatch } from '../lib/usersettings';
+  import { myHistoryColumns } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
 
   let jobs: JobDTO[] = $state([]);
@@ -317,23 +317,11 @@
   let visible = $derived(filtered.slice(page * perPage, page * perPage + perPage));
   let statuses = $derived([...new Set(jobs.map((j) => j.Status))].sort());
 
-  // Все колонки в фиксированном порядке бэкенда; чекбоксы применяют сразу.
+  // Все колонки в фиксированном порядке бэкенда (настройка — в Настройках).
   const allColumns = Object.keys(sortable);
 
-  async function toggleColumn(key: string) {
-    error = '';
-    const next = columns.includes(key) ? columns.filter((c) => c !== key) : [...columns, key];
-    // Порядок — как в allColumns, бэкенд хранит присланный.
-    const ordered = allColumns.filter((c) => next.includes(c));
-    if (!ordered.length) return; // хоть одна колонка обязана остаться
-    try {
-      // Сразу в оба места: legacy-БД (совместимость) и файл пользователя.
-      await wails.setHistoryColumns(ordered);
-      await saveMySettingsPatch({ historyColumns: ordered });
-      columns = ordered;
-    } catch (e) {
-      error = String(e);
-    }
+  function openColumns() {
+    goTab.set('settings');
   }
 
   function toCalc(j: JobDTO) {
@@ -526,16 +514,12 @@
     {#each statuses as s}<option value={s}>{s}</option>{/each}
   </select>
   <span class="count">{$t('hist.shown')}: {visible.length} / {filtered.length} / {jobs.length}</span>
+  <button onclick={openColumns}>{$t('hist.columns_btn')}: {columns.length}/{allColumns.length}</button>
   <span class="pager">
     <button disabled={page === 0} onclick={() => page--}>‹</button>
     {page + 1} / {pages}
     <button disabled={page >= pages - 1} onclick={() => page++}>›</button>
   </span>
-</div>
-<div class="cols no-print">
-  {#each allColumns as c}
-    <label class="col"><input type="checkbox" checked={columns.includes(c)} disabled={!canWrite($user)} onchange={() => toggleColumn(c)} /> {colLabel(c)}</label>
-  {/each}
 </div>
 
 <table class="tw">
@@ -572,8 +556,6 @@
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-  .cols { display: flex; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 10px; }
-  label.col { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
   .note { color: var(--muted); }
   input, select, button { padding: 6px; font-size: 14px; }
   .count { color: var(--muted); font-size: 13px; }
