@@ -125,15 +125,12 @@
     .print-only { display: block !important; }
     main { padding: 0; }
     :global(body) { background: white; }
-    @page { size: A4; margin: 12mm; }
-    @page ordersLandscape { size: A4 landscape; margin: 10mm; }
-    @page reportsLandscape { size: A4 landscape; margin: 10mm; }
+    /* Строго портрет A4: именованных альбомных страниц нет —
+       их частичная поддержка в Chromium давала пустые страницы. */
+    @page { size: A4 portrait; margin: 12mm; }
   }
   @media print {
-    :global(body[data-tab='orders'] main) { page: ordersLandscape; }
-    :global(body[data-tab='reports'] main) { page: reportsLandscape; }
     :global(.cols) { grid-template-columns: 1fr !important; }
     :global(.grid) { grid-template-columns: 1fr !important; }
-    :global(.panels) { grid-template-columns: 1fr !important; }
   }
 </style>
