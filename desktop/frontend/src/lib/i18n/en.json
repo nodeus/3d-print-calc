@@ -263,5 +263,5 @@
   "info.import_text": "CSV — Settings → preview → apply (no duplicates). Moonraker — Printers page, address must include http:// scheme. Full manual — docs/HELP.md.",
   "info.author": "Author",
   "info.donate": "Thank the developer",
-  "info.donate_text": "Support development — scan the QR or open the link."
+  "info.donate_text": "Support development — scan the QR with your camera or open the link. Any amount helps grow and maintain the project. If the calculator has been useful to you and your business, please donate any amount. Thank you!"
 }

@@ -9,6 +9,8 @@
   import { THEME_PRESET_DARK, THEME_PRESET_LIGHT, applyTheme, persistTheme } from '../lib/theme';
   import { saveMySettingsPatch, mySettings } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { orderFor, saveTableOrder } from '../lib/colorder';
+  import { startColDrag } from '../lib/coldrag';
   import { calcFormDefaults, applyCalcDefaults, type CalcForm } from '../lib/calcform';
   import Users from './Users.svelte';
 
@@ -287,6 +289,33 @@
 
   // Курсы и конвертация.
   let rates: FxRate[] = $state([]);
+  const fxKeys = ['currency', 'rate', 'day'];
+  const fxLabel = (k: string) => ({ currency: 'fx.currency', rate: 'fx.rate', day: 'fx.day' })[k] ?? k;
+  const fxNum = (k: string) => k === 'rate';
+
+  let fxOrd = $derived(orderFor($mySettings.colOrder, 'fx', fxKeys));
+
+  function fxText(r: FxRate, k: string): string {
+    switch (k) {
+      case 'currency': return r.currency;
+      case 'rate': return String(r.rate);
+      case 'day': return r.day;
+      default: return '';
+    }
+  }
+
+  let fxDragKey: string | null = $state(null);
+  let fxDropX: number | null = $state(null);
+  let fxWrapEl: HTMLDivElement | null = $state(null);
+
+  async function dropFxCols(next: string[]) {
+    error = '';
+    try {
+      await saveTableOrder('fx', next);
+    } catch (e) {
+      error = String(e);
+    }
+  }
   let fxSortKey = $state('currency');
   let fxSortDir: 1 | -1 = $state(1);
 
@@ -412,20 +441,24 @@
 
 <div class="card">
   <h3>{$t('fx.title')}</h3>
-  <table class="tw">
+  <div class="twrap" bind:this={fxWrapEl}>
+  {#if fxDropX != null}<div class="drop-line no-print" style="left:{fxDropX}px;"></div>{/if}
+  <table class="tw" class:dragging={fxDragKey != null}>
     <thead><tr>
-      {#each [{ key: 'currency', label: 'fx.currency' }, { key: 'rate', label: 'fx.rate' }, { key: 'day', label: 'fx.day' }] as c}
-        <th style={thWidth('fx', c.key)}>
-          <button class="th" onclick={() => toggleFxSort(c.key)}>{$t(c.label)}{fxArrow(c.key)}</button>
-          <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'fx', c.key)} ondblclick={() => resetColWidth('fx', c.key)}></span>
+      {#each fxOrd as k}
+        <th class:n={fxNum(k)} style={thWidth('fx', k)} data-col={k} class:dragsrc={fxDragKey === k}>
+          {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, fxWrapEl, k, fxOrd, (dk, x) => { fxDragKey = dk; fxDropX = x; }, dropFxCols); }}>⋮⋮</span>{/if}
+          <button class="th" onclick={() => toggleFxSort(k)}>{$t(fxLabel(k))}{fxArrow(k)}</button>
+          <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'fx', k)} ondblclick={() => resetColWidth('fx', k)}></span>
         </th>
       {/each}
       <th class="no-print"></th>
     </tr></thead>
     <tbody>
-      {#each ratesShown as r}<tr><td>{r.currency}</td><td class="n">{r.rate}</td><td>{r.day}</td><td class="no-print"><button onclick={() => removeRate(r)}>✕</button></td></tr>{/each}
+      {#each ratesShown as r}<tr>{#each fxOrd as k}<td class:n={fxNum(k)}>{fxText(r, k)}</td>{/each}<td class="no-print"><button onclick={() => removeRate(r)}>✕</button></td></tr>{/each}
     </tbody>
   </table>
+  </div>
   {#if canWrite($user)}
     <div class="row">
       <input placeholder="USD" bind:value={rateCur} />

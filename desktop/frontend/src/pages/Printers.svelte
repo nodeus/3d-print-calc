@@ -7,6 +7,9 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { mySettings } from '../lib/usersettings';
+  import { orderFor, saveTableOrder } from '../lib/colorder';
+  import { startColDrag } from '../lib/coldrag';
 
   let printers: PrinterDTO[] = $state([]);
   let error = $state('');
@@ -43,9 +46,38 @@
 
   const printerCols = [
     { key: 'name', label: 'printer.name' }, { key: 'model', label: 'printer.model' },
-    { key: 'price', label: 'printer.price' }, { key: 'amort', label: 'printer.amort' },
+    { key: 'price', label: 'printer.price', num: true }, { key: 'amort', label: 'printer.amort', num: true },
     { key: 'method', label: 'printer.method' },
   ];
+  const printerKeys = printerCols.map((c) => c.key);
+  const printerNum = (k: string) => printerCols.some((c) => c.key === k && c.num);
+  const printerLabel = (k: string) => printerCols.find((c) => c.key === k)?.label ?? k;
+
+  let printerOrd = $derived(orderFor($mySettings.colOrder, 'printers', printerKeys));
+
+  function printerText(p: PrinterDTO, k: string): string {
+    switch (k) {
+      case 'name': return p.Name;
+      case 'model': return p.Model;
+      case 'price': return money(p.PurchasePrice / 100, p.Currency, 'ru');
+      case 'amort': return num(p.amortPerHour);
+      case 'method': return p.AmortMethod;
+      default: return '';
+    }
+  }
+
+  let dragKey: string | null = $state(null);
+  let dropX: number | null = $state(null);
+  let wrapEl: HTMLDivElement | null = $state(null);
+
+  async function dropCols(next: string[]) {
+    error = '';
+    try {
+      await saveTableOrder('printers', next);
+    } catch (e) {
+      error = String(e);
+    }
+  }
   let form: Printer = $state(blank());
   let isNew = $state(false);
 
@@ -178,8 +210,8 @@
     await downloadPDF($t('nav.printers'), [
       {
         Title: '',
-        Headers: [$t('printer.name'), $t('printer.model'), $t('printer.price'), $t('printer.amort'), $t('printer.method')],
-        Rows: printers.map((p) => [p.Name, p.Model, money(p.PurchasePrice / 100, p.Currency, 'ru'), num(p.amortPerHour), p.AmortMethod]),
+        Headers: printerOrd.map((k) => $t(printerLabel(k))),
+        Rows: shown.map((p) => printerOrd.map((k) => printerText(p, k))),
       },
     ]);
   }
@@ -221,24 +253,29 @@
   </div>
 {/if}
 
-<table class="tw">
+<div class="twrap" bind:this={wrapEl}>
+{#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+<table class="tw" class:dragging={dragKey != null}>
   <thead><tr>
-    {#each printerCols as c}
-      <th style={thWidth('printers', c.key)}>
-        <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
-        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'printers', c.key)} ondblclick={() => resetColWidth('printers', c.key)}></span>
+    {#each printerOrd as k}
+      <th class:n={printerNum(k)} style={thWidth('printers', k)} data-col={k} class:dragsrc={dragKey === k}>
+        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => startColDrag(e, wrapEl, k, printerOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols)}>⋮⋮</span>{/if}
+        <button class="th" onclick={() => toggleSort(k)}>{$t(printerLabel(k))}{arrow(k)}</button>
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'printers', k)} ondblclick={() => resetColWidth('printers', k)}></span>
       </th>
     {/each}
     <th class="no-print"></th>
   </tr></thead>
   <tbody>
     {#each shown as p}
-      <tr><td>{p.Name}</td><td>{p.Model}</td><td class="n">{money(p.PurchasePrice / 100, p.Currency, 'ru')}</td><td class="n">{num(p.amortPerHour)}</td><td>{p.AmortMethod}</td>
+      <tr>
+        {#each printerOrd as k}<td class:n={printerNum(k)}>{printerText(p, k)}</td>{/each}
         <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(p)}>✎</button> <button onclick={() => remove(p)}>✕</button>{/if}</td>
       </tr>
     {/each}
   </tbody>
 </table>
+</div>
 
 <h3>{$t('moon.title')}</h3>
 {#each printers as p}

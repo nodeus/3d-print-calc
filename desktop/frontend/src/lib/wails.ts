@@ -355,6 +355,7 @@ export interface UserUISettings {
   locale: string;
   historyColumns: string[];
   widths: Record<string, Record<string, number>>;
+  colOrder: Record<string, string[]>;
   calcDefaults: Record<string, unknown>;
 }
 

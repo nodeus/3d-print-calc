@@ -7,6 +7,9 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { mySettings } from '../lib/usersettings';
+  import { orderFor, saveTableOrder } from '../lib/colorder';
+  import { startColDrag } from '../lib/coldrag';
 
   let materials: MaterialDTO[] = $state([]);
   let error = $state('');
@@ -64,11 +67,45 @@
 
   const matCols = [
     { key: 'code', label: 'mat.code' }, { key: 'color', label: 'mat.color' },
-    { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.price' },
-    { key: 'density', label: 'mat.density' }, { key: 'weight', label: 'mat.weight' },
+    { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.price', num: true },
+    { key: 'density', label: 'mat.density', num: true }, { key: 'weight', label: 'mat.weight', num: true },
     { key: 'bought', label: 'mat.bought' }, { key: 'archived', label: 'mat.archived' },
     { key: 'vendor', label: 'mat.vendor' },
   ];
+  const matKeys = matCols.map((c) => c.key);
+  const matNum = (k: string) => matCols.some((c) => c.key === k && c.num);
+  const matLabel = (k: string) => matCols.find((c) => c.key === k)?.label ?? k;
+
+  let matOrd = $derived(orderFor($mySettings.colOrder, 'materials', matKeys));
+
+  // Текстовое значение ячейки (цвет — отдельно квадратиком).
+  function matText(m: MaterialDTO, k: string): string {
+    switch (k) {
+      case 'code': return m.code;
+      case 'type': return m.type;
+      case 'price': return money(m.pricePerKg, m.currency, 'ru');
+      case 'density': return String(m.density);
+      case 'weight': return String(m.defaultWeightG || 1000);
+      case 'bought': return m.boughtAt || '—';
+      case 'archived': return m.archived ? '✓' : '';
+      case 'vendor': return m.vendor;
+      default: return '';
+    }
+  }
+
+  // Drag-перестановка за грип.
+  let dragKey: string | null = $state(null);
+  let dropX: number | null = $state(null);
+  let wrapEl: HTMLDivElement | null = $state(null);
+
+  async function dropCols(next: string[]) {
+    error = '';
+    try {
+      await saveTableOrder('materials', next);
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   function validHex(s: string): boolean {
     return /^#[0-9a-fA-F]{6}$/.test(s.trim());
@@ -158,8 +195,8 @@
     await downloadPDF($t('nav.materials'), [
       {
         Title: '',
-        Headers: [$t('mat.code'), $t('mat.color'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.weight'), $t('mat.bought'), $t('mat.archived'), $t('mat.vendor')],
-        Rows: materials.map((m) => [m.code, m.colorHex, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), String(m.defaultWeightG || 1000), m.boughtAt || '—', m.archived ? '+' : '', m.vendor]),
+        Headers: matOrd.map((k) => $t(matLabel(k))),
+        Rows: materials.map((m) => matOrd.map((k) => (k === 'color' ? m.colorHex : matText(m, k)))),
       },
     ]);
   }
@@ -180,16 +217,19 @@
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
 
-<table class="tw">
+<div class="twrap" bind:this={wrapEl}>
+{#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+<table class="tw" class:dragging={dragKey != null}>
   <thead><tr>
-    {#each matCols as c}
-      <th style={thWidth('materials', c.key)}>
-        {#if c.key === 'color'}
-          {$t(c.label)}
+    {#each matOrd as k}
+      <th class:n={matNum(k)} style={thWidth('materials', k)} data-col={k} class:dragsrc={dragKey === k}>
+        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, matOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }}>⋮⋮</span>{/if}
+        {#if k === 'color'}
+          {$t(matLabel(k))}
         {:else}
-          <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
+          <button class="th" onclick={() => toggleSort(k)}>{$t(matLabel(k))}{arrow(k)}</button>
         {/if}
-        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'materials', c.key)} ondblclick={() => resetColWidth('materials', c.key)}></span>
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'materials', k)} ondblclick={() => resetColWidth('materials', k)}></span>
       </th>
     {/each}
     <th class="no-print"></th>
@@ -198,33 +238,52 @@
     {#each shown as m}
       {#if editId === m.id}
         <tr>
-          <td>{m.code}</td>
-          <td>
-            <div class="colorrow">
-              <input type="color" value={validHex(edit.ColorHex) ? edit.ColorHex : '#000000'} oninput={(e) => (edit.ColorHex = e.currentTarget.value)} title={$t('mat.color')} />
-              <input class="hex" bind:value={edit.ColorHex} placeholder="#rrggbb" />
-            </div>
-            <div class="colorrow">
-              {#each favs as f}<button class="sw" style="background:{f}" title={f} onclick={() => pickColor(f)}></button>{/each}
-              {#each presets as p}<button class="sw preset" style="background:{p}" title={p} onclick={() => pickColor(p)}></button>{/each}
-            </div>
-            {#if canWrite($user)}
-              <div class="colorrow">
-                <button onclick={() => edit.ColorHex && toggleFav(edit.ColorHex)}>{favs.includes(edit.ColorHex.toLowerCase()) ? '★' : '☆'} {$t('mat.fav')}</button>
-              </div>
+          {#each matOrd as k}
+            {#if k === 'code'}
+              <td>{m.code}</td>
+            {:else if k === 'color'}
+              <td>
+                <div class="colorrow">
+                  <input type="color" value={validHex(edit.ColorHex) ? edit.ColorHex : '#000000'} oninput={(e) => (edit.ColorHex = e.currentTarget.value)} title={$t('mat.color')} />
+                  <input class="hex" bind:value={edit.ColorHex} placeholder="#rrggbb" />
+                </div>
+                <div class="colorrow">
+                  {#each favs as f}<button class="sw" style="background:{f}" title={f} onclick={() => pickColor(f)}></button>{/each}
+                  {#each presets as p}<button class="sw preset" style="background:{p}" title={p} onclick={() => pickColor(p)}></button>{/each}
+                </div>
+                {#if canWrite($user)}
+                  <div class="colorrow">
+                    <button onclick={() => edit.ColorHex && toggleFav(edit.ColorHex)}>{favs.includes(edit.ColorHex.toLowerCase()) ? '★' : '☆'} {$t('mat.fav')}</button>
+                  </div>
+                {/if}
+              </td>
+            {:else if k === 'type'}
+              <td><input list="mat-types-edit" bind:value={edit.Type} placeholder="PETG" /></td>
+            {:else if k === 'price'}
+              <td><input placeholder="869" type="number" min="0" bind:value={editPrice} /></td>
+            {:else if k === 'density'}
+              <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
+            {:else if k === 'weight'}
+              <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
+            {:else if k === 'bought'}
+              <td><input type="date" bind:value={edit.BoughtAt} title={$t('mat.bought')} /></td>
+            {:else if k === 'archived'}
+              <td><input type="checkbox" bind:checked={edit.Archived} title={$t('mat.archived')} /></td>
+            {:else if k === 'vendor'}
+              <td><input bind:value={edit.Vendor} /></td>
             {/if}
-          </td>
-          <td><input list="mat-types-edit" bind:value={edit.Type} placeholder="PETG" /></td>
-          <td><input placeholder="869" type="number" min="0" bind:value={editPrice} /></td>
-          <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
-          <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
-          <td><input type="date" bind:value={edit.BoughtAt} title={$t('mat.bought')} /></td>
-          <td><input type="checkbox" bind:checked={edit.Archived} title={$t('mat.archived')} /></td>
-          <td><input bind:value={edit.Vendor} /></td>
+          {/each}
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr><td>{m.code}</td><td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td class="n">{m.defaultWeightG || 1000}</td><td>{m.boughtAt || '—'}</td><td>{m.archived ? '✓' : ''}</td><td>{m.vendor}</td>
+        <tr>
+          {#each matOrd as k}
+            {#if k === 'color'}
+              <td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td>
+            {:else}
+              <td class:n={matNum(k)}>{matText(m, k)}</td>
+            {/if}
+          {/each}
           <td class="no-print">
             {#if canWrite($user)}<button onclick={() => startEdit(m)}>✎</button> <button onclick={() => remove(m)}>✕</button>{/if}
           </td>
@@ -233,6 +292,7 @@
     {/each}
   </tbody>
 </table>
+</div>
 <datalist id="mat-types-edit">
   {#each knownTypes as tp}<option value={tp}></option>{/each}
 </datalist>

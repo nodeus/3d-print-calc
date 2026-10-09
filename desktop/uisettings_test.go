@@ -23,6 +23,7 @@ func TestUserSettingsFile(t *testing.T) {
 	in := UserUISettings{
 		Theme: "Dracula", Locale: "en", HistoryColumns: []string{"filename", "cost"},
 		Widths:       map[string]map[string]float64{"history": {"cost": 120}},
+		ColOrder:     map[string][]string{"materials": {"vendor", "code"}},
 		CalcDefaults: map[string]any{"tariff": 8.5},
 	}
 	if err := app.SaveMyUISettings(in); err != nil {
@@ -37,6 +38,9 @@ func TestUserSettingsFile(t *testing.T) {
 	}
 	if got.Widths["history"]["cost"] != 120 {
 		t.Fatalf("ширины: %+v", got.Widths)
+	}
+	if len(got.ColOrder["materials"]) != 2 || got.ColOrder["materials"][0] != "vendor" {
+		t.Fatalf("порядок: %+v", got.ColOrder)
 	}
 	if got.CalcDefaults["tariff"] != 8.5 {
 		t.Fatalf("дефолты: %+v", got.CalcDefaults)
