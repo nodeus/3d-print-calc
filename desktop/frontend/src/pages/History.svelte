@@ -670,6 +670,9 @@
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
   table { font-size: 13px; }
   td.file { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media print {
+    td.file { max-width: 200px; }
+  }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
   .err { color: var(--err); }
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
