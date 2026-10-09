@@ -5,29 +5,28 @@ import { writable } from 'svelte/store';
 export interface CalcForm {
   matCode: string;
   printerId: number;
-  timeH: number;
-  timeM: number;
+  timeH: number | null;
+  timeM: number | null;
   weightG: number | null;
   filamentMM: number | null;
-  tariff: number;
-  powerKW: number;
-  amortPerHour: number;
-  opRate: number;
-  prepH: number;
-  postH: number;
-  designerRate: number;
-  modelH: number;
-  modelPrice: number;
-  extraMat: number;
-  failPct: number;
-  marginProfitPct: number;
-  marginDevPct: number;
-  copies: number;
-  vatPct: number;
-  roundStep: number;
-  fees: number;
-  maintPerHour: number;
-  purgeG: number;
+  tariff: number | null;
+  powerKW: number | null;
+  amortPerHour: number | null;
+  opRate: number | null;
+  prepH: number | null;
+  postH: number | null;
+  designerRate: number | null;
+  modelH: number | null;
+  modelPrice: number | null;
+  extraMat: number | null;
+  failPct: number | null;
+  marginProfitPct: number | null;
+  marginDevPct: number | null;
+  vatPct: number | null;
+  roundStep: number | null;
+  fees: number | null;
+  maintPerHour: number | null;
+  purgeG: number | null;
   filename: string;
   customerId: number;
   orderId: number;
@@ -56,7 +55,6 @@ export const calcFormDefaults: CalcForm = {
   failPct: 0,
   marginProfitPct: 80,
   marginDevPct: 35,
-  copies: 1,
   vatPct: 0,
   roundStep: 0,
   fees: 100,
@@ -71,6 +69,31 @@ export const calcFormDefaults: CalcForm = {
 };
 
 export const calcForm = writable<CalcForm>({ ...calcFormDefaults });
+
+// Заводские значения + пользовательские (из файла настроек).
+// Сброс «к заводским» возвращает calcFormDefaults, «к моим» — factoryWithUser.
+let userDefaults: Partial<CalcForm> = {};
+
+export function factoryValues(): CalcForm {
+  return { ...calcFormDefaults, ...userDefaults };
+}
+
+// applyCalcDefaults кладёт дефолты пользователя поверх заводских
+// (только известные ключи, типы — как в форме).
+export function applyCalcDefaults(m: Record<string, unknown>): void {
+  const next: Partial<CalcForm> = {};
+  for (const k of Object.keys(calcFormDefaults) as (keyof CalcForm)[]) {
+    if (k in m && m[k] != null) {
+      (next as Record<string, unknown>)[k] = m[k];
+    }
+  }
+  userDefaults = next;
+}
+
+// resetCalcForm возвращает форму к дефолтам (заводским или пользовательским).
+export function resetCalcForm(): void {
+  calcForm.set(factoryValues());
+}
 
 const LS_KEY = 'calcform.v1';
 

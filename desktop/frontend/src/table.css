@@ -23,6 +23,10 @@ td.n {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+tfoot td {
+  border-top: 2px solid var(--final-border);
+  font-size: 13px;
+}
 @media print {
   table {
     font-size: 11px;
@@ -31,5 +35,61 @@ td.n {
     border: none;
     padding: 0;
     max-width: none;
+  }
+}
+
+/* Перестановка колонок за грип (см. lib/coldrag.ts). */
+.twrap {
+  position: relative;
+}
+table.dragging {
+  user-select: none;
+}
+th.dragsrc {
+  opacity: 0.5;
+}
+.grip {
+  cursor: grab;
+  opacity: 0.45;
+  margin-right: 4px;
+  font-size: 12px;
+}
+.grip:active {
+  cursor: grabbing;
+}
+.drop-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  z-index: 2;
+  pointer-events: none;
+}
+@media print {
+  .grip,
+  .drop-line {
+    display: none;
+  }
+}
+table.tw {
+  table-layout: fixed;
+}
+table.tw th {
+  position: relative;
+  overflow: visible;
+}
+span.rz {
+  position: absolute;
+  right: -4px;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: col-resize;
+  z-index: 1;
+}
+@media print {
+  span.rz {
+    display: none;
   }
 }

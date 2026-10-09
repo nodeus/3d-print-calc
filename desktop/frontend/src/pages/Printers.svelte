@@ -6,11 +6,84 @@
   import { askConfirm } from '../lib/confirm';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num } from '../lib/format';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { mySettings } from '../lib/usersettings';
+  import { orderFor, saveTableOrder } from '../lib/colorder';
+  import { startColDrag } from '../lib/coldrag';
 
   let printers: PrinterDTO[] = $state([]);
   let error = $state('');
   let editId = $state(0);
-  let form: Printer = $state(blank());
+  let sortKey = $state('name');
+  let sortDir: 1 | -1 = $state(1);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+    else { sortKey = key; sortDir = 1; }
+  }
+
+  function arrow(key: string): string {
+    return sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  function sortVal(p: PrinterDTO): string | number {
+    switch (sortKey) {
+      case 'name': return p.Name.toLowerCase();
+      case 'model': return (p.Model || '').toLowerCase();
+      case 'price': return p.PurchasePrice;
+      case 'amort': return p.amortPerHour;
+      case 'method': return p.AmortMethod || '';
+      default: return p.Name.toLowerCase();
+    }
+  }
+
+  let shown = $derived([...printers].sort((a, b) => {
+    const va = sortVal(a);
+    const vb = sortVal(b);
+    const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+    return cmp * sortDir;
+  }));
+
+  const printerCols = [
+    { key: 'name', label: 'printer.name' }, { key: 'model', label: 'printer.model' },
+    { key: 'price', label: 'printer.price', num: true }, { key: 'amort', label: 'printer.amort', num: true },
+    { key: 'method', label: 'printer.method' },
+  ];
+  const printerKeys = printerCols.map((c) => c.key);
+  const printerNum = (k: string) => printerCols.some((c) => c.key === k && c.num);
+  const printerLabel = (k: string) => printerCols.find((c) => c.key === k)?.label ?? k;
+
+  let printerOrd = $derived(orderFor($mySettings.colOrder, 'printers', printerKeys));
+
+  function printerText(p: PrinterDTO, k: string): string {
+    switch (k) {
+      case 'name': return p.Name;
+      case 'model': return p.Model;
+      case 'price': return money(p.PurchasePrice / 100, p.Currency, 'ru');
+      case 'amort': return num(p.amortPerHour);
+      case 'method': return p.AmortMethod;
+      default: return '';
+    }
+  }
+
+  let dragKey: string | null = $state(null);
+  let dropX: number | null = $state(null);
+  let wrapEl: HTMLDivElement | null = $state(null);
+
+  async function dropCols(next: string[]) {
+    error = '';
+    try {
+      await saveTableOrder('printers', next);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+  // Форма: числа nullable (пусто — виден плейсхолдер, в payload — ?? дефолт).
+  type PrinterForm = Omit<Printer, 'PurchasePrice' | 'LifeYears' | 'HoursPerDay' | 'PowerKW' | 'MaintPerHour' | 'ResourceHours'> & {
+    PurchasePrice: number | null; LifeYears: number | null; HoursPerDay: number | null;
+    PowerKW: number | null; MaintPerHour: number | null; ResourceHours: number | null;
+  };
+  let form: PrinterForm = $state(blank());
   let isNew = $state(false);
 
   // Moonraker
@@ -21,12 +94,12 @@
   let importing = $state(false);
   let progress = $state({ done: 0, total: 0 });
 
-  function blank(): Printer {
+  function blank(): PrinterForm {
     return {
-      ID: 0, Name: '', Model: '', PurchasePrice: 0, Currency: 'RUB',
-      CommissioningDate: '', LifeYears: 3, HoursPerDay: 8,
-      CalendarMode: 'calendar', AmortMethod: 'calendar', PowerKW: 0.35,
-      MaintPerHour: 0, ResourceHours: 0, MoonrakerURL: '',
+      ID: 0, Name: '', Model: '', PurchasePrice: null, Currency: 'RUB',
+      CommissioningDate: '', LifeYears: null, HoursPerDay: null,
+      CalendarMode: 'calendar', AmortMethod: 'calendar', PowerKW: null,
+      MaintPerHour: null, ResourceHours: null, MoonrakerURL: '',
     };
   }
 
@@ -64,10 +137,14 @@
   async function save() {
     error = '';
     try {
-      const payload = {
+      const payload: Printer = {
         ...form,
-        PurchasePrice: Math.round(form.PurchasePrice * 100),
-        MaintPerHour: Math.round(form.MaintPerHour * 100),
+        PurchasePrice: Math.round((form.PurchasePrice ?? 0) * 100),
+        LifeYears: form.LifeYears ?? 3,
+        HoursPerDay: form.HoursPerDay ?? 8,
+        PowerKW: form.PowerKW ?? 0.35,
+        MaintPerHour: Math.round((form.MaintPerHour ?? 0) * 100),
+        ResourceHours: form.ResourceHours ?? 0,
       };
       if (isNew) await wails.addPrinter(payload);
       else await wails.updatePrinter(payload);
@@ -142,8 +219,8 @@
     await downloadPDF($t('nav.printers'), [
       {
         Title: '',
-        Headers: [$t('printer.name'), $t('printer.model'), $t('printer.price'), $t('printer.amort'), $t('printer.method')],
-        Rows: printers.map((p) => [p.Name, p.Model, money(p.PurchasePrice / 100, p.Currency, 'ru'), num(p.amortPerHour), p.AmortMethod]),
+        Headers: printerOrd.map((k) => $t(printerLabel(k))),
+        Rows: shown.map((p) => printerOrd.map((k) => printerText(p, k))),
       },
     ]);
   }
@@ -185,16 +262,29 @@
   </div>
 {/if}
 
-<table>
-  <thead><tr><th>{$t('printer.name')}</th><th>{$t('printer.model')}</th><th>{$t('printer.price')}</th><th>{$t('printer.amort')}</th><th>{$t('printer.method')}</th><th class="no-print"></th></tr></thead>
+<div class="twrap" bind:this={wrapEl}>
+{#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+<table class="tw" class:dragging={dragKey != null}>
+  <thead><tr>
+    {#each printerOrd as k}
+      <th class:n={printerNum(k)} style={thWidth('printers', k)} data-col={k} class:dragsrc={dragKey === k}>
+        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => startColDrag(e, wrapEl, k, printerOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols)}>⋮⋮</span>{/if}
+        <button class="th" onclick={() => toggleSort(k)}>{$t(printerLabel(k))}{arrow(k)}</button>
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'printers', k)} ondblclick={() => resetColWidth('printers', k)}></span>
+      </th>
+    {/each}
+    <th class="no-print"></th>
+  </tr></thead>
   <tbody>
-    {#each printers as p}
-      <tr><td>{p.Name}</td><td>{p.Model}</td><td class="n">{money(p.PurchasePrice / 100, p.Currency, 'ru')}</td><td class="n">{num(p.amortPerHour)}</td><td>{p.AmortMethod}</td>
+    {#each shown as p}
+      <tr>
+        {#each printerOrd as k}<td class:n={printerNum(k)}>{printerText(p, k)}</td>{/each}
         <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(p)}>✎</button> <button onclick={() => remove(p)}>✕</button>{/if}</td>
       </tr>
     {/each}
   </tbody>
 </table>
+</div>
 
 <h3>{$t('moon.title')}</h3>
 {#each printers as p}
@@ -222,6 +312,7 @@
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 120px; }
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; margin-bottom: 12px; }
+  button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 14px; }
   button.warn { border-color: var(--err); color: var(--err); }
   .ok { color: green; }
   .err { color: var(--err); }

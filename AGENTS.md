@@ -107,12 +107,30 @@ amortPerHour,opRate,prepH,postH}, cost, price, currency}` (v1 читается �
 ставки — только из настоящих данных (`manual` или `edited=1`), чистый импорт
 пользовательские ставки не затирает. Форма калькулятора живёт в `calcForm`
 + `localStorage` (`calcform.v1`) — переживает вкладки и перезапуск.
+Дефолты калькулятора (`factoryValues` + `userDefaults` из файла настроек):
+кнопка в калькуляторе + редактор в Настройках.
+Числовые поля форм — `number | null` (`null` = пусто, виден плейсхолдер);
+на границе расчёта/сохранения — `?? 0` (`copies/qty ?? 1`).
+Время работ (подготовка/пост/модель) — ввод парами ч+мин (`lib/hm.ts`),
+внутри/снапшотах — десятичные часы. Копий нет: всегда `Copies: 1`
+(движок деление хранит для старых данных).
+Колонки истории — 33 ключа (`HistoryColumns` в `desktop/app.go`: 13 базовых +
+20 расчётных из снапшота); настройка — карточка с аккордеонами в Настройках
+(таб «Основное»), ярлык «Колонки: N/33» вверху Истории. Порядок колонок —
+drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, порядок —
+`orderFor`/`colOrder` в секции пользователя; у Истории порядок живёт
+в массиве видимых колонок).
+Ширины колонок — drag за край `th` (`span.rz`, `table.tw`), хранятся
+`widths[table][col]` в секции пользователя. Сортировка `button.th` — во всех таблицах.
+Настройки интерфейса — `user_settings.json` рядом с `app.db`
+(`desktop/uisettings.go`): окно общее, остальное по логинам; нет файла — дефолты.
 
 Настройки амортизации/мощности/ТО — **на принтер**.
 
 ### БД SQLite (WAL, один `app.db`)
 
-`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
+`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE,
++bought_at, +archived — архивные скрыты из остатков и селекта калькулятора),
 spools(material_id, price, currency, bought_at, weight_left_g), printers(...,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),

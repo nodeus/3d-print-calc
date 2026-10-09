@@ -156,6 +156,40 @@ func TestUserDeleteGuards(t *testing.T) {
 	}
 }
 
+// TestMaterialBoughtArchived: дата закупа и флаг архивности материала.
+func TestMaterialBoughtArchived(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, err := mats.UpsertByCode(models.Material{Code: "PETG-A", Type: "PETG", Density: 1.27})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mats.Update(models.Material{ID: mid, Code: "PETG-A", Type: "PETG",
+		Density: 1.27, BoughtAt: "2026-10-01", Archived: true}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	got, err := mats.GetByCode("PETG-A")
+	if err != nil {
+		t.Fatalf("GetByCode: %v", err)
+	}
+	if got.BoughtAt != "2026-10-01" || !got.Archived {
+		t.Fatalf("поля не сохранились: %+v", got)
+	}
+	// Катушка архивного материала скрыта из остатков.
+	if _, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := db.SpoolStats()
+	if err != nil {
+		t.Fatalf("SpoolStats: %v", err)
+	}
+	for _, s := range stats {
+		if s.Code == "PETG-A" {
+			t.Fatalf("архивный материал в остатках: %+v", s)
+		}
+	}
+}
+
 func TestUpdateManualReprice(t *testing.T) {
 	db := openTestDB(t)
 	mats := db.Materials()

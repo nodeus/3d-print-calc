@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { get } from 'svelte/store';
   import Calculator from './pages/Calculator.svelte';
   import History from './pages/History.svelte';
   import Materials from './pages/Materials.svelte';
@@ -13,6 +14,7 @@
   import { t, initLocale } from './lib/i18n';
   import { user, refreshUser } from './lib/session';
   import { loadTheme } from './lib/theme';
+  import { applyMySettings } from './lib/usersettings';
   import { goTab } from './lib/nav';
   import { exportCurrentTab, hasPdfExporter } from './lib/pdf';
   import { wails } from './lib/wails';
@@ -26,6 +28,8 @@
     await initLocale();
     await loadTheme();
     await refreshUser();
+    // Сессия могла сохраниться: подтянуть настройки пользователя поверх глобальных.
+    if (get(user)) await applyMySettings();
   });
 
   const unsubGoTab = goTab.subscribe((v) => {
@@ -130,5 +134,6 @@
     :global(body[data-tab='reports'] main) { page: reportsLandscape; }
     :global(.cols) { grid-template-columns: 1fr !important; }
     :global(.grid) { grid-template-columns: 1fr !important; }
+    :global(.panels) { grid-template-columns: 1fr !important; }
   }
 </style>

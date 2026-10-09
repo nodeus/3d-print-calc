@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
+  import { get } from 'svelte/store';
   import { wails, type JobDTO, type MaterialDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
@@ -9,6 +10,10 @@
   import { goTab } from '../lib/nav';
   import { calcFormDefaults } from '../lib/calcform';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
+  import { myHistoryColumns, saveMySettingsPatch, mySettings } from '../lib/usersettings';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { splitHours, joinHours } from '../lib/hm';
+  import { startColDrag } from '../lib/coldrag';
 
   let jobs: JobDTO[] = $state([]);
   let materials: MaterialDTO[] = $state([]);
@@ -18,7 +23,7 @@
   let sortKey: string = $state('start');
   let sortDir: 1 | -1 = $state(-1);
   let page = $state(0);
-  const perPage = 50;
+  let perPage = $derived($mySettings.historyPerPage > 0 ? $mySettings.historyPerPage : 50);
   // Видимые колонки (Настройки → Колонки истории).
   let columns: string[] = $state(['filename', 'start', 'status', 'duration', 'weight', 'cost', 'price', 'origin']);
 
@@ -36,7 +41,44 @@
     cost: 'cost',
     price: 'price',
     origin: 'origin',
+    material: 'material',
+    tariff: 'tariff',
+    power: 'power',
+    amort: 'amort',
+    maint: 'maint',
+    purge: 'purge',
+    oprate: 'oprate',
+    prep: 'prep',
+    post: 'post',
+    designer: 'designer',
+    modelh: 'modelh',
+    modelprice: 'modelprice',
+    extra: 'extra',
+    fail: 'fail',
+    marginprofit: 'marginprofit',
+    margindev: 'margindev',
+    fees: 'fees',
+    copies: 'copies',
+    vat: 'vat',
+    round: 'round',
   };
+
+  // Вход расчёта из снапшота (v2); импорт без правок — пусто.
+  function snapInput(j: JobDTO): Record<string, number> {
+    try {
+      return JSON.parse(j.CostSnapshot)?.input ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  function snapMaterialOf(j: JobDTO): string {
+    try {
+      return JSON.parse(j.CostSnapshot)?.material ?? '';
+    } catch {
+      return '';
+    }
+  }
 
   function colLabel(key: string): string {
     const map: Record<string, string> = {
@@ -53,8 +95,48 @@
       cost: $t('hist.cost'),
       price: $t('calc.price'),
       origin: $t('hist.origin'),
+      material: $t('calc.material'),
+      tariff: $t('calc.tariff'),
+      power: $t('calc.power'),
+      amort: $t('calc.amort'),
+      maint: $t('calc.maint'),
+      purge: $t('calc.purge'),
+      oprate: $t('calc.op_rate'),
+      prep: $t('calc.prep'),
+      post: $t('calc.post'),
+      designer: $t('calc.designer_rate'),
+      modelh: $t('calc.model_h'),
+      modelprice: $t('calc.model_price'),
+      extra: $t('calc.extra'),
+      fail: $t('calc.fail'),
+      marginprofit: $t('calc.margin_profit'),
+      margindev: $t('calc.margin_dev'),
+      fees: $t('calc.fees'),
+      copies: $t('calc.copies'),
+      vat: $t('calc.vat'),
+      round: $t('calc.round'),
     };
     return map[key] ?? key;
+  }
+
+  // Маппинг колонка → ключ snapshot.input.
+  const inpKey: Record<string, string> = {
+    tariff: 'tariff', power: 'powerKW', amort: 'amortPerHour', maint: 'maintPerHour',
+    purge: 'purgeWasteG', oprate: 'opRate', prep: 'prepH', post: 'postH',
+    designer: 'designerRate', modelh: 'modelH', modelprice: 'modelPrice',
+    extra: 'extraMat', fail: 'failRate', marginprofit: 'marginProfit',
+    margindev: 'marginDev', fees: 'fees', copies: 'copies',
+    vat: 'vatRate', round: 'roundStep',
+  };
+
+  // Значение расчётной колонки: число из snapshot.input (доли → %) или null.
+  function inpVal(j: JobDTO, key: string): number | null {
+    const k = inpKey[key];
+    if (!k) return null;
+    const raw = snapInput(j)[k];
+    if (raw == null) return null;
+    if (['fail', 'marginprofit', 'margindev', 'vat'].includes(key)) return raw * 100;
+    return raw;
   }
 
   function cell(j: JobDTO, key: string): string {
@@ -85,19 +167,50 @@
         return num(snap(j).price);
       case 'origin':
         return originBadge(j);
+      case 'material':
+        return snapMaterialOf(j) || '—';
+      case 'fail':
+      case 'marginprofit':
+      case 'margindev':
+      case 'vat': {
+        const v = inpVal(j, key);
+        return v == null ? '—' : num(v) + '%';
+      }
+      case 'tariff':
+      case 'power':
+      case 'amort':
+      case 'maint':
+      case 'purge':
+      case 'oprate':
+      case 'prep':
+      case 'post':
+      case 'designer':
+      case 'modelh':
+      case 'modelprice':
+      case 'extra':
+      case 'fees':
+      case 'copies':
+      case 'round': {
+        const v = inpVal(j, key);
+        return v == null ? '—' : num(v);
+      }
       default:
         return '';
     }
   }
 
   function isNum(key: string): boolean {
-    return ['duration', 'weight', 'length', 'size', 'filament', 'cost', 'price'].includes(key);
+    return ['duration', 'weight', 'length', 'size', 'filament', 'cost', 'price',
+      'tariff', 'power', 'amort', 'maint', 'purge', 'oprate', 'prep', 'post',
+      'designer', 'modelh', 'modelprice', 'extra', 'fail', 'marginprofit',
+      'margindev', 'fees', 'copies', 'vat', 'round'].includes(key);
   }
 
   async function load() {
     try {
       jobs = (await wails.jobs(0)) ?? []; // всё: раньше лимит 200 обрезал историю
-      columns = (await wails.historyColumns()) ?? columns;
+      // Колонки: секция пользователя из файла, фолбэк — legacy-БД.
+      columns = await myHistoryColumns(columns);
       materials = (await wails.materials()) ?? [];
     } catch (e) {
       error = String(e);
@@ -168,6 +281,28 @@
           return snap(j).price;
         case 'origin':
           return j.Origin || 'import';
+        case 'material':
+          return snapMaterialOf(j).toLowerCase();
+        case 'tariff':
+        case 'power':
+        case 'amort':
+        case 'maint':
+        case 'purge':
+        case 'oprate':
+        case 'prep':
+        case 'post':
+        case 'designer':
+        case 'modelh':
+        case 'modelprice':
+        case 'extra':
+        case 'fail':
+        case 'marginprofit':
+        case 'margindev':
+        case 'fees':
+        case 'copies':
+        case 'vat':
+        case 'round':
+          return inpVal(j, sortKey) ?? -1;
         default:
           return j.StartAt;
       }
@@ -183,7 +318,96 @@
 
   let pages = $derived(Math.max(1, Math.ceil(filtered.length / perPage)));
   let visible = $derived(filtered.slice(page * perPage, page * perPage + perPage));
+
+  $effect(() => {
+    void filtered.length;
+    void perPage;
+    untrack(() => {
+      if (page > pages - 1) page = pages - 1;
+      if (page < 0) page = 0;
+    });
+  });
   let statuses = $derived([...new Set(jobs.map((j) => j.Status))].sort());
+
+  // Все колонки в фиксированном порядке бэкенда (настройка — в Настройках).
+  const allColumns = Object.keys(sortable);
+
+  function openColumns() {
+    goTab.set('settings');
+  }
+
+  // Суммы по выборке: только аддитивные колонки (сырьё, не строки ячеек).
+  const summable = ['duration', 'weight', 'length', 'size', 'filament', 'cost', 'price'];
+
+  function rawVal(j: JobDTO, key: string): number {
+    switch (key) {
+      case 'duration': return j.TotalSec;
+      case 'weight': return j.WeightG;
+      case 'length': return j.LengthM;
+      case 'size': return j.SizeBytes;
+      case 'filament': return j.FilamentTotalMm;
+      case 'cost': return snap(j).cost;
+      case 'price': return snap(j).price;
+      default: return 0;
+    }
+  }
+
+  let totals: Record<string, number> | null = $state(null);
+  let totalsN = $state(0);
+
+  function calcTotals() {
+    const t: Record<string, number> = {};
+    for (const k of summable) {
+      let s = 0;
+      for (const j of filtered) s += rawVal(j, k) || 0;
+      t[k] = Math.round(s * 100) / 100;
+    }
+    totals = t;
+    totalsN = filtered.length;
+  }
+
+  // Выборка изменилась — суммы прячем до повторного подсчёта.
+  // untrack обязателен: чтение totals подписало бы эффект на него же,
+  // и подсчёт тут же гасился бы (баг v1.2.1).
+  $effect(() => {
+    void filtered.length;
+    void columns.length;
+    untrack(() => {
+      totals = null;
+    });
+  });
+
+  function footText(k: string): string {
+    if (!totals) return '';
+    const labelCol = columns.includes('filename') ? 'filename' : columns[0];
+    if (k === labelCol) return `${$t('hist.total')} · ${totalsN}`;
+    if (!(k in totals)) return '';
+    const v = totals[k];
+    if (k === 'duration') return hms(Math.round(v));
+    return num(v);
+  }
+
+  // Drag-перестановка колонок за грип (manager+). Порог 4px отделяет
+  // перетаскивание от клика; линия показывает место вставки.
+  let dragCol: string | null = $state(null);
+  let dropX: number | null = $state(null);
+  let wrapEl: HTMLDivElement | null = $state(null);
+
+  async function persistColumns(ordered: string[]) {
+    error = '';
+    try {
+      await wails.setHistoryColumns(ordered);
+      await saveMySettingsPatch({ historyColumns: ordered });
+      columns = ordered;
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function gripDown(e: PointerEvent, col: string) {
+    if (!canWrite(get(user))) return;
+    startColDrag(e, wrapEl, col, columns, (k, x) => { dragCol = k; dropX = x; }, persistColumns);
+  }
 
   function toCalc(j: JobDTO) {
     prefillJob.set(j);
@@ -191,11 +415,13 @@
   }
 
   async function toPDF() {
+    const rows = filtered.map((j) => columns.map((c) => cell(j, c)));
+    if (totals) rows.push(columns.map((c) => footText(c)));
     await downloadPDF($t('nav.history'), [
       {
         Title: '',
         Headers: columns.map(colLabel),
-        Rows: filtered.map((j) => columns.map((c) => cell(j, c))),
+        Rows: rows,
       },
     ]);
   }
@@ -232,7 +458,7 @@
     filename: '', status: 'completed', startAt: '', endAt: '',
     printSec: 0, totalSec: 0, weightG: 0, lengthM: 0, slicer: '', material: '',
     tariff: 0, powerKW: 0, amortPerHour: 0, maintPerHour: 0, purgeG: 0,
-    opRate: 0, prepH: 0, postH: 0, designerRate: 0, modelH: 0, modelPrice: 0,
+    opRate: 0, designerRate: 0, modelPrice: 0,
     extraMat: 0, failPct: 0, marginProfitPct: 0, marginDevPct: 0, fees: 0,
     copies: 1, vatPct: 0, roundStep: 0,
   });
@@ -248,7 +474,7 @@
     } catch {
       inp = {};
     }
-    const pick = (k: string, fb: number) => (inp[k] != null ? inp[k] : fb);
+    const pick = (k: string, fb: number | null) => (inp[k] != null ? inp[k] : (fb ?? 0));
     edit = {
       filename: j.Filename, status: j.Status, startAt: j.StartAt, endAt: j.EndAt,
       printSec: j.PrintSec, totalSec: j.TotalSec, weightG: j.WeightG,
@@ -257,17 +483,24 @@
       amortPerHour: pick('amortPerHour', d.amortPerHour),
       maintPerHour: pick('maintPerHour', d.maintPerHour),
       purgeG: pick('purgeWasteG', d.purgeG),
-      opRate: pick('opRate', d.opRate), prepH: pick('prepH', d.prepH), postH: pick('postH', d.postH),
-      designerRate: pick('designerRate', d.designerRate),
-      modelH: pick('modelH', d.modelH), modelPrice: pick('modelPrice', d.modelPrice),
+      opRate: pick('opRate', d.opRate), designerRate: pick('designerRate', d.designerRate),
+      modelPrice: pick('modelPrice', d.modelPrice),
       extraMat: pick('extraMat', d.extraMat),
       failPct: pick('failRate', 0) * 100,
-      marginProfitPct: pick('marginProfit', d.marginProfitPct / 100) * 100,
-      marginDevPct: pick('marginDev', d.marginDevPct / 100) * 100,
+      marginProfitPct: pick('marginProfit', (d.marginProfitPct ?? 0) / 100) * 100,
+      marginDevPct: pick('marginDev', (d.marginDevPct ?? 0) / 100) * 100,
       fees: pick('fees', d.fees), copies: Math.max(1, Math.round(pick('copies', 1))),
       vatPct: pick('vatRate', 0) * 100, roundStep: pick('roundStep', 0),
     };
+    editPrep = splitHours(pick('prepH', d.prepH ?? 0));
+    editPost = splitHours(pick('postH', d.postH ?? 0));
+    editModel = splitHours(pick('modelH', d.modelH ?? 0));
   }
+
+  // Время работ в правке — парами часы+минуты (в снапшот — десятичные часы).
+  let editPrep = $state({ h: null as number | null, m: null as number | null });
+  let editPost = $state({ h: null as number | null, m: null as number | null });
+  let editModel = $state({ h: null as number | null, m: null as number | null });
 
   function snapMaterial(j: JobDTO): string {
     try {
@@ -284,19 +517,19 @@
         id: editId,
         filename: edit.filename, status: edit.status,
         startAt: edit.startAt, endAt: edit.endAt,
-        printSec: edit.printSec, totalSec: edit.totalSec,
+        printSec: edit.printSec ?? 0, totalSec: edit.totalSec ?? 0,
         estimatedSec: 0, sizeBytes: 0,
-        weightG: edit.weightG, lengthM: edit.lengthM,
+        weightG: edit.weightG ?? 0, lengthM: edit.lengthM ?? 0,
         slicer: edit.slicer, material: edit.material.trim(),
-        tariff: edit.tariff, powerKW: edit.powerKW,
-        amortPerHour: edit.amortPerHour, maintPerHour: edit.maintPerHour,
-        purgeWasteG: edit.purgeG,
-        opRate: edit.opRate, prepH: edit.prepH, postH: edit.postH,
-        designerRate: edit.designerRate, modelH: edit.modelH, modelPrice: edit.modelPrice,
-        extraMat: edit.extraMat, failRate: edit.failPct / 100,
-        marginProfit: edit.marginProfitPct / 100, marginDev: edit.marginDevPct / 100,
-        fees: edit.fees, copies: Math.max(1, Math.round(edit.copies)),
-        vatRate: edit.vatPct / 100, roundStep: edit.roundStep,
+        tariff: edit.tariff ?? 0, powerKW: edit.powerKW ?? 0,
+        amortPerHour: edit.amortPerHour ?? 0, maintPerHour: edit.maintPerHour ?? 0,
+        purgeWasteG: edit.purgeG ?? 0,
+        opRate: edit.opRate ?? 0, prepH: joinHours(editPrep.h, editPrep.m), postH: joinHours(editPost.h, editPost.m),
+        designerRate: edit.designerRate ?? 0, modelH: joinHours(editModel.h, editModel.m), modelPrice: edit.modelPrice ?? 0,
+        extraMat: edit.extraMat ?? 0, failRate: (edit.failPct ?? 0) / 100,
+        marginProfit: (edit.marginProfitPct ?? 0) / 100, marginDev: (edit.marginDevPct ?? 0) / 100,
+        fees: edit.fees ?? 0, copies: Math.max(1, Math.round(edit.copies ?? 1)),
+        vatRate: (edit.vatPct ?? 0) / 100, roundStep: edit.roundStep ?? 0,
       });
       editId = 0;
       await load();
@@ -323,7 +556,7 @@
       <label>{$t('calc.material')}
         <select bind:value={edit.material}>
           <option value="">—</option>
-          {#each materials as m}<option value={m.code}>{m.code}</option>{/each}
+          {#each materials.filter((m) => !m.archived || m.code === edit.material) as m}<option value={m.code}>{m.code}</option>{/each}
         </select>
       </label>
       <label>{$t('hist.slicer')}<input bind:value={edit.slicer} placeholder="OrcaSlicer" /></label>
@@ -345,10 +578,13 @@
     </div>
     <div class="row">
       <label>{$t('calc.op_rate')}<input type="number" min="0" bind:value={edit.opRate} /></label>
-      <label>{$t('calc.prep')}<input type="number" min="0" step="0.1" bind:value={edit.prepH} /></label>
-      <label>{$t('calc.post')}<input type="number" min="0" step="0.1" bind:value={edit.postH} /></label>
+      <label>{$t('calc.prep_h')}<input type="number" min="0" bind:value={editPrep.h} /></label>
+      <label>{$t('calc.prep_m')}<input type="number" min="0" bind:value={editPrep.m} /></label>
+      <label>{$t('calc.post_h')}<input type="number" min="0" bind:value={editPost.h} /></label>
+      <label>{$t('calc.post_m')}<input type="number" min="0" bind:value={editPost.m} /></label>
       <label>{$t('calc.designer_rate')}<input type="number" min="0" bind:value={edit.designerRate} /></label>
-      <label>{$t('calc.model_h')}<input type="number" min="0" step="0.1" bind:value={edit.modelH} /></label>
+      <label>{$t('calc.model_h')}<input type="number" min="0" bind:value={editModel.h} /></label>
+      <label>{$t('calc.model_m')}<input type="number" min="0" bind:value={editModel.m} /></label>
       <label>{$t('calc.model_price')}<input type="number" min="0" bind:value={edit.modelPrice} /></label>
     </div>
     <div class="row">
@@ -375,6 +611,8 @@
     {#each statuses as s}<option value={s}>{s}</option>{/each}
   </select>
   <span class="count">{$t('hist.shown')}: {visible.length} / {filtered.length} / {jobs.length}</span>
+  <button onclick={calcTotals}>{$t('hist.sums_btn')}</button>
+  <button onclick={openColumns}>{$t('hist.columns_btn')}: {columns.length}/{allColumns.length}</button>
   <span class="pager">
     <button disabled={page === 0} onclick={() => page--}>‹</button>
     {page + 1} / {pages}
@@ -382,13 +620,17 @@
   </span>
 </div>
 
-<table>
+<div class="twrap" bind:this={wrapEl}>
+{#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+<table class="tw" class:dragging={dragCol != null}>
   <thead><tr>
     {#each columns as c}
-      <th class:n={isNum(c)}>
+      <th class:n={isNum(c)} style={thWidth('history', c)} data-col={c} class:dragsrc={dragCol === c}>
+        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, c)}>⋮⋮</span>{/if}
         {#if sortable[c]}
           <button class="th" onclick={() => toggleSort(sortable[c])}>{colLabel(c)}{arrow(sortable[c])}</button>
         {:else}{colLabel(c)}{/if}
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'history', c)} ondblclick={() => resetColWidth('history', c)}></span>
       </th>
     {/each}
     <th class="no-print"></th>
@@ -411,7 +653,14 @@
       </tr>
     {/each}
   </tbody>
+  {#if totals}
+    <tfoot><tr>
+      {#each columns as c}<td class:n={isNum(c)}><b>{footText(c)}</b></td>{/each}
+      <td class="no-print"></td>
+    </tr></tfoot>
+  {/if}
 </table>
+</div>
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }

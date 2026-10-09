@@ -401,6 +401,8 @@ func (r *ordersRepo) RecalcTotal(orderID int64) (int64, error) {
 }
 
 // DeleteOrderItem удаляет позицию с пересчётом итога.
+// Привязанные оплаты удаляются вместе с позицией (каскад): иначе чужие
+// деньги оставались бы в заказе и завышали бы PaidTotal.
 func (r *ordersRepo) DeleteOrderItem(id int64) error {
 	var orderID int64
 	if err := r.db.QueryRow(`SELECT order_id FROM order_items WHERE id=?`, id).Scan(&orderID); err != nil {
@@ -411,8 +413,7 @@ func (r *ordersRepo) DeleteOrderItem(id int64) error {
 		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
 	}
 	defer tx.Rollback()
-	// Оплаты позиции обнуляем (становятся оплатами всего заказа), позицию удаляем.
-	if _, err := tx.Exec(`UPDATE payments SET order_item_id=NULL WHERE order_item_id=?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM payments WHERE order_item_id=?`, id); err != nil {
 		return fmt.Errorf("ERR_ORDER_ITEM: %w", err)
 	}
 	if _, err := tx.Exec(`DELETE FROM order_items WHERE id=?`, id); err != nil {
