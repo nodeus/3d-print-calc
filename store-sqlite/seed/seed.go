@@ -142,6 +142,16 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 	for i, r := range rows {
 		code := importers.ParseMaterial(r.Filename)
 		m, ok := matIDs[code]
+		spoolN := 0
+		if !ok {
+			// Приоритет точного кода (legacy: PETG-NIT-W4), затем база + номер
+			// катушки (PETG-NIT-BLACK-1 → PETG-NIT-BLACK + №1).
+			if base, n := importers.ParseMaterialSpool(r.Filename); n > 0 {
+				if mb, ok2 := matIDs[base]; ok2 {
+					m, ok, code, spoolN = mb, true, base, n
+				}
+			}
+		}
 		if !ok && code != "" {
 			// Код из имени файла, которого нет в листе «Материалы»
 			// (более поздние закупки): стаб со стандартной плотностью.
@@ -158,6 +168,18 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 		if ok {
 			pricePerKg, density = priceByCode[code], m.Density
 			spoolID = spoolIDs[code]
+			// Номер катушки из имени файла: её цена точнее первой.
+			if spoolN > 0 {
+				if spools, err := mats.ListSpools(m.ID); err == nil {
+					for _, s := range spools {
+						if s.SpoolNo == spoolN {
+							spoolID = s.ID
+							pricePerKg = float64(s.Price) / 100
+							break
+						}
+					}
+				}
+			}
 			st.Linked++
 		}
 		weightG := calc.WeightFromLength(density, 1.75, r.FilamentUsed)

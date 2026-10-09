@@ -155,6 +155,7 @@ func (a *App) UpdateSpool(s models.Spool) error {
 type SpoolDTO struct {
 	ID          int64   `json:"id"`
 	MaterialID  int64   `json:"materialId"`
+	SpoolNo     int     `json:"spoolNo"`
 	Price       float64 `json:"price"`
 	Currency    string  `json:"currency"`
 	BoughtAt    string  `json:"boughtAt"`
@@ -165,7 +166,7 @@ type SpoolDTO struct {
 
 func toSpoolDTO(s models.Spool) SpoolDTO {
 	return SpoolDTO{
-		ID: s.ID, MaterialID: s.MaterialID, Price: float64(s.Price) / 100,
+		ID: s.ID, MaterialID: s.MaterialID, SpoolNo: s.SpoolNo, Price: float64(s.Price) / 100,
 		Currency: s.Currency, BoughtAt: s.BoughtAt,
 		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightLeftG, Archived: s.Archived,
 	}

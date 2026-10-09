@@ -262,6 +262,7 @@
   "mat.archived": "Архивный",
   "mat.price_spool_note": "Цена первой катушки — правится в катушках ниже",
   "spool.title": "Катушки",
+  "spool.num": "№",
   "spool.date": "Дата покупки",
   "spool.price": "Цена, ₽",
   "spool.weight": "Партия, г",
