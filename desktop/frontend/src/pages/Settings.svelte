@@ -419,6 +419,20 @@
   {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs})</p>{/if}
 </div>
 
+<div class="card">
+  <h3>{$t('set.pw')}</h3>
+  <label>{$t('auth.password')} ({$t('set.pw_old')})<input type="password" bind:value={oldPw} /></label>
+  <label>{$t('set.pw_new')}<input type="password" bind:value={newPw} /></label>
+  <div class="row"><button onclick={changePw}>{$t('common.save')}</button></div>
+  {#if pwMsg}<p class="ok">{pwMsg}</p>{/if}
+</div>
+
+{#if isAdmin($user)}
+  <div class="card wide">
+    <h3>{$t('nav.users')}</h3>
+    <Users />
+  </div>
+{/if}
 </div>
 <div class="panel">
 <div class="card">
@@ -461,22 +475,6 @@
 {/if}
 </div>
 
-</div>
-<div class="panel">
-<div class="card">
-  <h3>{$t('set.pw')}</h3>
-  <label>{$t('auth.password')} ({$t('set.pw_old')})<input type="password" bind:value={oldPw} /></label>
-  <label>{$t('set.pw_new')}<input type="password" bind:value={newPw} /></label>
-  <div class="row"><button onclick={changePw}>{$t('common.save')}</button></div>
-  {#if pwMsg}<p class="ok">{pwMsg}</p>{/if}
-</div>
-
-{#if isAdmin($user)}
-  <div class="card wide">
-    <h3>{$t('nav.users')}</h3>
-    <Users />
-  </div>
-{/if}
 </div>
 </div>
 
