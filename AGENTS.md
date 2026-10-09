@@ -107,12 +107,21 @@ amortPerHour,opRate,prepH,postH}, cost, price, currency}` (v1 читается �
 ставки — только из настоящих данных (`manual` или `edited=1`), чистый импорт
 пользовательские ставки не затирает. Форма калькулятора живёт в `calcForm`
 + `localStorage` (`calcform.v1`) — переживает вкладки и перезапуск.
+Дефолты калькулятора (`factoryValues` + `userDefaults` из файла настроек):
+кнопка в калькуляторе + редактор в Настройках.
+Колонки истории — 33 ключа (`HistoryColumns` в `desktop/app.go`: 13 базовых +
+20 расчётных из снапшота); чекбоксы — вверху Истории, instant-save.
+Ширины колонок — drag за край `th` (`span.rz`, `table.tw`), хранятся
+`widths[table][col]` в секции пользователя. Сортировка `button.th` — во всех таблицах.
+Настройки интерфейса — `user_settings.json` рядом с `app.db`
+(`desktop/uisettings.go`): окно общее, остальное по логинам; нет файла — дефолты.
 
 Настройки амортизации/мощности/ТО — **на принтер**.
 
 ### БД SQLite (WAL, один `app.db`)
 
-`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
+`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE,
++bought_at, +archived — архивные скрыты из остатков и селекта калькулятора),
 spools(material_id, price, currency, bought_at, weight_left_g), printers(...,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),

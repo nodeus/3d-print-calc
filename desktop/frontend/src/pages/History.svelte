@@ -9,6 +9,8 @@
   import { goTab } from '../lib/nav';
   import { calcFormDefaults } from '../lib/calcform';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
+  import { myHistoryColumns, saveMySettingsPatch } from '../lib/usersettings';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
 
   let jobs: JobDTO[] = $state([]);
   let materials: MaterialDTO[] = $state([]);
@@ -36,7 +38,44 @@
     cost: 'cost',
     price: 'price',
     origin: 'origin',
+    material: 'material',
+    tariff: 'tariff',
+    power: 'power',
+    amort: 'amort',
+    maint: 'maint',
+    purge: 'purge',
+    oprate: 'oprate',
+    prep: 'prep',
+    post: 'post',
+    designer: 'designer',
+    modelh: 'modelh',
+    modelprice: 'modelprice',
+    extra: 'extra',
+    fail: 'fail',
+    marginprofit: 'marginprofit',
+    margindev: 'margindev',
+    fees: 'fees',
+    copies: 'copies',
+    vat: 'vat',
+    round: 'round',
   };
+
+  // Вход расчёта из снапшота (v2); импорт без правок — пусто.
+  function snapInput(j: JobDTO): Record<string, number> {
+    try {
+      return JSON.parse(j.CostSnapshot)?.input ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  function snapMaterialOf(j: JobDTO): string {
+    try {
+      return JSON.parse(j.CostSnapshot)?.material ?? '';
+    } catch {
+      return '';
+    }
+  }
 
   function colLabel(key: string): string {
     const map: Record<string, string> = {
@@ -53,8 +92,48 @@
       cost: $t('hist.cost'),
       price: $t('calc.price'),
       origin: $t('hist.origin'),
+      material: $t('calc.material'),
+      tariff: $t('calc.tariff'),
+      power: $t('calc.power'),
+      amort: $t('calc.amort'),
+      maint: $t('calc.maint'),
+      purge: $t('calc.purge'),
+      oprate: $t('calc.op_rate'),
+      prep: $t('calc.prep'),
+      post: $t('calc.post'),
+      designer: $t('calc.designer_rate'),
+      modelh: $t('calc.model_h'),
+      modelprice: $t('calc.model_price'),
+      extra: $t('calc.extra'),
+      fail: $t('calc.fail'),
+      marginprofit: $t('calc.margin_profit'),
+      margindev: $t('calc.margin_dev'),
+      fees: $t('calc.fees'),
+      copies: $t('calc.copies'),
+      vat: $t('calc.vat'),
+      round: $t('calc.round'),
     };
     return map[key] ?? key;
+  }
+
+  // Маппинг колонка → ключ snapshot.input.
+  const inpKey: Record<string, string> = {
+    tariff: 'tariff', power: 'powerKW', amort: 'amortPerHour', maint: 'maintPerHour',
+    purge: 'purgeWasteG', oprate: 'opRate', prep: 'prepH', post: 'postH',
+    designer: 'designerRate', modelh: 'modelH', modelprice: 'modelPrice',
+    extra: 'extraMat', fail: 'failRate', marginprofit: 'marginProfit',
+    margindev: 'marginDev', fees: 'fees', copies: 'copies',
+    vat: 'vatRate', round: 'roundStep',
+  };
+
+  // Значение расчётной колонки: число из snapshot.input (доли → %) или null.
+  function inpVal(j: JobDTO, key: string): number | null {
+    const k = inpKey[key];
+    if (!k) return null;
+    const raw = snapInput(j)[k];
+    if (raw == null) return null;
+    if (['fail', 'marginprofit', 'margindev', 'vat'].includes(key)) return raw * 100;
+    return raw;
   }
 
   function cell(j: JobDTO, key: string): string {
@@ -85,19 +164,50 @@
         return num(snap(j).price);
       case 'origin':
         return originBadge(j);
+      case 'material':
+        return snapMaterialOf(j) || '—';
+      case 'fail':
+      case 'marginprofit':
+      case 'margindev':
+      case 'vat': {
+        const v = inpVal(j, key);
+        return v == null ? '—' : num(v) + '%';
+      }
+      case 'tariff':
+      case 'power':
+      case 'amort':
+      case 'maint':
+      case 'purge':
+      case 'oprate':
+      case 'prep':
+      case 'post':
+      case 'designer':
+      case 'modelh':
+      case 'modelprice':
+      case 'extra':
+      case 'fees':
+      case 'copies':
+      case 'round': {
+        const v = inpVal(j, key);
+        return v == null ? '—' : num(v);
+      }
       default:
         return '';
     }
   }
 
   function isNum(key: string): boolean {
-    return ['duration', 'weight', 'length', 'size', 'filament', 'cost', 'price'].includes(key);
+    return ['duration', 'weight', 'length', 'size', 'filament', 'cost', 'price',
+      'tariff', 'power', 'amort', 'maint', 'purge', 'oprate', 'prep', 'post',
+      'designer', 'modelh', 'modelprice', 'extra', 'fail', 'marginprofit',
+      'margindev', 'fees', 'copies', 'vat', 'round'].includes(key);
   }
 
   async function load() {
     try {
       jobs = (await wails.jobs(0)) ?? []; // всё: раньше лимит 200 обрезал историю
-      columns = (await wails.historyColumns()) ?? columns;
+      // Колонки: секция пользователя из файла, фолбэк — legacy-БД.
+      columns = await myHistoryColumns(columns);
       materials = (await wails.materials()) ?? [];
     } catch (e) {
       error = String(e);
@@ -168,6 +278,28 @@
           return snap(j).price;
         case 'origin':
           return j.Origin || 'import';
+        case 'material':
+          return snapMaterialOf(j).toLowerCase();
+        case 'tariff':
+        case 'power':
+        case 'amort':
+        case 'maint':
+        case 'purge':
+        case 'oprate':
+        case 'prep':
+        case 'post':
+        case 'designer':
+        case 'modelh':
+        case 'modelprice':
+        case 'extra':
+        case 'fail':
+        case 'marginprofit':
+        case 'margindev':
+        case 'fees':
+        case 'copies':
+        case 'vat':
+        case 'round':
+          return inpVal(j, sortKey) ?? -1;
         default:
           return j.StartAt;
       }
@@ -184,6 +316,25 @@
   let pages = $derived(Math.max(1, Math.ceil(filtered.length / perPage)));
   let visible = $derived(filtered.slice(page * perPage, page * perPage + perPage));
   let statuses = $derived([...new Set(jobs.map((j) => j.Status))].sort());
+
+  // Все колонки в фиксированном порядке бэкенда; чекбоксы применяют сразу.
+  const allColumns = Object.keys(sortable);
+
+  async function toggleColumn(key: string) {
+    error = '';
+    const next = columns.includes(key) ? columns.filter((c) => c !== key) : [...columns, key];
+    // Порядок — как в allColumns, бэкенд хранит присланный.
+    const ordered = allColumns.filter((c) => next.includes(c));
+    if (!ordered.length) return; // хоть одна колонка обязана остаться
+    try {
+      // Сразу в оба места: legacy-БД (совместимость) и файл пользователя.
+      await wails.setHistoryColumns(ordered);
+      await saveMySettingsPatch({ historyColumns: ordered });
+      columns = ordered;
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   function toCalc(j: JobDTO) {
     prefillJob.set(j);
@@ -323,7 +474,7 @@
       <label>{$t('calc.material')}
         <select bind:value={edit.material}>
           <option value="">—</option>
-          {#each materials as m}<option value={m.code}>{m.code}</option>{/each}
+          {#each materials.filter((m) => !m.archived || m.code === edit.material) as m}<option value={m.code}>{m.code}</option>{/each}
         </select>
       </label>
       <label>{$t('hist.slicer')}<input bind:value={edit.slicer} placeholder="OrcaSlicer" /></label>
@@ -381,14 +532,20 @@
     <button disabled={page >= pages - 1} onclick={() => page++}>›</button>
   </span>
 </div>
+<div class="cols no-print">
+  {#each allColumns as c}
+    <label class="col"><input type="checkbox" checked={columns.includes(c)} disabled={!canWrite($user)} onchange={() => toggleColumn(c)} /> {colLabel(c)}</label>
+  {/each}
+</div>
 
-<table>
+<table class="tw">
   <thead><tr>
     {#each columns as c}
-      <th class:n={isNum(c)}>
+      <th class:n={isNum(c)} style={thWidth('history', c)}>
         {#if sortable[c]}
           <button class="th" onclick={() => toggleSort(sortable[c])}>{colLabel(c)}{arrow(sortable[c])}</button>
         {:else}{colLabel(c)}{/if}
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'history', c)} ondblclick={() => resetColWidth('history', c)}></span>
       </th>
     {/each}
     <th class="no-print"></th>
@@ -415,6 +572,8 @@
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .cols { display: flex; gap: 4px 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  label.col { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
   .note { color: var(--muted); }
   input, select, button { padding: 6px; font-size: 14px; }
   .count { color: var(--muted); font-size: 13px; }

@@ -57,6 +57,8 @@ type Material struct {
 	Diameter            float64 // мм, напр. 1.75
 	DefaultSpoolWeightG float64 // вес новых катушек, г (дефолт 1000)
 	Note                string
+	BoughtAt            string // дата закупа, '' = отсутствует
+	Archived            bool   // архивные скрыты из остатков и селекта калькулятора
 }
 
 // Spool — закупочная партия (катушка) с ценой и остатком.

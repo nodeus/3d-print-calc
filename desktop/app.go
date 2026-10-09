@@ -26,6 +26,8 @@ type MaterialDTO struct {
 	Vendor         string  `json:"vendor"`
 	ColorHex       string  `json:"colorHex"`
 	Note           string  `json:"note"`
+	BoughtAt       string  `json:"boughtAt"`
+	Archived       bool    `json:"archived"`
 	Density        float64 `json:"density"`
 	Diameter       float64 `json:"diameter"`
 	DefaultWeightG float64 `json:"defaultWeightG"`
@@ -47,6 +49,7 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 			ID: m.ID, Code: m.Code, Type: m.Type, Vendor: m.Vendor,
 			ColorHex: m.ColorHex, Note: m.Note, DefaultWeightG: m.DefaultSpoolWeightG,
 			Density: m.Density, Diameter: m.Diameter, Currency: "RUB",
+			BoughtAt: m.BoughtAt, Archived: m.Archived,
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
 			dto.PricePerKg = float64(spools[0].Price) / 100
@@ -487,9 +490,14 @@ func (a *App) ConvertCurrency(target string, rate float64) error {
 }
 
 // HistoryColumns — все колонки истории печати (порядок фиксирован).
+// Вторая группа — расчётные поля из снапшота (все редактируемые в правке).
 var HistoryColumns = []string{
 	"filename", "start", "end", "status", "duration", "weight", "length",
 	"size", "filament", "slicer", "cost", "price", "origin",
+	"material", "tariff", "power", "amort", "maint", "purge",
+	"oprate", "prep", "post", "designer", "modelh", "modelprice",
+	"extra", "fail", "marginprofit", "margindev", "fees",
+	"copies", "vat", "round",
 }
 
 // DefaultHistoryColumns — видимые по умолчанию.

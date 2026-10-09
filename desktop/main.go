@@ -68,10 +68,19 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.eventsOn = true
 	runtime.WindowSetTitle(ctx, fmt.Sprintf("3D Print Cost Calculator v%s (%s)", Version, BuildDate))
+	// Восстановить размер/позицию окна из файла настроек.
+	if w, err := a.GetWindowSettings(); err == nil && w.W > 0 && w.H > 0 {
+		runtime.WindowSetSize(ctx, w.W, w.H)
+		runtime.WindowSetPosition(ctx, w.X, w.Y)
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {
-	_ = ctx
+	// Сохранить размер/позицию окна в файл настроек.
+	if w, h := runtime.WindowGetSize(ctx); w > 0 && h > 0 {
+		x, y := runtime.WindowGetPosition(ctx)
+		_ = a.saveWindowSettings(WindowSettings{W: w, H: h, X: x, Y: y})
+	}
 }
 
 // initDB открывает app.db, накатывает миграции и сеет при первом запуске.

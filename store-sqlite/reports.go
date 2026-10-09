@@ -146,6 +146,7 @@ type SpoolStat struct {
 // Ничего не перезаписывает (идемпотентно при реимпортах).
 // Работы с явным spool_id идут на свою катушку; работы без катушки —
 // на первую катушку того же материала (код из снапшота). Без кода — ничьи.
+// Катушки архивных материалов скрыты.
 func (d *DB) SpoolStats() ([]SpoolStat, error) {
 	rows, err := d.sql.Query(`SELECT m.code, m.color_hex, m.vendor, s.weight_init_g,
 		COUNT(j.id), COALESCE(SUM(j.weight_g), 0)
@@ -155,6 +156,7 @@ func (d *DB) SpoolStats() ([]SpoolStat, error) {
 			AND json_extract(COALESCE(j.cost_snapshot, '{}'), '$.material') = m.code
 			AND s.id = (SELECT MIN(s2.id) FROM spools s2 WHERE s2.material_id = m.id)
 		)
+		WHERE COALESCE(m.archived, 0) = 0
 		GROUP BY s.id ORDER BY m.code`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_REPORT: %w", err)

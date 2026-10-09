@@ -2,6 +2,7 @@
   import { wails } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user } from '../lib/session';
+  import { applyMySettings } from '../lib/usersettings';
 
   let login = $state('admin');
   let password = $state('');
@@ -17,6 +18,8 @@
         setTimeout(() => reject(new Error($t('auth.timeout'))), 20000),
       );
       user.set(await Promise.race([wails.login(login, password), timeout]));
+      // Настройки вошедшего (тема, язык, колонки, ширины, дефолты калькулятора).
+      await applyMySettings();
     } catch (e) {
       error = String(e);
     } finally {

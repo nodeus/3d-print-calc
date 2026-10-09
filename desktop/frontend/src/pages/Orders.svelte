@@ -7,8 +7,83 @@
   import { openOrderId, customerFilter } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
 
   let rows: OrderRow[] = $state([]);
+  let sortKey = $state('created');
+  let sortDir: 1 | -1 = $state(-1);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+    else { sortKey = key; sortDir = 1; }
+  }
+
+  function arrow(key: string): string {
+    return sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  function sortVal(r: OrderRow): string | number {
+    switch (sortKey) {
+      case 'number': return orderNo(r.order).toLowerCase();
+      case 'created': return r.order.CreatedAt || '';
+      case 'title': return orderTitle(r.order).toLowerCase();
+      case 'customer': return custName(r.order.CustomerID).toLowerCase();
+      case 'status': return r.order.Status;
+      case 'total': return r.order.TotalBase;
+      case 'paid': return r.paid;
+      case 'balance': return r.balance;
+      case 'paystate': return r.payState;
+      default: return r.order.CreatedAt || '';
+    }
+  }
+
+  const orderCols = [
+    { key: 'number', label: 'ord.number' }, { key: 'created', label: 'ord.created' },
+    { key: 'title', label: 'ord.title' }, { key: 'customer', label: 'cust.name' },
+    { key: 'status', label: 'ord.status' }, { key: 'total', label: 'ord.total' },
+    { key: 'paid', label: 'ord.paid' }, { key: 'balance', label: 'ord.balance' },
+    { key: 'paystate', label: 'ord.pay_state' },
+  ];
+
+  // Сортировка позиций в деталях.
+  let itemSortKey = $state('n');
+  let itemSortDir: 1 | -1 = $state(1);
+
+  function toggleItemSort(key: string) {
+    if (itemSortKey === key) itemSortDir = itemSortDir === 1 ? -1 : 1;
+    else { itemSortKey = key; itemSortDir = 1; }
+  }
+
+  function itemArrow(key: string): string {
+    return itemSortKey === key ? (itemSortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  const itemCols = [
+    { key: 'title', label: 'ord.item' }, { key: 'qty', label: 'ord.qty' },
+    { key: 'cost', label: 'calc.cost' }, { key: 'price', label: 'calc.price' },
+    { key: 'paid', label: 'ord.paid' }, { key: 'state', label: 'ord.pay_state' },
+  ];
+
+  function shownItems(items: OrderItem[]): OrderItem[] {
+    if (!items) return [];
+    const val = (it: OrderItem): string | number => {
+      switch (itemSortKey) {
+        case 'title': return it.Title.toLowerCase();
+        case 'qty': return it.Qty;
+        case 'cost': return it.Cost;
+        case 'price': return it.Price;
+        case 'paid': return itemPaid(it.ID);
+        case 'state': return itemState(it);
+        default: return it.ID;
+      }
+    };
+    return [...items].sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+      return cmp * itemSortDir;
+    });
+  }
   let customers: Customer[] = $state([]);
   let detail: OrderDetail | null = $state(null);
   let newCustomerId = $state(0);
@@ -112,9 +187,15 @@
     };
   });
 
-  let visibleRows = $derived(
-    $customerFilter ? rows.filter((r) => r.order.CustomerID === $customerFilter) : rows,
-  );
+  let visibleRows = $derived.by(() => {
+    const base = $customerFilter ? rows.filter((r) => r.order.CustomerID === $customerFilter) : rows;
+    return [...base].sort((a, b) => {
+      const va = sortVal(a);
+      const vb = sortVal(b);
+      const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+      return cmp * sortDir;
+    });
+  });
 
   function clearCustomerFilter() {
     customerFilter.set(0);
@@ -279,8 +360,15 @@
         <button onclick={create}>{$t('ord.new')}</button>
       </div>
     {/if}
-    <table>
-      <thead><tr><th>{$t('ord.number')}</th><th>{$t('ord.created')}</th><th>{$t('ord.title')}</th><th>{$t('cust.name')}</th><th>{$t('ord.status')}</th><th class="n">{$t('ord.total')}</th><th class="n">{$t('ord.paid')}</th><th class="n">{$t('ord.balance')}</th><th>{$t('ord.pay_state')}</th></tr></thead>
+    <table class="tw">
+      <thead><tr>
+        {#each orderCols as c}
+          <th class:n={['total', 'paid', 'balance'].includes(c.key)} style={thWidth('orders', c.key)}>
+            <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
+            <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orders', c.key)} ondblclick={() => resetColWidth('orders', c.key)}></span>
+          </th>
+        {/each}
+      </tr></thead>
       <tbody>
         {#each visibleRows as r}
           <tr class:sel={detail?.order.ID === r.order.ID} onclick={() => openDetail(r.order.ID)}>
@@ -321,10 +409,18 @@
       {#if detail.order.DiscountPct || detail.order.DiscountFixed}
         <p>{$t('ord.discount')}: {detail.order.DiscountPct}% + {money(detail.order.DiscountFixed / 100, detail.order.Currency, 'ru')}</p>
       {/if}
-      <table>
-        <thead><tr><th>№</th><th>{$t('ord.item')}</th><th class="n">{$t('ord.qty')}</th><th class="n">{$t('calc.cost')}</th><th class="n">{$t('calc.price')}</th><th class="n">{$t('ord.paid')}</th><th>{$t('ord.pay_state')}</th><th class="no-print"></th></tr></thead>
+      <table class="tw">
+        <thead><tr><th class="no-print" style="width:34px;">№</th>
+          {#each itemCols as c}
+            <th class:n={c.key !== 'title' && c.key !== 'state'} style={thWidth('orderItems', c.key)}>
+              <button class="th" onclick={() => toggleItemSort(c.key)}>{$t(c.label)}{itemArrow(c.key)}</button>
+              <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orderItems', c.key)} ondblclick={() => resetColWidth('orderItems', c.key)}></span>
+            </th>
+          {/each}
+          <th class="no-print"></th>
+        </tr></thead>
         <tbody>
-          {#each detail.items as it, i}<tr><td>{i + 1}</td><td>{it.Title}</td><td class="n">{it.Qty}</td><td class="n">{money(it.Cost / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(it.Price / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(itemPaid(it.ID) / 100, detail.order.Currency, 'ru')}</td><td>{payStateLabel(itemState(it))}{#if it.PaidManual} ✓{/if}</td><td class="no-print">{#if canWrite($user)}<button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td></tr>{/each}
+          {#each shownItems(detail.items) as it, i}<tr><td>{i + 1}</td><td>{it.Title}</td><td class="n">{it.Qty}</td><td class="n">{money(it.Cost / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(it.Price / 100, detail.order.Currency, 'ru')}</td><td class="n">{money(itemPaid(it.ID) / 100, detail.order.Currency, 'ru')}</td><td>{payStateLabel(itemState(it))}{#if it.PaidManual} ✓{/if}</td><td class="no-print">{#if canWrite($user)}<button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td></tr>{/each}
         </tbody>
       </table>
       {#if canWrite($user)}
@@ -360,6 +456,7 @@
   label { display: flex; flex-direction: column; font-size: 12px; }
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 13px; }
+  button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
   tr.sel td { background: var(--sel-bg); }
   tbody tr { cursor: pointer; }
   .filterchip { background: var(--sel-bg); border-radius: 4px; padding: 4px 8px; display: inline-block; }

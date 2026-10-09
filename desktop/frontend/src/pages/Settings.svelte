@@ -1,11 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { wails, type BackupManifest, type ImportReport, type FxRate } from '../lib/wails';
   import { t, locale, switchLocale } from '../lib/i18n';
   import { setBaseSym } from '../lib/currency';
   import { user, isAdmin, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
   import { THEME_PRESET_DARK, THEME_PRESET_LIGHT, applyTheme, persistTheme } from '../lib/theme';
+  import { saveMySettingsPatch, mySettings } from '../lib/usersettings';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
+  import { calcFormDefaults, applyCalcDefaults, type CalcForm } from '../lib/calcform';
   import Users from './Users.svelte';
 
   let currency = $state('RUB');
@@ -25,12 +29,6 @@
   let numTemplate = $state('');
   let numSeq = $state('');
   let numPreview = $state('');
-  // Колонки истории
-  const allColumns = [
-    'filename', 'start', 'end', 'status', 'duration', 'weight', 'length',
-    'size', 'filament', 'slicer', 'cost', 'price', 'origin',
-  ];
-  let visibleColumns: string[] = $state([]);
 
   async function loadNumbers() {
     try {
@@ -61,16 +59,67 @@
     }
   }
 
-  function toggleColumn(key: string) {
-    visibleColumns = visibleColumns.includes(key)
-      ? visibleColumns.filter((c) => c !== key)
-      : [...visibleColumns, key];
+  // Дефолты калькулятора (редактор): значения из файла настроек поверх заводских.
+  const defKeys: { key: keyof CalcForm; label: string; text?: boolean }[] = [
+    { key: 'matCode', label: 'calc.material', text: true },
+    { key: 'timeH', label: 'calc.time_h' }, { key: 'timeM', label: 'calc.time_m' },
+    { key: 'weightG', label: 'calc.weight' }, { key: 'filamentMM', label: 'calc.filament' },
+    { key: 'tariff', label: 'calc.tariff' }, { key: 'powerKW', label: 'calc.power' },
+    { key: 'amortPerHour', label: 'calc.amort' }, { key: 'maintPerHour', label: 'calc.maint' },
+    { key: 'purgeG', label: 'calc.purge' },
+    { key: 'opRate', label: 'calc.op_rate' }, { key: 'prepH', label: 'calc.prep' },
+    { key: 'postH', label: 'calc.post' },
+    { key: 'designerRate', label: 'calc.designer_rate' }, { key: 'modelH', label: 'calc.model_h' },
+    { key: 'modelPrice', label: 'calc.model_price' },
+    { key: 'extraMat', label: 'calc.extra' }, { key: 'fees', label: 'calc.fees' },
+    { key: 'failPct', label: 'calc.fail' },
+    { key: 'marginProfitPct', label: 'calc.margin_profit' },
+    { key: 'marginDevPct', label: 'calc.margin_dev' },
+    { key: 'copies', label: 'calc.copies' }, { key: 'vatPct', label: 'calc.vat' },
+    { key: 'roundStep', label: 'calc.round' },
+  ];
+  let defVals: Record<string, string> = $state({});
+  let defMsg = $state(false);
+
+  function loadCalcDefaults() {
+    const saved = (get(mySettings).calcDefaults ?? {}) as Record<string, unknown>;
+    const merged = { ...calcFormDefaults, ...saved };
+    defVals = {};
+    for (const { key } of defKeys) {
+      const v = (merged as Record<string, unknown>)[key];
+      defVals[key] = v == null ? '' : String(v);
+    }
   }
 
-  async function saveColumns() {
+  async function saveCalcDefaults() {
+    error = '';
+    const out: Record<string, unknown> = {};
+    for (const { key, text } of defKeys) {
+      const raw = (defVals[key] ?? '').trim();
+      if (text) {
+        if (raw) out[key] = raw;
+        continue;
+      }
+      if (raw === '') continue;
+      const v = Number(raw.replace(',', '.'));
+      if (Number.isFinite(v)) out[key] = v;
+    }
+    try {
+      await saveMySettingsPatch({ calcDefaults: out });
+      applyCalcDefaults(out);
+      defMsg = true;
+      setTimeout(() => (defMsg = false), 2500);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function resetCalcDefaults() {
     error = '';
     try {
-      await wails.setHistoryColumns(visibleColumns);
+      await saveMySettingsPatch({ calcDefaults: {} });
+      applyCalcDefaults({});
+      loadCalcDefaults();
     } catch (e) {
       error = String(e);
     }
@@ -94,32 +143,13 @@
     }
   }
 
-  function colLabel(key: string): string {
-    const map: Record<string, string> = {
-      filename: $t('hist.filename'),
-      start: $t('hist.start'),
-      end: $t('hist.end'),
-      status: $t('hist.status'),
-      duration: $t('hist.duration'),
-      weight: $t('hist.weight'),
-      length: $t('hist.length'),
-      size: $t('hist.size'),
-      filament: $t('hist.filament'),
-      slicer: $t('hist.slicer'),
-      cost: $t('hist.cost'),
-      price: $t('calc.price'),
-      origin: $t('hist.origin'),
-    };
-    return map[key] ?? key;
-  }
-
   onMount(async () => {
     try {
       currency = await wails.getBaseCurrency();
       setBaseSym(currency);
       await loadNumbers();
-      visibleColumns = await wails.historyColumns();
       await loadRates();
+      await loadCalcDefaults();
       const ui = await wails.uiSettings();
       theme = ui.theme || 'light';
     } catch (e) {
@@ -134,6 +164,7 @@
       const ui = await wails.uiSettings();
       applyTheme(name, ui.custom ?? {});
       await persistTheme(name);
+      await saveMySettingsPatch({ theme: name });
     } catch (e) {
       error = String(e);
     }
@@ -181,6 +212,24 @@
 
   // Курсы и конвертация.
   let rates: FxRate[] = $state([]);
+  let fxSortKey = $state('currency');
+  let fxSortDir: 1 | -1 = $state(1);
+
+  function toggleFxSort(key: string) {
+    if (fxSortKey === key) fxSortDir = fxSortDir === 1 ? -1 : 1;
+    else { fxSortKey = key; fxSortDir = 1; }
+  }
+
+  function fxArrow(key: string): string {
+    return fxSortKey === key ? (fxSortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  let ratesShown = $derived([...rates].sort((a, b) => {
+    const va = fxSortKey === 'rate' ? a.rate : fxSortKey === 'day' ? a.day : a.currency.toLowerCase();
+    const vb = fxSortKey === 'rate' ? b.rate : fxSortKey === 'day' ? b.day : b.currency.toLowerCase();
+    const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+    return cmp * fxSortDir;
+  }));
   let rateCur = $state('');
   let rateVal = $state(0);
   let convCur = $state('');
@@ -262,9 +311,13 @@
   }
 </script>
 
+{#if error}<p class="err">{error}</p>{/if}
+
+<div class="panels">
+<div class="panel">
 <div class="card">
   <label>{$t('set.language')}
-    <select value={$locale} onchange={(e) => switchLocale(e.currentTarget.value)}>
+    <select value={$locale} onchange={(e) => { switchLocale(e.currentTarget.value); saveMySettingsPatch({ locale: e.currentTarget.value }); }}>
       <option value="ru">Русский</option>
       <option value="en">English</option>
     </select>
@@ -279,10 +332,18 @@
 
 <div class="card">
   <h3>{$t('fx.title')}</h3>
-  <table>
-    <thead><tr><th>{$t('fx.currency')}</th><th class="n">{$t('fx.rate')}</th><th>{$t('fx.day')}</th><th class="no-print"></th></tr></thead>
+  <table class="tw">
+    <thead><tr>
+      {#each [{ key: 'currency', label: 'fx.currency' }, { key: 'rate', label: 'fx.rate' }, { key: 'day', label: 'fx.day' }] as c}
+        <th style={thWidth('fx', c.key)}>
+          <button class="th" onclick={() => toggleFxSort(c.key)}>{$t(c.label)}{fxArrow(c.key)}</button>
+          <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'fx', c.key)} ondblclick={() => resetColWidth('fx', c.key)}></span>
+        </th>
+      {/each}
+      <th class="no-print"></th>
+    </tr></thead>
     <tbody>
-      {#each rates as r}<tr><td>{r.currency}</td><td class="n">{r.rate}</td><td>{r.day}</td><td class="no-print"><button onclick={() => removeRate(r)}>✕</button></td></tr>{/each}
+      {#each ratesShown as r}<tr><td>{r.currency}</td><td class="n">{r.rate}</td><td>{r.day}</td><td class="no-print"><button onclick={() => removeRate(r)}>✕</button></td></tr>{/each}
     </tbody>
   </table>
   {#if canWrite($user)}
@@ -301,6 +362,37 @@
   {/if}
 </div>
 
+<div class="card">
+  <h3>{$t('set.ordnum')}</h3>
+  <label>{$t('set.ordnum_tpl')}<input bind:value={numTemplate} oninput={previewNumbers} placeholder={'{YYYY}-{nnnn}'} /></label>
+  <label>{$t('set.ordnum_seq')}<input placeholder="42" type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
+  <p>{$t('set.ordnum_preview')}: <b>{numPreview}</b></p>
+  <p class="note">{$t('set.ordnum_help')}</p>
+  <div class="row"><button onclick={saveNumbers}>{$t('common.save')}</button></div>
+</div>
+
+<div class="card">
+  <h3>{$t('set.calcdef')}</h3>
+  <p class="note">{$t('set.calcdef_note')}</p>
+  <div class="defs">
+    {#each defKeys as d}
+      <label class="def">{$t(d.label)}
+        {#if d.text}
+          <input bind:value={defVals[d.key]} />
+        {:else}
+          <input type="number" step="any" bind:value={defVals[d.key]} />
+        {/if}
+      </label>
+    {/each}
+  </div>
+  <div class="row">
+    <button onclick={saveCalcDefaults}>{$t('common.save')}</button>
+    <button onclick={resetCalcDefaults}>{$t('set.calcdef_reset')}</button>
+  </div>
+  {#if defMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
+</div>
+</div>
+<div class="panel">
 <div class="card">
   <h3>{$t('set.backup')}</h3>
   <div class="row">
@@ -327,8 +419,8 @@
   {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs})</p>{/if}
 </div>
 
-{#if error}<p class="err">{error}</p>{/if}
-
+</div>
+<div class="panel">
 <div class="card">
   <h3>{$t('set.theme')}</h3>
   <p class="note">{$t('set.theme_current')}: <b>{theme}</b></p>
@@ -369,6 +461,8 @@
 {/if}
 </div>
 
+</div>
+<div class="panel">
 <div class="card">
   <h3>{$t('set.pw')}</h3>
   <label>{$t('auth.password')} ({$t('set.pw_old')})<input type="password" bind:value={oldPw} /></label>
@@ -377,49 +471,33 @@
   {#if pwMsg}<p class="ok">{pwMsg}</p>{/if}
 </div>
 
-<div class="card">
-  <h3>{$t('set.columns')}</h3>
-  <div class="checks">
-    {#each allColumns as c}
-      <label class="check"><input type="checkbox" checked={visibleColumns.includes(c)} onchange={() => toggleColumn(c)} /> {colLabel(c)}</label>
-    {/each}
-  </div>
-  <div class="row"><button onclick={saveColumns}>{$t('common.save')}</button></div>
-</div>
-
-<div class="card">
-  <h3>{$t('set.ordnum')}</h3>
-  <label>{$t('set.ordnum_tpl')}<input bind:value={numTemplate} oninput={previewNumbers} placeholder={'{YYYY}-{nnnn}'} /></label>
-  <label>{$t('set.ordnum_seq')}<input placeholder="42" type="number" min="1" bind:value={numSeq} oninput={previewNumbers} /></label>
-  <p>{$t('set.ordnum_preview')}: <b>{numPreview}</b></p>
-  <p class="note">{$t('set.ordnum_help')}</p>
-  <div class="row"><button onclick={saveNumbers}>{$t('common.save')}</button></div>
-</div>
-
 {#if isAdmin($user)}
   <div class="card wide">
     <h3>{$t('nav.users')}</h3>
     <Users />
   </div>
 {/if}
+</div>
+</div>
 
 <style>
-  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; max-width: 560px; margin-bottom: 12px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
+  .defs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 8px; }
+  label.def input { width: 100%; box-sizing: border-box; }
   .card.wide { max-width: none; }
   h3 { margin: 0 0 8px; font-size: 15px; }
   h4 { margin: 12px 0 6px; font-size: 13px; color: var(--muted); }
   .swatches { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
   button.sw { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 10px; font-size: 12px; min-width: 118px; }
   button.sw.on { outline: 2px solid var(--accent); }
+  button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 14px; }
   .dots { display: flex; gap: 3px; }
   .dots i { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--sw-border); }
   label { display: flex; flex-direction: column; margin-bottom: 8px; font-size: 13px; }
   select { padding: 6px; font-size: 14px; }
   .note { color: var(--muted); font-size: 13px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .checks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
-  label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; line-height: 1.4; white-space: nowrap; }
-  label.check input { margin: 0; width: 16px; height: 16px; flex: none; }
   button { padding: 8px 14px; }
   button.warn { border-color: var(--err); color: var(--err); }
   .ok { color: green; word-break: break-all; }
