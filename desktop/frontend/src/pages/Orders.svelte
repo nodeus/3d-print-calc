@@ -216,6 +216,42 @@
     return 'partial';
   }
 
+  // Черновик позиции: предпросмотр строки до добавления.
+  let draftQty = $derived(itemQty ?? 1);
+  let draftPrice = $derived(Math.round((itemPrice ?? 0) * draftQty));
+  let draftShare = $derived.by(() => {
+    if (!detail) return 0;
+    const pct = detail.order.DiscountPct || 0;
+    const fixed = detail.order.DiscountFixed || 0;
+    if (!pct && !fixed) return 0;
+    const sub = itemsSubtotal() + draftPrice;
+    let s = Math.round((draftPrice * pct) / 100);
+    if (fixed && sub > 0) s += Math.round((fixed * draftPrice) / sub);
+    return s;
+  });
+  let draftTotal = $derived(draftPrice - draftShare);
+
+  // Разбор ячейки для title-подсказки: откуда взялось число.
+  function itemBreakdown(it: OrderItem, k: string): string | undefined {
+    const cur = detail?.order.Currency ?? 'RUB';
+    const unit = (v: number) => money(v / 100, cur, 'ru');
+    const line = itemPriceSum(it);
+    if (k === 'price') return `${unit(it.Price)} × ${it.Qty} = ${unit(line)}`;
+    if (k === 'cost') return `${unit(it.Cost)} × ${it.Qty} = ${unit(itemCostSum(it))}`;
+    if (!detail) return undefined;
+    if (k === 'discount') {
+      const pct = detail.order.DiscountPct || 0;
+      const fixed = detail.order.DiscountFixed || 0;
+      if (!pct && !fixed) return undefined;
+      const sub = itemsSubtotal();
+      const parts = [`${pct}% от ${unit(line)}`];
+      if (fixed && sub > 0) parts.push(`фикс. ${unit(fixed)} × ${line}/${sub}`);
+      return `${parts.join(' + ')} = ${unit(itemDiscount(it))}`;
+    }
+    if (k === 'itotal') return `${unit(line)} − ${unit(itemDiscount(it))} = ${unit(itemTotal(it))}`;
+    return undefined;
+  }
+
   // Построчные суммы позиции (итог заказа — их сумма, см. RecalcTotal).
   function itemCostSum(it: OrderItem): number {
     return Math.round(it.Cost * it.Qty);
@@ -568,7 +604,7 @@
         <tbody>
           {#each shownItems(detail.items) as it, i}<tr>
             <td>{i + 1}</td>
-            {#each itemOrd as k}<td class:n={itemNum(k)}>{itemText(it, k)}</td>{/each}
+            {#each itemOrd as k}<td class:n={itemNum(k)} title={itemBreakdown(it, k)}>{itemText(it, k)}</td>{/each}
             <td class="no-print">{#if canWrite($user)}<button onclick={() => fillItemPay(it)} title={$t('ord.pay_item')}>₽</button> <button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td>
           </tr>{/each}
         </tbody>
@@ -582,6 +618,13 @@
           <input type="number" min="0" placeholder={$t('ord.ph_price')} bind:value={itemPrice} />
           <button onclick={addItem}>+</button>
         </div>
+        <p class="note">{$t('ord.cost_note')}</p>
+        {#if itemTitle.trim()}
+          <p class="note">{$t('ord.draft_preview')}: {draftQty} × {money((itemPrice ?? 0), detail.order.Currency, 'ru')} − {money(draftShare / 100, detail.order.Currency, 'ru')} = <b>{money(draftTotal / 100, detail.order.Currency, 'ru')}</b></p>
+        {/if}
+        {#if (itemCost ?? 0) > 0 && (itemPrice ?? 0) <= 0}
+          <p class="warnline">{$t('ord.zero_price_warn')}</p>
+        {/if}
       {/if}
       <p>{$t('ord.paid')}: {money(detail.paid / 100, detail.order.Currency, 'ru')} · {$t('ord.balance')}: <b>{money(detail.balance / 100, detail.order.Currency, 'ru')}</b>
         {#if canWrite($user)} <button class="no-print" onclick={fillWholePay}>{$t('ord.pay_all')}</button>{/if}
@@ -616,5 +659,7 @@
   .count { color: var(--muted); font-size: 13px; }
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
   .pay { color: var(--muted); font-size: 13px; margin: 2px 0; }
+  .note { color: var(--muted); font-size: 13px; margin: 2px 0; }
+  .warnline { color: var(--warn); font-size: 13px; margin: 2px 0; }
   .err { color: var(--err); }
 </style>
