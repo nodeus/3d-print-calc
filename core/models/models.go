@@ -72,6 +72,7 @@ type Spool struct {
 	WeightInitG float64
 	WeightLeftG float64
 	Archived    bool
+	SpoolNo     int // порядковый номер внутри материала (1, 2, 3...)
 }
 
 // Printer — принтер со своим расчётом амортизации.

@@ -67,7 +67,7 @@
       if (se.id === 0) {
         const w = se.weight ?? defWeight;
         await wails.addSpool({
-          id: 0, materialId: se.materialId, price: se.price ?? 0,
+          id: 0, materialId: se.materialId, spoolNo: 0, price: se.price ?? 0,
           currency: se.currency || 'RUB', boughtAt: se.boughtAt,
           weightInitG: w, weightLeftG: w, archived: false,
         });
@@ -278,9 +278,9 @@
       if (expanded !== m.id || !list || !list.length) continue;
       sections.push({
         Title: `${m.code} — ${$t('spool.title')}`,
-        Headers: [$t('spool.date'), $t('spool.price'), $t('spool.weight'), $t('spool.left'), ''],
+        Headers: [$t('spool.num'), $t('spool.date'), $t('spool.price'), $t('spool.weight'), $t('spool.left'), ''],
         Rows: list.map((s) => [
-          s.boughtAt || '—', money(s.price, s.currency, 'ru'),
+          String(s.spoolNo || '—'), s.boughtAt || '—', money(s.price, s.currency, 'ru'),
           String(s.weightInitG), String(s.weightLeftG),
           calcSpool(list)?.id === s.id ? '★' : '',
         ]),
@@ -382,11 +382,12 @@
         <tr><td colspan={matOrd.length + 1}>
           <b>{$t('spool.title')} — {m.code}</b>
           <table>
-            <thead><tr><th>{$t('spool.date')}</th><th class="n">{$t('spool.price')}</th><th class="n">{$t('spool.weight')}</th><th class="n">{$t('spool.left')}</th><th></th><th class="no-print"></th></tr></thead>
+            <thead><tr><th>{$t('spool.num')}</th><th>{$t('spool.date')}</th><th class="n">{$t('spool.price')}</th><th class="n">{$t('spool.weight')}</th><th class="n">{$t('spool.left')}</th><th></th><th class="no-print"></th></tr></thead>
             <tbody>
               {#each spools[m.id] ?? [] as s}
                 {#if spoolEdit && spoolEdit.id === s.id}
                   <tr>
+                    <td>{s.spoolNo || '—'}</td>
                     <td><input type="date" bind:value={spoolEdit.boughtAt} /></td>
                     <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" /></td>
                     <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
@@ -396,6 +397,7 @@
                   </tr>
                 {:else}
                   <tr>
+                    <td>{s.spoolNo || '—'}</td>
                     <td>{s.boughtAt || '—'}</td>
                     <td class="n">{money(s.price, s.currency, 'ru')}</td>
                     <td class="n">{s.weightInitG}</td>

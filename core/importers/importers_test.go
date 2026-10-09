@@ -76,6 +76,29 @@ func TestParseMaterial(t *testing.T) {
 	}
 }
 
+func TestParseMaterialSpool(t *testing.T) {
+	cases := []struct {
+		in   string
+		code string
+		n    int
+	}{
+		{"part_PETG-NIT-BLACK-1_2h10m.gcode", "PETG-NIT-BLACK", 1},
+		{"part_PETG-NIT-BLACK-12_2h10m.gcode", "PETG-NIT-BLACK", 12},
+		// Номер только через дефис: _1 неотличим от температуры (150),
+		// поэтому не разбирается.
+		{"part_PETG-NIT-BLACK_1_2h10m.gcode", "PETG-NIT-BLACK", 0},
+		{"sample_PETG-NIT-W4_30m.gcode", "PETG-NIT-W4", 0}, // W4 — код, не номер
+		{"my_rack_PETG-PPL01_2h1m.gcode", "PETG-PPL01", 0},
+		{"hook_PETG_1h10m.gcode", "", 0},
+		{"calibration_cube.gcode", "", 0},
+	}
+	for _, c := range cases {
+		if code, n := ParseMaterialSpool(c.in); code != c.code || n != c.n {
+			t.Errorf("ParseMaterialSpool(%q) = (%q, %d), хочу (%q, %d)", c.in, code, n, c.code, c.n)
+		}
+	}
+}
+
 func TestParseEstDuration(t *testing.T) {
 	cases := []struct {
 		in   string

@@ -262,6 +262,7 @@
   "mat.archived": "Archived",
   "mat.price_spool_note": "First spool price — edit in spools below",
   "spool.title": "Spools",
+  "spool.num": "No.",
   "spool.date": "Bought on",
   "spool.price": "Price, ₽",
   "spool.weight": "Batch, g",

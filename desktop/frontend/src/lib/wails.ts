@@ -76,6 +76,7 @@ export interface Spool {
 export interface SpoolDTO {
   id: number;
   materialId: number;
+  spoolNo: number;
   price: number;
   currency: string;
   boughtAt: string;
