@@ -50,6 +50,7 @@
   let orderTitle = $state('');
   let orderQty = $state(1);
   let orderMsg = $state(false);
+  let addedInfo = $state('');
 
   let result = $state<CalcResult | null>(null);
   let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
@@ -422,12 +423,14 @@
   async function addToOrder() {
     if (!result || !orderId || !orderTitle.trim()) return;
     try {
-      // Цена/себестоимость — ЗА КОПИЮ: итог заказа считает price×qty.
+      // Цена/себестоимость — за копию: итог заказа считает price×qty.
       // (Раньше уходила цена за весь стол — при qty>1 итог кратно завышался.)
+      const q = orderQty;
       await wails.addOrderItem({
-        orderId, jobId: 0, title: orderTitle.trim(), qty: orderQty,
+        orderId, jobId: 0, title: orderTitle.trim(), qty: q,
         cost: Math.round(result.CostPerCopy * 100), price: Math.round(result.PricePerCopy * 100),
       });
+      addedInfo = `${orderTitle.trim()} — ${q} × ${money(result.PricePerCopy, currency, $locale)} = ${money(result.PricePerCopy * q, currency, $locale)}`;
       orderMsg = true;
       setTimeout(() => (orderMsg = false), 2500);
       persist();
@@ -604,7 +607,7 @@
           <label>{$t('ord.qty')}<input placeholder="1" type="number" min="0.5" step="0.5" bind:value={orderQty} /></label>
           <button onclick={addToOrder}>{$t('ord.add')}</button>
         </div>
-        {#if orderMsg}<p class="ok">{$t('ord.added')}</p>{/if}
+        {#if orderMsg}<p class="ok">{$t('ord.added')}: {addedInfo}</p>{/if}
       {/if}
     {:else}<p>…</p>{/if}
   </section>
