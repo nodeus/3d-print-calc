@@ -85,6 +85,7 @@
   const itemCols = [
     { key: 'title', label: 'ord.item' }, { key: 'qty', label: 'ord.qty', num: true },
     { key: 'cost', label: 'calc.cost', num: true }, { key: 'price', label: 'calc.price', num: true },
+    { key: 'discount', label: 'ord.discount_col', num: true }, { key: 'itotal', label: 'ord.item_total', num: true },
     { key: 'paid', label: 'ord.paid', num: true }, { key: 'state', label: 'ord.pay_state' },
   ];
   const itemKeys = itemCols.map((c) => c.key);
@@ -100,6 +101,8 @@
       case 'qty': return String(it.Qty);
       case 'cost': return money(itemCostSum(it) / 100, cur, 'ru');
       case 'price': return money(itemPriceSum(it) / 100, cur, 'ru');
+      case 'discount': return money(itemDiscount(it) / 100, cur, 'ru');
+      case 'itotal': return money(itemTotal(it) / 100, cur, 'ru');
       case 'paid': return money(itemPaid(it.ID) / 100, cur, 'ru');
       case 'state': return payStateLabel(itemState(it)) + (it.PaidManual ? ' ✓' : '');
       default: return '';
@@ -136,6 +139,8 @@
         case 'qty': return it.Qty;
         case 'cost': return it.Cost;
         case 'price': return it.Price;
+        case 'discount': return itemDiscount(it);
+        case 'itotal': return itemTotal(it);
         case 'paid': return itemPaid(it.ID);
         case 'state': return itemState(it);
         default: return it.ID;
@@ -218,6 +223,29 @@
 
   function itemPriceSum(it: OrderItem): number {
     return Math.round(it.Price * it.Qty);
+  }
+
+  function itemsSubtotal(): number {
+    if (!detail) return 0;
+    return detail.items.reduce((s, it) => s + itemPriceSum(it), 0);
+  }
+
+  // Доля скидки заказа на позицию: сначала % от строки, затем фикс.
+  // распределяется пропорционально строкам (при пустой сумме — нули).
+  function itemDiscount(it: OrderItem): number {
+    if (!detail) return 0;
+    const line = itemPriceSum(it);
+    const sub = itemsSubtotal();
+    const pct = detail.order.DiscountPct || 0;
+    const fixed = detail.order.DiscountFixed || 0;
+    if (!pct && !fixed) return 0;
+    let share = Math.round((line * pct) / 100);
+    if (fixed && sub > 0) share += Math.round((fixed * line) / sub);
+    return share;
+  }
+
+  function itemTotal(it: OrderItem): number {
+    return itemPriceSum(it) - itemDiscount(it);
   }
 
   async function togglePaid(it: OrderItem) {
@@ -380,6 +408,19 @@
     }
   }
 
+  // Подставить оплату позиции (остаток с учётом скидки) в форму оплаты.
+  function fillItemPay(it: OrderItem) {
+    payItemId = it.ID;
+    payAmount = Math.max(0, Math.round(itemTotal(it) - itemPaid(it.ID)) / 100);
+  }
+
+  // Подставить весь заказ (итог со скидкой) как оплату всего заказа.
+  function fillWholePay() {
+    if (!detail) return;
+    payItemId = 0;
+    payAmount = Math.round(detail.order.TotalBase) / 100;
+  }
+
   async function removeItem(id: number, title: string) {
     if (!detail) return;
     error = '';
@@ -528,7 +569,7 @@
           {#each shownItems(detail.items) as it, i}<tr>
             <td>{i + 1}</td>
             {#each itemOrd as k}<td class:n={itemNum(k)}>{itemText(it, k)}</td>{/each}
-            <td class="no-print">{#if canWrite($user)}<button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td>
+            <td class="no-print">{#if canWrite($user)}<button onclick={() => fillItemPay(it)} title={$t('ord.pay_item')}>₽</button> <button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td>
           </tr>{/each}
         </tbody>
       </table>
@@ -542,7 +583,9 @@
           <button onclick={addItem}>+</button>
         </div>
       {/if}
-      <p>{$t('ord.paid')}: {money(detail.paid / 100, detail.order.Currency, 'ru')} · {$t('ord.balance')}: <b>{money(detail.balance / 100, detail.order.Currency, 'ru')}</b></p>
+      <p>{$t('ord.paid')}: {money(detail.paid / 100, detail.order.Currency, 'ru')} · {$t('ord.balance')}: <b>{money(detail.balance / 100, detail.order.Currency, 'ru')}</b>
+        {#if canWrite($user)} <button class="no-print" onclick={fillWholePay}>{$t('ord.pay_all')}</button>{/if}
+      </p>
       {#each detail.payments as p}<p class="pay">+{money(p.Amount / 100, detail.order.Currency, 'ru')} · {p.PaidAt} · {p.OrderItem ? itemTitleOf(p.OrderItem) : $t('ord.whole_order')} {p.Note}</p>{/each}
       {#if canWrite($user)}
         <div class="row no-print">
