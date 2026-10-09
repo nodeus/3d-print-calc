@@ -25,8 +25,9 @@ type UserUISettings struct {
 	Theme          string                        `json:"theme"`
 	Locale         string                        `json:"locale"`
 	HistoryColumns []string                      `json:"historyColumns"`
-	Widths         map[string]map[string]float64 `json:"widths"`   // таблица → колонка → px
-	ColOrder       map[string][]string           `json:"colOrder"` // таблица → порядок ключей колонок
+	Widths         map[string]map[string]float64 `json:"widths"`        // таблица → колонка → px
+	ColOrder       map[string][]string           `json:"colOrder"`      // таблица → порядок ключей колонок
+	OrdersPerPage  int                           `json:"ordersPerPage"` // строк на странице заказов (0 = 20)
 	CalcDefaults   map[string]any                `json:"calcDefaults"`
 }
 

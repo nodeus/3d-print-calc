@@ -118,11 +118,15 @@ type OrderRow struct {
 	Order    models.Order `json:"order"`
 	Paid     int64        `json:"paid"`
 	Balance  int64        `json:"balance"`
-	PayState string       `json:"payState"` // paid | partial | unpaid
+	PayState string       `json:"payState"` // paid | partial | unpaid | unknown
 }
 
-// PayStateOf вычисляет состояние оплаты: paid / partial / unpaid.
+// PayStateOf вычисляет состояние оплаты: paid / partial / unpaid / unknown.
+// Нулевой итог без оплат (пустой или бесплатный заказ) — unknown, не paid.
 func PayStateOf(total, paid int64) string {
+	if total <= 0 && paid <= 0 {
+		return "unknown"
+	}
 	if paid >= total {
 		return "paid"
 	}

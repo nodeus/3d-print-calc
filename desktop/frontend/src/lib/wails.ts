@@ -356,6 +356,7 @@ export interface UserUISettings {
   historyColumns: string[];
   widths: Record<string, Record<string, number>>;
   colOrder: Record<string, string[]>;
+  ordersPerPage: number;
   calcDefaults: Record<string, unknown>;
 }
 

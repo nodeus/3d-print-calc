@@ -139,6 +139,28 @@
     }
   }
 
+  // Строк на странице списка заказов.
+  let ordersPerPage = $state(20);
+  let pageMsg = $state(false);
+
+  function loadOrdersPerPage() {
+    const v = get(mySettings).ordersPerPage;
+    ordersPerPage = v > 0 ? v : 20;
+  }
+
+  async function saveOrdersPerPage() {
+    error = '';
+    const v = Math.max(1, Math.round(Number(ordersPerPage)) || 20);
+    ordersPerPage = v;
+    try {
+      await saveMySettingsPatch({ ordersPerPage: v });
+      pageMsg = true;
+      setTimeout(() => (pageMsg = false), 2500);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   // Колонки истории: группы-аккордеоны, выбор локально, применение кнопкой.
   const DEFAULT_COLS = ['filename', 'start', 'status', 'duration', 'weight', 'cost', 'price', 'origin'];
   const colGroups: { id: string; label: string; keys: string[] }[] = [
@@ -227,6 +249,7 @@
       await loadRates();
       await loadCalcDefaults();
       await loadColSel();
+      loadOrdersPerPage();
       const ui = await wails.uiSettings();
       theme = ui.theme || 'light';
     } catch (e) {
@@ -530,6 +553,14 @@
     </div>
   {/if}
   {#if colMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
+</div>
+<div class="card">
+  <h3>{$t('set.orderspage')}</h3>
+  <div class="row">
+    <input type="number" min="1" max="500" step="1" bind:value={ordersPerPage} />
+    <button onclick={saveOrdersPerPage}>{$t('common.save')}</button>
+  </div>
+  {#if pageMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
 </div>
 {:else if setTab === 'data'}
 <div class="card">

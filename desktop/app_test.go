@@ -220,3 +220,22 @@ func TestMaterialColorFavs(t *testing.T) {
 		t.Fatalf("favs = %v", got)
 	}
 }
+
+// TestPayStateOf: нулевой итог без оплат — unknown, не paid.
+func TestPayStateOf(t *testing.T) {
+	for _, tc := range []struct {
+		total, paid int64
+		want        string
+	}{
+		{0, 0, "unknown"},
+		{0, 100, "paid"},
+		{10000, 0, "unpaid"},
+		{10000, 4000, "partial"},
+		{10000, 10000, "paid"},
+		{10000, 15000, "paid"},
+	} {
+		if got := PayStateOf(tc.total, tc.paid); got != tc.want {
+			t.Fatalf("PayStateOf(%d,%d) = %q, хочу %q", tc.total, tc.paid, got, tc.want)
+		}
+	}
+}

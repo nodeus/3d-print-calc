@@ -1,17 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type Customer } from '../lib/wails';
+  import { wails, type Customer, type OrderRow } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
   import { gotoCustomerOrders } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
+  import { money } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
   import { mySettings } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
 
   let list: Customer[] = $state([]);
+  let rows: OrderRow[] = $state([]);
+  let baseCur = $state('RUB');
   let error = $state('');
   let sortKey = $state('name');
   let sortDir: 1 | -1 = $state(1);
@@ -25,30 +28,55 @@
     return sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
   }
 
-  function sortVal(c: Customer): string {
+  function sortVal(c: Customer): string | number {
+    const mine = rows.filter((r) => r.order.CustomerID === c.ID);
     switch (sortKey) {
       case 'contact': return (c.Contact || '').toLowerCase();
       case 'note': return (c.Note || '').toLowerCase();
+      case 'orders': return mine.length;
+      case 'paid': return mine.reduce((s, r) => s + r.paid, 0);
+      case 'debt': return mine.reduce((s, r) => s + Math.max(0, r.balance), 0);
       default: return c.Name.toLowerCase();
     }
   }
 
-  let shown = $derived([...list].sort((a, b) => sortVal(a).localeCompare(sortVal(b)) * sortDir));
+  let shown = $derived([...list].sort((a, b) => {
+    const va = sortVal(a);
+    const vb = sortVal(b);
+    const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+    return cmp * sortDir;
+  }));
+
+  // Агрегаты заказчика по строкам заказов.
+  function custAgg(id: number): { orders: number; paid: number; debt: number } {
+    const mine = rows.filter((r) => r.order.CustomerID === id);
+    return {
+      orders: mine.length,
+      paid: mine.reduce((s, r) => s + r.paid, 0),
+      debt: mine.reduce((s, r) => s + Math.max(0, r.balance), 0),
+    };
+  }
 
   const custCols = [
     { key: 'name', label: 'cust.name' }, { key: 'contact', label: 'cust.contact' },
-    { key: 'note', label: 'cust.note' },
+    { key: 'note', label: 'cust.note' }, { key: 'orders', label: 'cust.orders', num: true },
+    { key: 'paid', label: 'cust.paid', num: true }, { key: 'debt', label: 'cust.debt', num: true },
   ];
   const custKeys = custCols.map((c) => c.key);
+  const custNum = (k: string) => custCols.some((c) => c.key === k && c.num);
   const custLabel = (k: string) => custCols.find((c) => c.key === k)?.label ?? k;
 
   let custOrd = $derived(orderFor($mySettings.colOrder, 'customers', custKeys));
 
   function custText(c: Customer, k: string): string {
+    const a = custAgg(c.ID);
     switch (k) {
       case 'name': return c.Name;
       case 'contact': return c.Contact;
       case 'note': return c.Note;
+      case 'orders': return String(a.orders);
+      case 'paid': return money(a.paid / 100, baseCur, 'ru');
+      case 'debt': return money(a.debt / 100, baseCur, 'ru');
       default: return '';
     }
   }
@@ -74,6 +102,8 @@
   async function load() {
     try {
       list = (await wails.listCustomers()) ?? [];
+      rows = (await wails.listOrderRows()) ?? [];
+      baseCur = await wails.getBaseCurrency();
     } catch (e) {
       error = String(e);
     }
@@ -151,7 +181,7 @@
 <table class="tw" class:dragging={dragKey != null}>
   <thead><tr>
     {#each custOrd as k}
-      <th style={thWidth('customers', k)} data-col={k} class:dragsrc={dragKey === k}>
+      <th class:n={custNum(k)} style={thWidth('customers', k)} data-col={k} class:dragsrc={dragKey === k}>
         {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, custOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }}>⋮⋮</span>{/if}
         <button class="th" onclick={() => toggleSort(k)}>{$t(custLabel(k))}{arrow(k)}</button>
         <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'customers', k)} ondblclick={() => resetColWidth('customers', k)}></span>
@@ -180,7 +210,7 @@
             {#if k === 'name'}
               <td><button class="link" onclick={() => gotoCustomerOrders(c.ID)}>{c.Name}</button></td>
             {:else}
-              <td>{custText(c, k)}</td>
+              <td class:n={custNum(k)}>{custText(c, k)}</td>
             {/if}
           {/each}
           <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(c)}>✎</button> <button onclick={() => remove(c)}>✕</button>{/if}</td>
