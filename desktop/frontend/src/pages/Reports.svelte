@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt, type SpoolStat } from '../lib/wails';
+  import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt, type SpoolStat, type PartDTO, type SpoolPurchase } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
   import { gotoOrder } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
@@ -17,6 +17,9 @@
   let load: PrinterStat[] = $state([]);
   let debts: Debt[] = $state([]);
   let spools: SpoolStat[] = $state([]);
+  let parts: PartDTO[] = $state([]);
+  let spoolBuys: SpoolPurchase[] = $state([]);
+  let printerNames: Record<number, string> = $state({});
   let baseCur = $state('RUB');
 
   function cmpVals(a: string | number, b: string | number, dir: 1 | -1): number {
@@ -206,6 +209,102 @@
   };
   const repLabel = (t: string, k: string) => repLabels[t]?.[k] ?? k;
   const repIsNum = (t: string, k: string) => (repNum[t] ?? []).includes(k);
+
+  // Закупки: группировка по периоду (день/неделя/месяц/год).
+  let purGroup: 'day' | 'week' | 'month' | 'year' = $state('month');
+
+  function isoWeek(d: Date): string {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const day = (t.getUTCDay() + 6) % 7;
+    t.setUTCDate(t.getUTCDate() - day + 3);
+    const first = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+    const week = 1 + Math.round(((t.getTime() - first.getTime()) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7);
+    return `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  }
+
+  function periodKey(date: string): string {
+    if (!date) return '—';
+    if (purGroup === 'day') return date.slice(0, 10);
+    if (purGroup === 'month') return date.slice(0, 7);
+    if (purGroup === 'year') return date.slice(0, 4);
+    const d = new Date(date.length > 10 ? date : date + 'T00:00:00');
+    if (isNaN(d.getTime())) return date.slice(0, 7);
+    return isoWeek(d);
+  }
+
+  interface PurRow { period: string; parts: number; plastic: number; total: number }
+
+  let purRows = $derived.by(() => {
+    const map = new Map<string, PurRow>();
+    const add = (date: string, sum: number, kind: 'parts' | 'plastic') => {
+      const k = periodKey(date);
+      let r = map.get(k);
+      if (!r) {
+        r = { period: k, parts: 0, plastic: 0, total: 0 };
+        map.set(k, r);
+      }
+      r[kind] += sum;
+      r.total += sum;
+    };
+    for (const p of parts) add(p.boughtAt, Math.round(p.total * 100) / 100, 'parts');
+    for (const s of spoolBuys) add(s.boughtAt, Math.round(s.price * 100) / 100, 'plastic');
+    const rows = [...map.values()];
+    rows.sort((a, b) => {
+      if (a.period === '—') return 1;
+      if (b.period === '—') return -1;
+      return b.period.localeCompare(a.period);
+    });
+    return rows;
+  });
+
+  let purTotal = $derived(purRows.reduce((s, r) => s + r.total, 0));
+  let purPartsTotal = $derived(purRows.reduce((s, r) => s + r.parts, 0));
+  let purPlasticTotal = $derived(purRows.reduce((s, r) => s + r.plastic, 0));
+
+  let purSortKey = $state('period');
+  let purSortDir: 1 | -1 = $state(-1);
+
+  function purSortBy(key: string) {
+    if (purSortKey === key) purSortDir = purSortDir === 1 ? -1 : 1;
+    else { purSortKey = key; purSortDir = -1; }
+  }
+
+  function purArrow(key: string): string {
+    return purSortKey === key ? (purSortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  let purShown = $derived([...purRows].sort((a, b) => {
+    const va = purSortKey === 'period' ? a.period : a[purSortKey as 'parts' | 'plastic' | 'total'];
+    const vb = purSortKey === 'period' ? b.period : b[purSortKey as 'parts' | 'plastic' | 'total'];
+    const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+    return cmp * purSortDir;
+  }));
+
+  const purKeys = ['period', 'parts', 'plastic', 'total'];
+  const purLabel = (k: string) => ({ period: 'rep.period', parts: 'rep.parts', plastic: 'rep.plastic', total: 'ord.total' })[k] ?? k;
+  const purNum = (k: string) => k !== 'period';
+
+  let purOrd = $derived(orderFor($mySettings.colOrder, 'repPurchases', purKeys));
+
+  function purText(r: PurRow, k: string): string {
+    switch (k) {
+      case 'period': return r.period;
+      case 'parts': return money(r.parts, 'RUB', 'ru');
+      case 'plastic': return money(r.plastic, 'RUB', 'ru');
+      case 'total': return money(r.total, 'RUB', 'ru');
+      default: return '';
+    }
+  }
+
+  let wrapPur: HTMLDivElement | null = $state(null);
+
+  async function dropPurCols(next: string[]) {
+    try {
+      await saveTableOrder('repPurchases', next);
+    } catch (e) {
+      console.error(e);
+    }
+  }
   let dragKey: string | null = $state(null);
   let dragTable = $state('');
   let dropX: number | null = $state(null);
@@ -248,6 +347,11 @@
         wails.debts(),
       ]).then((r) => r.map((x) => x ?? []))) as [MonthRevenue[], MaterialStat[], PrinterStat[], Debt[]];
       spools = (await wails.spoolStats()) ?? [];
+      parts = (await wails.listAllParts()) ?? [];
+      spoolBuys = (await wails.spoolPurchases()) ?? [];
+      const printers = (await wails.printers()) ?? [];
+      printerNames = {};
+      for (const p of printers) printerNames[p.ID] = p.Name;
       baseCur = await wails.getBaseCurrency();
     } catch (e) {
       console.error(e);
@@ -280,6 +384,14 @@
         Title: $t('rep.spools'),
         Headers: spoolOrd.map((k) => $t(repLabel('repSpools', k))),
         Rows: spoolsSorted.map((s) => spoolOrd.map((k) => (k === 'color' ? s.colorHex : spoolText(s, k)))),
+      },
+      {
+        Title: `${$t('rep.purchases')} (${$t('rep.grp_' + purGroup)})`,
+        Headers: purOrd.map((k) => $t(purLabel(k))),
+        Rows: [
+          ...purShown.map((r) => purOrd.map((k) => purText(r, k))),
+          purOrd.map((k) => (k === 'period' ? $t('hist.total') : k === 'parts' ? money(purPartsTotal, 'RUB', 'ru') : k === 'plastic' ? money(purPlasticTotal, 'RUB', 'ru') : money(purTotal, 'RUB', 'ru'))),
+        ],
       },
     ]);
   }
@@ -380,6 +492,36 @@
     </table>
     </div>
   </section>
+  <section class="card wide">
+    <h3>{$t('rep.purchases')}</h3>
+    <div class="row no-print">
+      {#each [['day', 'rep.grp_day'], ['week', 'rep.grp_week'], ['month', 'rep.grp_month'], ['year', 'rep.grp_year']] as [g, label]}
+        <button class:on={purGroup === g} onclick={() => (purGroup = g as typeof purGroup)}>{$t(label)}</button>
+      {/each}
+    </div>
+    <div class="twrap" bind:this={wrapPur}>
+    {#if dragTable === 'repPurchases' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+    <table class="tw" class:dragging={dragTable === 'repPurchases' && dragKey != null}>
+      <thead><tr>
+        {#each purOrd as k}
+          <th class:n={purNum(k)} style={thWidth('repPurchases', k)} data-col={k} class:dragsrc={dragTable === 'repPurchases' && dragKey === k}>
+            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repPurchases', wrapPur, k, purOrd)}>⋮⋮</span>{/if}
+            <button class="th" onclick={() => purSortBy(k)}>{$t(purLabel(k))}{purArrow(k)}</button>
+            <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'repPurchases', k)} ondblclick={() => resetColWidth('repPurchases', k)}></span>
+          </th>
+        {/each}
+      </tr></thead>
+      <tbody>
+        {#each purShown as r}<tr>{#each purOrd as k}<td class:n={purNum(k)}>{purText(r, k)}</td>{/each}</tr>{/each}
+      </tbody>
+      <tfoot><tr>
+        {#each purOrd as k}
+          <td class:n={purNum(k)}><b>{k === 'period' ? $t('hist.total') : k === 'parts' ? money(purPartsTotal, 'RUB', 'ru') : k === 'plastic' ? money(purPlasticTotal, 'RUB', 'ru') : money(purTotal, 'RUB', 'ru')}</b></td>
+        {/each}
+      </tr></tfoot>
+    </table>
+    </div>
+  </section>
 </div>
 
 <style>
@@ -390,6 +532,8 @@
   table { font-size: 13px; }
   th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
   tr.link { cursor: pointer; }
+  .row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .row button.on { outline: 2px solid var(--accent); font-weight: bold; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
   .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; vertical-align: middle; print-color-adjust: exact; }
 </style>

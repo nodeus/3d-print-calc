@@ -272,6 +272,40 @@ func (a *App) SpoolStats() ([]sqlite.SpoolStat, error) {
 	return a.db.SpoolStats()
 }
 
+// SpoolPurchase — закупка пластика (катушка) для отчёта закупок.
+type SpoolPurchase struct {
+	Code     string  `json:"code"`
+	Vendor   string  `json:"vendor"`
+	BoughtAt string  `json:"boughtAt"`
+	Price    float64 `json:"price"`
+	Currency string  `json:"currency"`
+	WeightG  float64 `json:"weightG"`
+	Archived bool    `json:"archived"`
+}
+
+// SpoolPurchases — все катушки с датами и ценами (для отчёта закупок).
+func (a *App) SpoolPurchases() ([]SpoolPurchase, error) {
+	mats, err := a.db.Materials().List()
+	if err != nil {
+		return nil, err
+	}
+	out := []SpoolPurchase{}
+	for _, m := range mats {
+		spools, err := a.db.Materials().ListSpools(m.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range spools {
+			out = append(out, SpoolPurchase{
+				Code: m.Code, Vendor: m.Vendor, BoughtAt: s.BoughtAt,
+				Price: float64(s.Price) / 100, Currency: s.Currency,
+				WeightG: s.WeightInitG, Archived: m.Archived,
+			})
+		}
+	}
+	return out, nil
+}
+
 // Debts — неоплаченные остатки.
 func (a *App) Debts() ([]sqlite.Debt, error) {
 	return a.db.Debts()

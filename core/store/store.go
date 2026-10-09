@@ -24,8 +24,16 @@ type Printers interface {
 	Save(p models.Printer) (int64, error)
 	List() ([]models.Printer, error)
 	Update(p models.Printer) error // все поля по id
-	Delete(id int64) error         // блок, если есть работы
+	Delete(id int64) error         // блок, если есть работы или закупки
 	SetMoonrakerURL(id int64, url string) error
+}
+
+// Parts — закупки запчастей и ТО по принтерам.
+type Parts interface {
+	Save(p models.PartPurchase) (int64, error) // insert (ID=0) или update
+	ListByPrinter(printerID int64) ([]models.PartPurchase, error)
+	ListAll() ([]models.PartPurchase, error) // для отчёта закупок
+	Delete(id int64) error
 }
 
 // Jobs — история печати. Импорт идемпотентен по filename+start_at.

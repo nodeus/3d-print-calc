@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type PrinterDTO, type Printer, type ImportReport } from '../lib/wails';
+  import { wails, type PrinterDTO, type Printer, type ImportReport, type PartDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
@@ -88,6 +88,53 @@
 
   // Moonraker
   let urls: Record<number, string> = $state({});
+  // Закупки запчастей/ТО по принтерам.
+  let parts: Record<number, PartDTO[]> = $state({});
+  let partEdit: { id: number; printerId: number; boughtAt: string; name: string; price: number | null; qty: number | null; note: string } | null = $state(null);
+
+  function newPart(printerId: number) {
+    partEdit = { id: 0, printerId, boughtAt: '', name: '', price: null, qty: null, note: '' };
+  }
+
+  function editPart(p: PartDTO) {
+    partEdit = { id: p.id, printerId: p.printerId, boughtAt: p.boughtAt, name: p.name, price: p.price, qty: p.qty, note: p.note };
+  }
+
+  async function loadParts(printerId: number) {
+    try {
+      parts[printerId] = (await wails.getParts(printerId)) ?? [];
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function savePart() {
+    if (!partEdit || !partEdit.name.trim()) return;
+    error = '';
+    try {
+      await wails.savePart({
+        id: partEdit.id, printerId: partEdit.printerId, boughtAt: partEdit.boughtAt,
+        name: partEdit.name.trim(), price: partEdit.price ?? 0, qty: partEdit.qty ?? 1,
+        total: 0, note: partEdit.note.trim(),
+      });
+      const pid = partEdit.printerId;
+      partEdit = null;
+      await loadParts(pid);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function removePart(p: PartDTO) {
+    error = '';
+    if (!(await askConfirm(`${$t('common.delete_q')} «${p.name}»?`))) return;
+    try {
+      await wails.deletePart(p.id);
+      await loadParts(p.printerId);
+    } catch (e) {
+      error = String(e);
+    }
+  }
   let status: Record<number, string> = $state({});
   let report: ImportReport | null = $state(null);
   let applied: ImportReport | null = $state(null);
@@ -107,6 +154,7 @@
     try {
       printers = (await wails.printers()) ?? [];
       for (const p of printers) urls[p.ID] = p.MoonrakerURL ?? '';
+      for (const p of printers) await loadParts(p.ID);
     } catch (e) {
       error = String(e);
     }
@@ -216,13 +264,23 @@
   }
 
   async function toPDF() {
-    await downloadPDF($t('nav.printers'), [
+    const sections = [
       {
         Title: '',
         Headers: printerOrd.map((k) => $t(printerLabel(k))),
         Rows: shown.map((p) => printerOrd.map((k) => printerText(p, k))),
       },
-    ]);
+    ];
+    for (const p of shown) {
+      const list = parts[p.ID] ?? [];
+      if (!list.length) continue;
+      sections.push({
+        Title: `${p.Name} — ${$t('part.title')}`,
+        Headers: [$t('part.date'), $t('part.name'), $t('part.price'), $t('part.qty'), $t('part.total'), $t('part.note')],
+        Rows: list.map((pt) => [pt.boughtAt || '—', pt.name, money(pt.price, 'RUB', 'ru'), String(pt.qty), money(pt.total, 'RUB', 'ru'), pt.note]),
+      });
+    }
+    await downloadPDF($t('nav.printers'), sections);
   }
 </script>
 
@@ -299,6 +357,44 @@
       </div>
     {/if}
     {#if status[p.ID]}<p class="ok">Moonraker {status[p.ID]}</p>{/if}
+    <h4>{$t('part.title')}</h4>
+    <table>
+      <thead><tr><th>{$t('part.date')}</th><th>{$t('part.name')}</th><th class="n">{$t('part.price')}</th><th class="n">{$t('part.qty')}</th><th class="n">{$t('part.total')}</th><th>{$t('part.note')}</th><th class="no-print"></th></tr></thead>
+      <tbody>
+        {#each parts[p.ID] ?? [] as pt}
+          {#if partEdit && partEdit.id === pt.id}
+            <tr>
+              <td><input type="date" bind:value={partEdit.boughtAt} /></td>
+              <td><input bind:value={partEdit.name} placeholder={$t('part.name')} /></td>
+              <td><input type="number" min="0" step="0.01" bind:value={partEdit.price} placeholder="500" /></td>
+              <td><input type="number" min="0" step="0.5" bind:value={partEdit.qty} placeholder="1" /></td>
+              <td class="n">{money(Math.round(((partEdit.price ?? 0) * (partEdit.qty ?? 1)) * 100) / 100, 'RUB', 'ru')}</td>
+              <td><input bind:value={partEdit.note} placeholder={$t('part.note')} /></td>
+              <td class="no-print"><button onclick={savePart}>{$t('common.save')}</button> <button onclick={() => (partEdit = null)}>{$t('common.cancel')}</button></td>
+            </tr>
+          {:else}
+            <tr><td>{pt.boughtAt || '—'}</td><td>{pt.name}</td><td class="n">{money(pt.price, 'RUB', 'ru')}</td><td class="n">{pt.qty}</td><td class="n">{money(pt.total, 'RUB', 'ru')}</td><td>{pt.note}</td>
+              <td class="no-print">{#if canWrite($user)}<button onclick={() => editPart(pt)}>✎</button> <button onclick={() => removePart(pt)}>✕</button>{/if}</td>
+            </tr>
+          {/if}
+        {/each}
+      </tbody>
+    </table>
+    {#if canWrite($user)}
+      {#if partEdit && partEdit.id === 0 && partEdit.printerId === p.ID}
+        <div class="row">
+          <input type="date" bind:value={partEdit.boughtAt} />
+          <input bind:value={partEdit.name} placeholder={$t('part.name')} />
+          <input type="number" min="0" step="0.01" bind:value={partEdit.price} placeholder="500" />
+          <input type="number" min="0" step="0.5" bind:value={partEdit.qty} placeholder="1" />
+          <input bind:value={partEdit.note} placeholder={$t('part.note')} />
+          <button onclick={savePart}>{$t('common.save')}</button>
+          <button onclick={() => (partEdit = null)}>{$t('common.cancel')}</button>
+        </div>
+      {:else if !partEdit}
+        <div class="row"><button onclick={() => newPart(p.ID)}>+ {$t('part.add')}</button></div>
+      {/if}
+    {/if}
   </div>
 {/each}
 {#if report}<p>{$t('set.csv_preview')}: total {report.total}{#if report.lifetimeTotal} / {$t('moon.lifetime_total')}: {report.lifetimeTotal}{/if}, new {report.new}, existing {report.existing}</p>{/if}
@@ -308,6 +404,7 @@
 
 <style>
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; margin-bottom: 8px; max-width: 720px; }
+  h4 { margin: 10px 0 6px; font-size: 13px; color: var(--muted); }
   .row { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 120px; }
   input, select, button { padding: 6px; font-size: 14px; }

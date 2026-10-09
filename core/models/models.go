@@ -92,6 +92,18 @@ type Printer struct {
 	MoonrakerURL      string // http://host:7125, пусто = не настроен
 }
 
+// PartPurchase — закупка запчастей/ТО по принтеру.
+// Цена — минорные единицы рублей; сумма итого вычисляется (price×qty).
+type PartPurchase struct {
+	ID        int64
+	PrinterID int64
+	BoughtAt  string // ISO-дата, '' = отсутствует
+	Name      string
+	Price     int64
+	Qty       float64
+	Note      string
+}
+
 // Job — печать/работа со снапшотом расчёта.
 type Job struct {
 	ID              int64

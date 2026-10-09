@@ -129,7 +129,7 @@ func (r *printersRepo) Update(p models.Printer) error {
 	return nil
 }
 
-// Delete удаляет принтер. Блок: есть работы на нём.
+// Delete удаляет принтер. Блок: есть работы или закупки на нём.
 func (r *printersRepo) Delete(id int64) error {
 	var n int
 	if err := r.db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE printer_id=?`, id).Scan(&n); err != nil {
@@ -137,6 +137,12 @@ func (r *printersRepo) Delete(id int64) error {
 	}
 	if n > 0 {
 		return fmt.Errorf("ERR_PRINTER_USED: %d работ ссылаются на принтер", n)
+	}
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM part_purchases WHERE printer_id=?`, id).Scan(&n); err != nil {
+		return fmt.Errorf("ERR_PRINTER_DELETE: %w", err)
+	}
+	if n > 0 {
+		return fmt.Errorf("ERR_PRINTER_USED: %d закупок ссылаются на принтер", n)
 	}
 	if _, err := r.db.Exec(`DELETE FROM printers WHERE id=?`, id); err != nil {
 		return fmt.Errorf("ERR_PRINTER_DELETE: %w", err)
