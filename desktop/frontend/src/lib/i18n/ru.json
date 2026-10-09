@@ -74,6 +74,8 @@
   "hist.to_calc": "В калькулятор",
   "hist.origin": "Источник",
   "hist.columns_btn": "Колонки",
+  "hist.sums_btn": "Посчитать суммы",
+  "hist.total": "Итого",
   "hist.drag_cols": "Тянуть — порядок колонок",
   "hist.manual": "вручную",
   "hist.edited": "изменена",

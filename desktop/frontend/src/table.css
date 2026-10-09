@@ -23,6 +23,10 @@ td.n {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+tfoot td {
+  border-top: 2px solid var(--final-border);
+  font-size: 13px;
+}
 @media print {
   table {
     font-size: 11px;
