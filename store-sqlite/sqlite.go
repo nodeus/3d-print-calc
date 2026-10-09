@@ -59,6 +59,9 @@ func (d *DB) Materials() store.Materials { return &materialsRepo{d.sql} }
 // Printers возвращает репозиторий принтеров.
 func (d *DB) Printers() store.Printers { return &printersRepo{d.sql} }
 
+// Parts возвращает репозиторий закупок запчастей и ТО.
+func (d *DB) Parts() store.Parts { return &partsRepo{d.sql} }
+
 // Jobs возвращает репозиторий истории печати.
 func (d *DB) Jobs() store.Jobs { return &jobsRepo{d.sql} }
 

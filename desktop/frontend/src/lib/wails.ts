@@ -349,6 +349,29 @@ export interface PDFSection {
   Rows: string[][];
 }
 
+// Закупка запчастей/ТО (деньги — основные единицы, рубли).
+export interface PartDTO {
+  id: number;
+  printerId: number;
+  boughtAt: string;
+  name: string;
+  price: number;
+  qty: number;
+  total: number;
+  note: string;
+}
+
+// Закупка пластика (катушка) для отчёта закупок.
+export interface SpoolPurchase {
+  code: string;
+  vendor: string;
+  boughtAt: string;
+  price: number;
+  currency: string;
+  weightG: number;
+  archived: boolean;
+}
+
 // Секция пользовательских настроек из user_settings.json (см. desktop/uisettings.go).
 export interface UserUISettings {
   theme: string;
@@ -422,6 +445,11 @@ declare global {
           PrinterLoad(): Promise<PrinterStat[]>;
           SpoolStats(): Promise<SpoolStat[]>;
           Debts(): Promise<Debt[]>;
+          SpoolPurchases(): Promise<SpoolPurchase[]>;
+          GetParts(printerId: number): Promise<PartDTO[]>;
+          ListAllParts(): Promise<PartDTO[]>;
+          SavePart(p: PartDTO): Promise<number>;
+          DeletePart(id: number): Promise<void>;
           SetMoonrakerURL(printerId: number, url: string): Promise<void>;
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
@@ -515,6 +543,7 @@ export const wails = {
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
   spoolStats: () => api().SpoolStats(),
+  spoolPurchases: () => api().SpoolPurchases(),
   debts: () => api().Debts(),
   setMoonrakerURL: (printerId: number, url: string) => api().SetMoonrakerURL(printerId, url),
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
@@ -532,6 +561,10 @@ export const wails = {
   addPrinter: (p: Printer) => api().AddPrinter(p),
   updatePrinter: (p: Printer) => api().UpdatePrinter(p),
   deletePrinter: (id: number) => api().DeletePrinter(id),
+  getParts: (printerId: number) => api().GetParts(printerId),
+  listAllParts: () => api().ListAllParts(),
+  savePart: (p: PartDTO) => api().SavePart(p),
+  deletePart: (id: number) => api().DeletePart(id),
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),
