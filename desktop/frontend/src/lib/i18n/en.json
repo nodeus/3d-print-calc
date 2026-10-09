@@ -74,6 +74,7 @@
   "hist.to_calc": "To calculator",
   "hist.origin": "Source",
   "hist.columns_btn": "Columns",
+  "hist.drag_cols": "Drag to reorder columns",
   "hist.manual": "manual",
   "hist.edited": "modified",
   "common.revert_q": "Revert",

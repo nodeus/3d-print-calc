@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { wails, type JobDTO, type MaterialDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
@@ -9,7 +10,7 @@
   import { goTab } from '../lib/nav';
   import { calcFormDefaults } from '../lib/calcform';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
-  import { myHistoryColumns } from '../lib/usersettings';
+  import { myHistoryColumns, saveMySettingsPatch } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
 
   let jobs: JobDTO[] = $state([]);
@@ -324,6 +325,76 @@
     goTab.set('settings');
   }
 
+  // Drag-перестановка колонок за грип (manager+). Порог 4px отделяет
+  // перетаскивание от клика; линия показывает место вставки.
+  let dragCol: string | null = $state(null);
+  let dropX: number | null = $state(null);
+  let wrapEl: HTMLDivElement | null = $state(null);
+
+  async function persistColumns(ordered: string[]) {
+    error = '';
+    try {
+      await wails.setHistoryColumns(ordered);
+      await saveMySettingsPatch({ historyColumns: ordered });
+      columns = ordered;
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function gripDown(e: PointerEvent, col: string) {
+    if (!canWrite(get(user))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const grip = e.currentTarget as HTMLElement;
+    const startX = e.clientX;
+    let dragging = false;
+    const ths = () =>
+      [...(wrapEl?.querySelectorAll('thead th[data-col]') ?? [])] as HTMLElement[];
+    const onMove = (ev: PointerEvent) => {
+      if (!dragging) {
+        if (Math.abs(ev.clientX - startX) < 4) return;
+        dragging = true;
+        dragCol = col;
+      }
+      // Позиция вставки: первый th, чья середина правее курсора.
+      const list = ths();
+      let idx = list.length;
+      let lineX: number | null = null;
+      const wrapR = wrapEl?.getBoundingClientRect();
+      for (let i = 0; i < list.length; i++) {
+        const r = list[i].getBoundingClientRect();
+        if (ev.clientX < r.left + r.width / 2) {
+          idx = i;
+          lineX = wrapR ? r.left - wrapR.left : null;
+          break;
+        }
+        lineX = wrapR ? r.right - wrapR.left : null;
+      }
+      (grip as HTMLElement & { __dropIdx?: number }).__dropIdx = idx;
+      dropX = lineX;
+    };
+    const onUp = async () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const idx = (grip as HTMLElement & { __dropIdx?: number }).__dropIdx;
+      const from = columns.indexOf(col);
+      dragCol = null;
+      dropX = null;
+      if (dragging && idx != null && from >= 0) {
+        // Индекс вставки считался со строкой-источником: после удаления сдвиг.
+        let to = idx > from ? idx - 1 : idx;
+        const next = columns.filter((c) => c !== col);
+        to = Math.max(0, Math.min(next.length, to));
+        next.splice(to, 0, col);
+        if (next.join() !== columns.join()) await persistColumns(next);
+      }
+      dragging = false;
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
   function toCalc(j: JobDTO) {
     prefillJob.set(j);
     goTab.set('calc');
@@ -522,10 +593,13 @@
   </span>
 </div>
 
-<table class="tw">
+<div class="twrap" bind:this={wrapEl}>
+{#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
+<table class="tw" class:dragging={dragCol != null}>
   <thead><tr>
     {#each columns as c}
-      <th class:n={isNum(c)} style={thWidth('history', c)}>
+      <th class:n={isNum(c)} style={thWidth('history', c)} data-col={c} class:dragsrc={dragCol === c}>
+        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, c)}>⋮⋮</span>{/if}
         {#if sortable[c]}
           <button class="th" onclick={() => toggleSort(sortable[c])}>{colLabel(c)}{arrow(sortable[c])}</button>
         {:else}{colLabel(c)}{/if}
@@ -553,9 +627,19 @@
     {/each}
   </tbody>
 </table>
+</div>
 
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .twrap { position: relative; }
+  table.dragging { user-select: none; }
+  th.dragsrc { opacity: 0.5; }
+  .grip { cursor: grab; opacity: 0.45; margin-right: 4px; font-size: 12px; }
+  .grip:active { cursor: grabbing; }
+  .drop-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); z-index: 2; pointer-events: none; }
+  @media print {
+    .grip, .drop-line { display: none; }
+  }
   .note { color: var(--muted); }
   input, select, button { padding: 6px; font-size: 14px; }
   .count { color: var(--muted); font-size: 13px; }
