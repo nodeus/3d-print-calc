@@ -10,7 +10,7 @@
   import { goTab } from '../lib/nav';
   import { calcFormDefaults } from '../lib/calcform';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
-  import { myHistoryColumns, saveMySettingsPatch } from '../lib/usersettings';
+  import { myHistoryColumns, saveMySettingsPatch, mySettings } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
   import { startColDrag } from '../lib/coldrag';
 
@@ -22,7 +22,7 @@
   let sortKey: string = $state('start');
   let sortDir: 1 | -1 = $state(-1);
   let page = $state(0);
-  const perPage = 50;
+  let perPage = $derived($mySettings.historyPerPage > 0 ? $mySettings.historyPerPage : 50);
   // Видимые колонки (Настройки → Колонки истории).
   let columns: string[] = $state(['filename', 'start', 'status', 'duration', 'weight', 'cost', 'price', 'origin']);
 
@@ -317,6 +317,15 @@
 
   let pages = $derived(Math.max(1, Math.ceil(filtered.length / perPage)));
   let visible = $derived(filtered.slice(page * perPage, page * perPage + perPage));
+
+  $effect(() => {
+    void filtered.length;
+    void perPage;
+    untrack(() => {
+      if (page > pages - 1) page = pages - 1;
+      if (page < 0) page = 0;
+    });
+  });
   let statuses = $derived([...new Set(jobs.map((j) => j.Status))].sort());
 
   // Все колонки в фиксированном порядке бэкенда (настройка — в Настройках).
@@ -464,7 +473,7 @@
     } catch {
       inp = {};
     }
-    const pick = (k: string, fb: number) => (inp[k] != null ? inp[k] : fb);
+    const pick = (k: string, fb: number | null) => (inp[k] != null ? inp[k] : (fb ?? 0));
     edit = {
       filename: j.Filename, status: j.Status, startAt: j.StartAt, endAt: j.EndAt,
       printSec: j.PrintSec, totalSec: j.TotalSec, weightG: j.WeightG,
@@ -478,8 +487,8 @@
       modelH: pick('modelH', d.modelH), modelPrice: pick('modelPrice', d.modelPrice),
       extraMat: pick('extraMat', d.extraMat),
       failPct: pick('failRate', 0) * 100,
-      marginProfitPct: pick('marginProfit', d.marginProfitPct / 100) * 100,
-      marginDevPct: pick('marginDev', d.marginDevPct / 100) * 100,
+      marginProfitPct: pick('marginProfit', (d.marginProfitPct ?? 0) / 100) * 100,
+      marginDevPct: pick('marginDev', (d.marginDevPct ?? 0) / 100) * 100,
       fees: pick('fees', d.fees), copies: Math.max(1, Math.round(pick('copies', 1))),
       vatPct: pick('vatRate', 0) * 100, roundStep: pick('roundStep', 0),
     };
@@ -500,19 +509,19 @@
         id: editId,
         filename: edit.filename, status: edit.status,
         startAt: edit.startAt, endAt: edit.endAt,
-        printSec: edit.printSec, totalSec: edit.totalSec,
+        printSec: edit.printSec ?? 0, totalSec: edit.totalSec ?? 0,
         estimatedSec: 0, sizeBytes: 0,
-        weightG: edit.weightG, lengthM: edit.lengthM,
+        weightG: edit.weightG ?? 0, lengthM: edit.lengthM ?? 0,
         slicer: edit.slicer, material: edit.material.trim(),
-        tariff: edit.tariff, powerKW: edit.powerKW,
-        amortPerHour: edit.amortPerHour, maintPerHour: edit.maintPerHour,
-        purgeWasteG: edit.purgeG,
-        opRate: edit.opRate, prepH: edit.prepH, postH: edit.postH,
-        designerRate: edit.designerRate, modelH: edit.modelH, modelPrice: edit.modelPrice,
-        extraMat: edit.extraMat, failRate: edit.failPct / 100,
-        marginProfit: edit.marginProfitPct / 100, marginDev: edit.marginDevPct / 100,
-        fees: edit.fees, copies: Math.max(1, Math.round(edit.copies)),
-        vatRate: edit.vatPct / 100, roundStep: edit.roundStep,
+        tariff: edit.tariff ?? 0, powerKW: edit.powerKW ?? 0,
+        amortPerHour: edit.amortPerHour ?? 0, maintPerHour: edit.maintPerHour ?? 0,
+        purgeWasteG: edit.purgeG ?? 0,
+        opRate: edit.opRate ?? 0, prepH: edit.prepH ?? 0, postH: edit.postH ?? 0,
+        designerRate: edit.designerRate ?? 0, modelH: edit.modelH ?? 0, modelPrice: edit.modelPrice ?? 0,
+        extraMat: edit.extraMat ?? 0, failRate: (edit.failPct ?? 0) / 100,
+        marginProfit: (edit.marginProfitPct ?? 0) / 100, marginDev: (edit.marginDevPct ?? 0) / 100,
+        fees: edit.fees ?? 0, copies: Math.max(1, Math.round(edit.copies ?? 1)),
+        vatRate: (edit.vatPct ?? 0) / 100, roundStep: edit.roundStep ?? 0,
       });
       editId = 0;
       await load();

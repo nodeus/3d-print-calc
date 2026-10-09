@@ -357,6 +357,7 @@ export interface UserUISettings {
   widths: Record<string, Record<string, number>>;
   colOrder: Record<string, string[]>;
   ordersPerPage: number;
+  historyPerPage: number;
   calcDefaults: Record<string, unknown>;
 }
 

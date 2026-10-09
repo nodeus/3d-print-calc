@@ -139,21 +139,24 @@
     }
   }
 
-  // Строк на странице списка заказов.
+  // Строк на странице списка заказов и истории.
   let ordersPerPage = $state(20);
+  let historyPerPage = $state(50);
   let pageMsg = $state(false);
 
   function loadOrdersPerPage() {
     const v = get(mySettings).ordersPerPage;
     ordersPerPage = v > 0 ? v : 20;
+    const h = get(mySettings).historyPerPage;
+    historyPerPage = h > 0 ? h : 50;
   }
 
   async function saveOrdersPerPage() {
     error = '';
-    const v = Math.max(1, Math.round(Number(ordersPerPage)) || 20);
-    ordersPerPage = v;
+    ordersPerPage = Math.max(1, Math.round(Number(ordersPerPage)) || 20);
+    historyPerPage = Math.max(1, Math.round(Number(historyPerPage)) || 50);
     try {
-      await saveMySettingsPatch({ ordersPerPage: v });
+      await saveMySettingsPatch({ ordersPerPage, historyPerPage });
       pageMsg = true;
       setTimeout(() => (pageMsg = false), 2500);
     } catch (e) {
@@ -358,9 +361,9 @@
     return cmp * fxSortDir;
   }));
   let rateCur = $state('');
-  let rateVal = $state(0);
+  let rateVal: number | null = $state(null);
   let convCur = $state('');
-  let convRate = $state(0);
+  let convRate: number | null = $state(null);
 
   async function loadRates() {
     try {
@@ -372,11 +375,10 @@
 
   async function saveRate() {
     error = '';
-    if (!rateCur.trim() || !(rateVal > 0)) return;
+    if (!rateCur.trim() || !((rateVal ?? 0) > 0)) return;
     try {
-      await wails.setFxRate(rateCur.trim().toUpperCase(), rateVal);
-      rateCur = '';
-      rateVal = 0;
+      await wails.setFxRate(rateCur.trim().toUpperCase(), rateVal ?? 0);
+      rateVal = null;
       await loadRates();
     } catch (e) {
       error = String(e);
@@ -396,14 +398,14 @@
   async function convertAll() {
     error = '';
     const target = convCur.trim().toUpperCase();
-    if (!target || !(convRate > 0)) return;
-    if (!(await askConfirm(`${$t('fx.convert_q')} ${target} @ ${convRate}? (${$t('fx.backup_warn')})`))) return;
+    if (!target || !((convRate ?? 0) > 0)) return;
+    if (!(await askConfirm(`${$t('fx.convert_q')} ${target} @ ${convRate ?? 0}? (${$t('fx.backup_warn')})`))) return;
     try {
-      await wails.convertCurrency(target, convRate);
+      await wails.convertCurrency(target, convRate ?? 0);
       currency = target;
       setBaseSym(target);
       convCur = '';
-      convRate = 0;
+      convRate = null;
       await loadRates();
     } catch (e) {
       error = String(e);
@@ -517,9 +519,9 @@
         {#each g.keys as d}
           <label class="def">{$t(d.label)}
             {#if d.text}
-              <input bind:value={defVals[d.key]} />
+              <input bind:value={defVals[d.key]} placeholder={String(calcFormDefaults[d.key] ?? '')} />
             {:else}
-              <input type="number" step="any" bind:value={defVals[d.key]} />
+              <input type="number" step="any" bind:value={defVals[d.key]} placeholder={String(calcFormDefaults[d.key] ?? '')} />
             {/if}
           </label>
         {/each}
@@ -557,7 +559,8 @@
 <div class="card">
   <h3>{$t('set.orderspage')}</h3>
   <div class="row">
-    <input type="number" min="1" max="500" step="1" bind:value={ordersPerPage} />
+    <label>{$t('set.orderspage_orders')}<input type="number" min="1" max="500" step="1" bind:value={ordersPerPage} /></label>
+    <label>{$t('set.orderspage_history')}<input type="number" min="1" max="500" step="1" bind:value={historyPerPage} /></label>
     <button onclick={saveOrdersPerPage}>{$t('common.save')}</button>
   </div>
   {#if pageMsg}<p class="ok">{$t('calc.saved')}</p>{/if}

@@ -153,10 +153,10 @@
   let newCustomerId = $state(0);
   let newTitle = $state('');
   let itemTitle = $state('');
-  let itemQty = $state(1);
-  let itemCost = $state(0);
-  let itemPrice = $state(0);
-  let payAmount = $state(0);
+  let itemQty: number | null = $state(null);
+  let itemCost: number | null = $state(null);
+  let itemPrice: number | null = $state(null);
+  let payAmount: number | null = $state(null);
   let payNote = $state('');
   let payItemId = $state(0);
   let error = $state('');
@@ -164,8 +164,8 @@
   let editOpen = $state(false);
   let editCustomerId = $state(0);
   let editTitle = $state('');
-  let editDiscountPct = $state(0);
-  let editDiscountFixed = $state(0);
+  let editDiscountPct: number | null = $state(null);
+  let editDiscountFixed: number | null = $state(null);
 
   const statuses = ['draft', 'quoted', 'in_work', 'done', 'paid', 'cancelled'];
 
@@ -327,8 +327,8 @@
         ...detail.order,
         CustomerID: editCustomerId,
         Title: editTitle,
-        DiscountPct: editDiscountPct,
-        DiscountFixed: Math.round(editDiscountFixed * 100),
+        DiscountPct: editDiscountPct ?? 0,
+        DiscountFixed: Math.round((editDiscountFixed ?? 0) * 100),
       });
       editOpen = false;
       await load();
@@ -355,9 +355,12 @@
     try {
       await wails.addOrderItem({
         orderId: detail.order.ID, jobId: 0, title: itemTitle.trim(),
-        qty: itemQty, cost: Math.round(itemCost * 100), price: Math.round(itemPrice * 100),
+        qty: itemQty ?? 1, cost: Math.round((itemCost ?? 0) * 100), price: Math.round((itemPrice ?? 0) * 100),
       });
       itemTitle = '';
+      itemQty = null;
+      itemCost = null;
+      itemPrice = null;
       await load();
     } catch (e) {
       error = String(e);
@@ -365,10 +368,10 @@
   }
 
   async function addPay() {
-    if (!detail || payAmount <= 0) return;
+    if (!detail || (payAmount ?? 0) <= 0) return;
     try {
-      await wails.addPayment(detail.order.ID, payItemId, Math.round(payAmount * 100), payNote);
-      payAmount = 0;
+      await wails.addPayment(detail.order.ID, payItemId, Math.round((payAmount ?? 0) * 100), payNote);
+      payAmount = null;
       payNote = '';
       payItemId = 0;
       await load();

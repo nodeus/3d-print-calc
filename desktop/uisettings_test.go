@@ -22,9 +22,11 @@ func TestUserSettingsFile(t *testing.T) {
 	}
 	in := UserUISettings{
 		Theme: "Dracula", Locale: "en", HistoryColumns: []string{"filename", "cost"},
-		Widths:       map[string]map[string]float64{"history": {"cost": 120}},
-		ColOrder:     map[string][]string{"materials": {"vendor", "code"}},
-		CalcDefaults: map[string]any{"tariff": 8.5},
+		Widths:         map[string]map[string]float64{"history": {"cost": 120}},
+		ColOrder:       map[string][]string{"materials": {"vendor", "code"}},
+		OrdersPerPage:  25,
+		HistoryPerPage: 100,
+		CalcDefaults:   map[string]any{"tariff": 8.5},
 	}
 	if err := app.SaveMyUISettings(in); err != nil {
 		t.Fatalf("SaveMyUISettings: %v", err)
@@ -44,6 +46,9 @@ func TestUserSettingsFile(t *testing.T) {
 	}
 	if got.CalcDefaults["tariff"] != 8.5 {
 		t.Fatalf("дефолты: %+v", got.CalcDefaults)
+	}
+	if got.OrdersPerPage != 25 || got.HistoryPerPage != 100 {
+		t.Fatalf("пагинация: %+v", got)
 	}
 	// Другой пользователь — своя пустая секция.
 	app.currentUser = &models.User{Login: "mgr"}
