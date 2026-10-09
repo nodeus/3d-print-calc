@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type MaterialDTO, type Material } from '../lib/wails';
+  import { wails, type MaterialDTO, type Material, type SpoolDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
@@ -19,10 +19,88 @@
   let newDensity: number | null = $state(null);
   let newPrice: number | null = $state(null);
   let newWeight: number | null = $state(null);
-  // Редактирование
+  // Редактирование материала (цены здесь нет — она живёт на катушках).
   let editId = $state(0);
   let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '', BoughtAt: '', Archived: false });
-  let editPrice = $state(0);
+
+  // Катушки материала: список, раскрытие, правка.
+  // Цена для расчётов — первая неархивная (порядок ListSpools); бейдж «расчётная».
+  type SpoolForm = { id: number; materialId: number; boughtAt: string; price: number | null; weight: number | null; currency: string };
+  let spools: Record<number, SpoolDTO[]> = $state({});
+  let expanded = $state(0);
+  let spoolEdit: SpoolForm | null = $state(null);
+
+  function calcSpool(list: SpoolDTO[]): SpoolDTO | null {
+    return list.find((s) => !s.archived) ?? null;
+  }
+
+  async function toggleSpools(m: MaterialDTO) {
+    if (expanded === m.id) {
+      expanded = 0;
+      return;
+    }
+    expanded = m.id;
+    await loadSpools(m.id);
+  }
+
+  async function loadSpools(materialId: number) {
+    try {
+      spools[materialId] = (await wails.getSpools(materialId)) ?? [];
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function newSpool(m: MaterialDTO) {
+    spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB' };
+  }
+
+  function editSpool(s: SpoolDTO) {
+    spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency };
+  }
+
+  async function saveSpool(defWeight: number) {
+    const se = spoolEdit;
+    if (!se) return;
+    error = '';
+    try {
+      if (se.id === 0) {
+        const w = se.weight ?? defWeight;
+        await wails.addSpool({
+          id: 0, materialId: se.materialId, price: se.price ?? 0,
+          currency: se.currency || 'RUB', boughtAt: se.boughtAt,
+          weightInitG: w, weightLeftG: w, archived: false,
+        });
+      } else {
+        const cur = (spools[se.materialId] ?? []).find((s) => s.id === se.id);
+        if (!cur) return;
+        await wails.updateSpool({
+          ID: cur.id, MaterialID: cur.materialId, Price: Math.round((se.price ?? 0) * 100),
+          Currency: se.currency || cur.currency, FxRate: 1, BoughtAt: se.boughtAt,
+          WeightInitG: se.weight ?? cur.weightInitG, WeightLeftG: cur.weightLeftG,
+          Archived: cur.archived,
+        });
+      }
+      const mid = se.materialId;
+      spoolEdit = null;
+      await loadSpools(mid);
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function removeSpool(s: SpoolDTO) {
+    error = '';
+    if (!(await askConfirm(`${$t('common.delete_q')} «${s.boughtAt || s.id}»?`))) return;
+    try {
+      await wails.deleteSpool(s.id);
+      await loadSpools(s.materialId);
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   let knownTypes = $derived([...new Set(materials.map((m) => m.type))].sort());
   // Цвета: пресеты + фавориты (settings).
@@ -155,7 +233,6 @@
   function startEdit(m: MaterialDTO) {
     editId = m.id;
     edit = { ID: m.id, Code: m.code, Type: m.type, Vendor: m.vendor, ColorHex: m.colorHex, Density: m.density, Diameter: m.diameter, DefaultSpoolWeightG: m.defaultWeightG || 1000, Note: m.note, BoughtAt: m.boughtAt || '', Archived: m.archived };
-    editPrice = m.pricePerKg;
   }
 
   function swatch(hex: string): string {
@@ -170,8 +247,6 @@
         return;
       }
       await wails.updateMaterial(edit);
-      // Цена — отдельным вызовом: создаст катушку, если её нет, остальное не трогает.
-      await wails.setMaterialPrice(editId, Math.round(editPrice * 100), 'RUB');
       editId = 0;
       await load();
     } catch (e) {
@@ -191,13 +266,27 @@
   }
 
   async function toPDF() {
-    await downloadPDF($t('nav.materials'), [
+    const sections = [
       {
         Title: '',
         Headers: matOrd.map((k) => $t(matLabel(k))),
         Rows: materials.map((m) => matOrd.map((k) => (k === 'color' ? m.colorHex : matText(m, k)))),
       },
-    ]);
+    ];
+    for (const m of materials) {
+      const list = spools[m.id];
+      if (expanded !== m.id || !list || !list.length) continue;
+      sections.push({
+        Title: `${m.code} — ${$t('spool.title')}`,
+        Headers: [$t('spool.date'), $t('spool.price'), $t('spool.weight'), $t('spool.left'), ''],
+        Rows: list.map((s) => [
+          s.boughtAt || '—', money(s.price, s.currency, 'ru'),
+          String(s.weightInitG), String(s.weightLeftG),
+          calcSpool(list)?.id === s.id ? '★' : '',
+        ]),
+      });
+    }
+    await downloadPDF($t('nav.materials'), sections);
   }
 </script>
 
@@ -259,7 +348,7 @@
             {:else if k === 'type'}
               <td><input list="mat-types-edit" bind:value={edit.Type} placeholder="PETG" /></td>
             {:else if k === 'price'}
-              <td><input placeholder="869" type="number" min="0" bind:value={editPrice} /></td>
+              <td class="n" title={$t('mat.price_spool_note')}>{matText(m, k)}</td>
             {:else if k === 'density'}
               <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
             {:else if k === 'weight'}
@@ -284,9 +373,54 @@
             {/if}
           {/each}
           <td class="no-print">
+            <button onclick={() => toggleSpools(m)} title={$t('spool.title')}>{expanded === m.id ? '▾' : '▸'} {(spools[m.id] ?? []).length || ''}</button>
             {#if canWrite($user)}<button onclick={() => startEdit(m)}>✎</button> <button onclick={() => remove(m)}>✕</button>{/if}
           </td>
         </tr>
+      {/if}
+      {#if expanded === m.id}
+        <tr><td colspan={matOrd.length + 1}>
+          <b>{$t('spool.title')} — {m.code}</b>
+          <table>
+            <thead><tr><th>{$t('spool.date')}</th><th class="n">{$t('spool.price')}</th><th class="n">{$t('spool.weight')}</th><th class="n">{$t('spool.left')}</th><th></th><th class="no-print"></th></tr></thead>
+            <tbody>
+              {#each spools[m.id] ?? [] as s}
+                {#if spoolEdit && spoolEdit.id === s.id}
+                  <tr>
+                    <td><input type="date" bind:value={spoolEdit.boughtAt} /></td>
+                    <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" /></td>
+                    <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
+                    <td class="n">{s.weightLeftG}</td>
+                    <td>{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
+                    <td class="no-print"><button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button> <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button></td>
+                  </tr>
+                {:else}
+                  <tr>
+                    <td>{s.boughtAt || '—'}</td>
+                    <td class="n">{money(s.price, s.currency, 'ru')}</td>
+                    <td class="n">{s.weightInitG}</td>
+                    <td class="n">{s.weightLeftG}</td>
+                    <td>{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
+                    <td class="no-print">{#if canWrite($user)}<button onclick={() => editSpool(s)}>✎</button> <button onclick={() => removeSpool(s)}>✕</button>{/if}</td>
+                  </tr>
+                {/if}
+              {/each}
+            </tbody>
+          </table>
+          {#if canWrite($user)}
+            {#if spoolEdit && spoolEdit.id === 0 && spoolEdit.materialId === m.id}
+              <div class="row">
+                <input type="date" bind:value={spoolEdit.boughtAt} title={$t('spool.date')} />
+                <input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" title={$t('spool.price')} />
+                <input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" title={$t('spool.weight')} />
+                <button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button>
+                <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button>
+              </div>
+            {:else if !spoolEdit}
+              <div class="row"><button onclick={() => newSpool(m)}>+ {$t('spool.add')}</button></div>
+            {/if}
+          {/if}
+        </td></tr>
       {/if}
     {/each}
   </tbody>

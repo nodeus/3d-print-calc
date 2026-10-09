@@ -156,6 +156,28 @@ func TestUserDeleteGuards(t *testing.T) {
 	}
 }
 
+// TestSpoolDeleteGuard: партию с привязанными работами удалить нельзя.
+func TestSpoolDeleteGuard(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, _ := mats.UpsertByCode(models.Material{Code: "PETG-G", Type: "PETG", Density: 1.27})
+	sid, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Jobs().Upsert(models.Job{Filename: "g.gcode", StartAt: "2026-01-01 10:00", Origin: "manual", SpoolID: sid}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mats.DeleteSpool(sid); err == nil {
+		t.Fatal("удаление катушки с работами обязано блокироваться")
+	}
+	// Свободная катушка удаляется.
+	sid2, _ := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 500, WeightLeftG: 500})
+	if err := mats.DeleteSpool(sid2); err != nil {
+		t.Fatalf("DeleteSpool свободной: %v", err)
+	}
+}
+
 // TestMaterialBoughtArchived: дата закупа и флаг архивности материала.
 func TestMaterialBoughtArchived(t *testing.T) {
 	db := openTestDB(t)

@@ -109,6 +109,7 @@ func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG flo
 	id, err := a.db.Materials().UpsertByCode(models.Material{
 		Code: code, Type: matType, Density: density, Diameter: 1.75,
 		DefaultSpoolWeightG: weightG,
+		BoughtAt:            time.Now().Format("2006-01-02"),
 	})
 	if err != nil {
 		return 0, err
@@ -125,7 +126,8 @@ func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG flo
 	if pricePerKg > 0 {
 		if _, err := a.db.Materials().AddSpool(models.Spool{
 			MaterialID: id, Price: int64(pricePerKg*100 + 0.5),
-			Currency: "RUB", FxRate: 1, WeightInitG: weightG, WeightLeftG: weightG,
+			Currency: "RUB", FxRate: 1, BoughtAt: time.Now().Format("2006-01-02"),
+			WeightInitG: weightG, WeightLeftG: weightG,
 		}); err != nil {
 			return 0, err
 		}
@@ -147,6 +149,71 @@ func (a *App) UpdateSpool(s models.Spool) error {
 		return err
 	}
 	return a.db.Materials().UpdateSpool(s)
+}
+
+// SpoolDTO — партия для фронта (деньги — основные единицы).
+type SpoolDTO struct {
+	ID          int64   `json:"id"`
+	MaterialID  int64   `json:"materialId"`
+	Price       float64 `json:"price"`
+	Currency    string  `json:"currency"`
+	BoughtAt    string  `json:"boughtAt"`
+	WeightInitG float64 `json:"weightInitG"`
+	WeightLeftG float64 `json:"weightLeftG"`
+	Archived    bool    `json:"archived"`
+}
+
+func toSpoolDTO(s models.Spool) SpoolDTO {
+	return SpoolDTO{
+		ID: s.ID, MaterialID: s.MaterialID, Price: float64(s.Price) / 100,
+		Currency: s.Currency, BoughtAt: s.BoughtAt,
+		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightLeftG, Archived: s.Archived,
+	}
+}
+
+// GetSpools возвращает партии материала.
+func (a *App) GetSpools(materialID int64) ([]SpoolDTO, error) {
+	list, err := a.db.Materials().ListSpools(materialID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SpoolDTO, 0, len(list))
+	for _, s := range list {
+		out = append(out, toSpoolDTO(s))
+	}
+	return out, nil
+}
+
+// AddSpool добавляет партию-закупку (manager+). Пустая дата — сегодня.
+func (a *App) AddSpool(s SpoolDTO) (int64, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return 0, err
+	}
+	if s.MaterialID == 0 {
+		return 0, fmt.Errorf("ERR_SPOOL_SAVE: нет материала")
+	}
+	if s.BoughtAt == "" {
+		s.BoughtAt = time.Now().Format("2006-01-02")
+	}
+	if s.Currency == "" {
+		s.Currency = "RUB"
+	}
+	if s.WeightInitG <= 0 {
+		s.WeightInitG = 1000
+	}
+	return a.db.Materials().AddSpool(models.Spool{
+		MaterialID: s.MaterialID, Price: int64(s.Price*100 + 0.5), Currency: s.Currency,
+		FxRate: 1, BoughtAt: s.BoughtAt,
+		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightInitG,
+	})
+}
+
+// DeleteSpool удаляет партию (manager+). Блок при привязанных работах — в store.
+func (a *App) DeleteSpool(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().DeleteSpool(id)
 }
 
 // SetMaterialPrice ставит цену материала: обновляет первую катушку

@@ -76,6 +76,21 @@ func (r *materialsRepo) UpdateSpool(s models.Spool) error {
 	return nil
 }
 
+// DeleteSpool удаляет партию. Блок: есть работы, привязанные к катушке.
+func (r *materialsRepo) DeleteSpool(id int64) error {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE spool_id=?`, id).Scan(&n); err != nil {
+		return fmt.Errorf("ERR_SPOOL_DELETE: %w", err)
+	}
+	if n > 0 {
+		return fmt.Errorf("ERR_SPOOL_USED: %d работ ссылаются на катушку", n)
+	}
+	if _, err := r.db.Exec(`DELETE FROM spools WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_SPOOL_DELETE: %w", err)
+	}
+	return nil
+}
+
 // SetMaterialPrice ставит цену первой катушки (создаёт катушку при отсутствии).
 // Остальные поля катушки не трогает — в отличие от UpdateSpool.
 // Новая катушка — весом default_spool_weight_g материала.

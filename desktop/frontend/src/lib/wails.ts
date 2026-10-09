@@ -73,6 +73,17 @@ export interface Spool {
   Archived: boolean;
 }
 
+export interface SpoolDTO {
+  id: number;
+  materialId: number;
+  price: number;
+  currency: string;
+  boughtAt: string;
+  weightInitG: number;
+  weightLeftG: number;
+  archived: boolean;
+}
+
 export interface Material {
   ID: number;
   Code: string;
@@ -458,6 +469,9 @@ declare global {
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
+          GetSpools(materialId: number): Promise<SpoolDTO[]>;
+          AddSpool(s: SpoolDTO): Promise<number>;
+          DeleteSpool(id: number): Promise<void>;
           SetMaterialPrice(materialId: number, priceMinor: number, currency: string): Promise<void>;
           GetMaterialColorFavs(): Promise<string[]>;
           SetMaterialColorFavs(cols: string[]): Promise<void>;
@@ -554,6 +568,9 @@ export const wails = {
   updateMaterial: (m: Material) => api().UpdateMaterial(m),
   deleteMaterial: (id: number) => api().DeleteMaterial(id),
   updateSpool: (s: Spool) => api().UpdateSpool(s),
+  getSpools: (materialId: number) => api().GetSpools(materialId),
+  addSpool: (s: SpoolDTO) => api().AddSpool(s),
+  deleteSpool: (id: number) => api().DeleteSpool(id),
   setMaterialPrice: (materialId: number, priceMinor: number, currency: string) =>
     api().SetMaterialPrice(materialId, priceMinor, currency),
   getMaterialColorFavs: () => api().GetMaterialColorFavs(),
