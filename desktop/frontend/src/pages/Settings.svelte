@@ -26,6 +26,8 @@
   let backupManifest: BackupManifest | null = $state(null);
   let csvReport: ImportReport | null = $state(null);
   let csvApplied: ImportReport | null = $state(null);
+  let matsReport: ImportReport | null = $state(null);
+  let matsApplied: ImportReport | null = $state(null);
   let importing = $state(false);
   let progress = $state({ done: 0, total: 0 });
   let error = $state('');
@@ -438,6 +440,15 @@
       wails.offImportProgress();
     }
   }
+
+  async function applyMatsCSV() {
+    error = '';
+    try {
+      matsApplied = await wails.applyMaterialsCSV();
+    } catch (e) {
+      error = String(e);
+    }
+  }
 </script>
 
 {#if error}<p class="err">{error}</p>{/if}
@@ -590,6 +601,12 @@
   {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
   {#if csvReport}<p>{$t('set.csv_preview')}: total {csvReport.total}, new {csvReport.new}, existing {csvReport.existing}</p>{/if}
   {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs})</p>{/if}
+  <div class="row">
+    <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
+    {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
+  </div>
+  {#if matsReport}<p>{$t('set.csv_preview')}: total {matsReport.total}, new {matsReport.new}, existing {matsReport.existing}</p>{/if}
+  {#if matsApplied}<p class="ok">{$t('set.csv_done')}: +{matsApplied.new}</p>{/if}
 </div>
 
 <div class="card">

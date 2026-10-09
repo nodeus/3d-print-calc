@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"3dprint-calc/core/importers"
+	"3dprint-calc/core/models"
 	"3dprint-calc/store-sqlite/seed"
 )
 
@@ -246,6 +247,65 @@ func (d *DB) ExportMaterialsCSV(w io.Writer) error {
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// ImportMaterials импортирует справочник материалов. dryRun=true —
+// только отчёт без записи. Существующие коды не трогаются вообще
+// (ни поля, ни цены); новые создаются с первой катушкой по цене файла
+// (bought_at пусто — дата неизвестна).
+func (d *DB) ImportMaterials(r io.Reader, dryRun bool) (ImportReport, error) {
+	var rep ImportReport
+	rep.DryRun = dryRun
+	rows, err := importers.ParseMaterials(r)
+	if err != nil {
+		return rep, err
+	}
+	rep.Total = len(rows)
+	mats := d.Materials()
+	list, err := mats.List()
+	if err != nil {
+		return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+	}
+	known := map[string]bool{}
+	for _, m := range list {
+		known[m.Code] = true
+	}
+	for _, row := range rows {
+		if known[row.Code] {
+			rep.Existing++
+			continue
+		}
+		rep.New++
+		known[row.Code] = true
+		if dryRun {
+			continue
+		}
+		density := row.Density
+		if density <= 0 {
+			density = 1.27
+		}
+		matType := row.Type
+		if matType == "" {
+			matType = "PETG"
+		}
+		mid, err := mats.UpsertByCode(models.Material{
+			Code: row.Code, Type: matType, Vendor: row.Vendor,
+			Density: density, Diameter: row.Diameter,
+		})
+		if err != nil {
+			return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+		}
+		if row.PricePerKg > 0 {
+			if _, err := mats.AddSpool(models.Spool{
+				MaterialID: mid, Price: int64(row.PricePerKg*100 + 0.5),
+				Currency: row.Currency, FxRate: 1,
+				WeightInitG: 1000, WeightLeftG: 1000,
+			}); err != nil {
+				return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+			}
+		}
+	}
+	return rep, nil
 }
 
 // ImportReport — итог импорта истории.

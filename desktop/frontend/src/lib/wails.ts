@@ -426,6 +426,8 @@ declare global {
           ExportMaterialsCSV(): Promise<string>;
           PreviewHistoryCSV(): Promise<ImportReport>;
           ApplyHistoryCSV(): Promise<ImportReport>;
+          PreviewMaterialsCSV(): Promise<ImportReport>;
+          ApplyMaterialsCSV(): Promise<ImportReport>;
           Login(login: string, password: string): Promise<UserDTO>;
           Logout(): Promise<void>;
           CurrentUser(): Promise<UserDTO | null>;
@@ -525,6 +527,8 @@ export const wails = {
   exportMaterialsCSV: () => api().ExportMaterialsCSV(),
   previewHistoryCSV: () => api().PreviewHistoryCSV(),
   applyHistoryCSV: () => api().ApplyHistoryCSV(),
+  previewMaterialsCSV: () => api().PreviewMaterialsCSV(),
+  applyMaterialsCSV: () => api().ApplyMaterialsCSV(),
   login: (login: string, password: string) => api().Login(login, password),
   logout: () => api().Logout(),
   currentUser: () => api().CurrentUser(),

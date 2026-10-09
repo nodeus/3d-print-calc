@@ -2,6 +2,7 @@ package importers
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -96,6 +97,32 @@ func TestParseMaterialSpool(t *testing.T) {
 		if code, n := ParseMaterialSpool(c.in); code != c.code || n != c.n {
 			t.Errorf("ParseMaterialSpool(%q) = (%q, %d), хочу (%q, %d)", c.in, code, n, c.code, c.n)
 		}
+	}
+}
+
+func TestParseMaterials(t *testing.T) {
+	raw := "code;type;vendor;price_per_kg;currency;density;diameter\n" +
+		"PETG-A;PETG;NIT;900;RUB;1,27;1,75\n" +
+		"PETG-B;;;0;;;\n"
+	rows, err := ParseMaterials(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseMaterials: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("строк: %d", len(rows))
+	}
+	a := rows[0]
+	if a.Code != "PETG-A" || a.Type != "PETG" || a.Vendor != "NIT" || a.PricePerKg != 900 ||
+		a.Currency != "RUB" || a.Density != 1.27 || a.Diameter != 1.75 {
+		t.Fatalf("строка: %+v", a)
+	}
+	b := rows[1]
+	if b.Code != "PETG-B" || b.Currency != "RUB" || b.PricePerKg != 0 || b.Density != 0 {
+		t.Fatalf("пустые: %+v", b)
+	}
+	bad := "code;type;vendor;price;currency;density;diameter\nPETG-A;PETG;;0;RUB;1,27;1,75\n"
+	if _, err := ParseMaterials(strings.NewReader(bad)); err == nil {
+		t.Fatal("битая шапка принята")
 	}
 }
 

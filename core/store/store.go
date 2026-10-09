@@ -11,7 +11,7 @@ type Materials interface {
 	UpsertByCode(m models.Material) (int64, error)
 	GetByCode(code string) (models.Material, error)
 	List() ([]models.Material, error)
-	Update(m models.Material) error // всё кроме кода (код — ключ и сидит в снапшотах)
+	Update(m models.Material) error // всё по id, код — с переписью снапшотов работ
 	Delete(id int64) error          // блок, если есть катушки
 	AddSpool(s models.Spool) (int64, error)
 	ListSpools(materialID int64) ([]models.Spool, error)

@@ -35,6 +35,7 @@ type App struct {
 	currentUser      *models.User
 	pendingFile      []byte // файл после preview, до apply
 	pendingPath      string
+	pendingMats      []byte               // CSV материалов после preview, до apply
 	pendingMoonraker []importers.PrintJob // строки Moonraker после preview
 	pendingPrinterID int64
 	pendingNew       int

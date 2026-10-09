@@ -70,8 +70,11 @@ func TestImportSpoolNumber(t *testing.T) {
 	if j9.SpoolID != spools[0].ID {
 		t.Fatalf("фолбэк: %+v", j9)
 	}
-	// Неизвестная база: стаб с полным кодом.
-	if _, err := db.Materials().GetByCode("PETG-UNKNOWN-3"); err != nil {
+	// Неизвестная база: стаб по базе, без номера катушки.
+	if _, err := db.Materials().GetByCode("PETG-UNKNOWN"); err != nil {
 		t.Fatalf("стаб не создан: %v", err)
+	}
+	if _, err := db.Materials().GetByCode("PETG-UNKNOWN-3"); err == nil {
+		t.Fatal("стаб с номером катушки в коде запрещён")
 	}
 }

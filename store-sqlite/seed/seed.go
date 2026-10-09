@@ -144,17 +144,18 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 		m, ok := matIDs[code]
 		spoolN := 0
 		if !ok {
-			// Приоритет точного кода (legacy: PETG-NIT-W4), затем база + номер
-			// катушки (PETG-NIT-BLACK-1 → PETG-NIT-BLACK + №1).
+			// Точного кода нет в базе: работаем с базой + номером катушки
+			// (новая парадигма: PETG-NIT-BLACK-1 → PETG-NIT-BLACK + №1).
+			// Точный код в базе — приоритет (legacy без номеров).
 			if base, n := importers.ParseMaterialSpool(r.Filename); n > 0 {
-				if mb, ok2 := matIDs[base]; ok2 {
-					m, ok, code, spoolN = mb, true, base, n
-				}
+				code, spoolN = base, n
+				m, ok = matIDs[code]
 			}
 		}
 		if !ok && code != "" {
 			// Код из имени файла, которого нет в листе «Материалы»
 			// (более поздние закупки): стаб со стандартной плотностью.
+			// Стаб всегда по базе, без номера катушки.
 			if _, _, err := upsertMaterial(mats, code, 0, 1.27, ""); err != nil {
 				return st, err
 			}

@@ -328,7 +328,7 @@
         <tr>
           {#each matOrd as k}
             {#if k === 'code'}
-              <td>{m.code}</td>
+              <td><input bind:value={edit.Code} placeholder="PETG-NIT-BLACK" title={$t('mat.code_rename_note')} /></td>
             {:else if k === 'color'}
               <td>
                 <div class="colorrow">
