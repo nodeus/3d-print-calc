@@ -193,3 +193,64 @@ func TestMaterialsCSVExport(t *testing.T) {
 		t.Errorf("строк = %d, хочу 16", n)
 	}
 }
+
+// TestImportMaterials: dry-run считает, apply создаёт только новые
+// (существующие не трогает, цены их не меняет), повтор идемпотентен.
+func TestImportMaterials(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, _ := mats.UpsertByCode(models.Material{Code: "PETG-OLD", Type: "PLA", Density: 1.24})
+	if _, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 50000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	raw := "code;type;vendor;price_per_kg;currency;density;diameter\n" +
+		"PETG-OLD;PETG;NIT;900;RUB;1,27;1,75\n" +
+		"PETG-NEW;PETG;;0;RUB;1,27;1,75\n" +
+		"PETG-PRICE;PETG;V;1000;RUB;1,27;1,75\n"
+	rep, err := db.ImportMaterials(strings.NewReader(raw), true)
+	if err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	if rep.Total != 3 || rep.New != 2 || rep.Existing != 1 {
+		t.Fatalf("dry-run: %+v", rep)
+	}
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if rep.New != 2 || rep.Existing != 1 {
+		t.Fatalf("apply: %+v", rep)
+	}
+	// Существующий не тронут: тип PLA, цена 500.
+	got, _ := mats.GetByCode("PETG-OLD")
+	if got.Type != "PLA" {
+		t.Fatalf("существующий перезаписан: %+v", got)
+	}
+	sp, _ := mats.ListSpools(mid)
+	if len(sp) != 1 || sp[0].Price != 50000 {
+		t.Fatalf("цена существующего: %+v", sp)
+	}
+	// Новый с ценой: первая катушка 1000.
+	nm, err := mats.GetByCode("PETG-PRICE")
+	if err != nil {
+		t.Fatalf("новый: %v", err)
+	}
+	nsp, _ := mats.ListSpools(nm.ID)
+	if len(nsp) != 1 || nsp[0].Price != 100000 || nsp[0].BoughtAt != "" {
+		t.Fatalf("катушка нового: %+v", nsp)
+	}
+	// Новый без цены — без катушек.
+	nn, _ := mats.GetByCode("PETG-NEW")
+	nsp2, _ := mats.ListSpools(nn.ID)
+	if len(nsp2) != 0 {
+		t.Fatalf("лишние катушки: %+v", nsp2)
+	}
+	// Повтор: всё существующее.
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false)
+	if err != nil {
+		t.Fatalf("re-apply: %v", err)
+	}
+	if rep.New != 0 || rep.Existing != 3 {
+		t.Fatalf("идемпотентность: %+v", rep)
+	}
+}

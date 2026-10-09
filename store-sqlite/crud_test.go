@@ -16,13 +16,13 @@ func TestMaterialCRUDGuards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Update меняет всё кроме кода.
+	// Update меняет всё, включая код.
 	if err := repo.Update(models.Material{ID: id, Code: "PETG-CHANGED", Type: "PLA", Density: 1.24, Diameter: 1.75, Vendor: "V"}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	got, err := repo.GetByCode("PETG-T1")
+	got, err := repo.GetByCode("PETG-CHANGED")
 	if err != nil {
-		t.Fatalf("код обязан сохраниться: %v", err)
+		t.Fatalf("новый код не сохранился: %v", err)
 	}
 	if got.Type != "PLA" || got.Density != 1.24 || got.Vendor != "V" {
 		t.Fatalf("update не применился: %+v", got)
@@ -34,7 +34,7 @@ func TestMaterialCRUDGuards(t *testing.T) {
 	if err := repo.Delete(id); err != nil {
 		t.Fatalf("Delete с пустой катушкой: %v", err)
 	}
-	if _, err := repo.GetByCode("PETG-T1"); err == nil {
+	if _, err := repo.GetByCode("PETG-CHANGED"); err == nil {
 		t.Fatal("материал остался после Delete")
 	}
 	// Катушка с работой: блок.
@@ -59,6 +59,43 @@ func TestMaterialCRUDGuards(t *testing.T) {
 	spools, _ = repo.ListSpools(id3)
 	if spools[0].Price != 99900 || spools[0].WeightLeftG != 500 {
 		t.Fatalf("spool не обновился: %+v", spools[0])
+	}
+}
+
+// TestMaterialRename: смена кода переписывает material в снапшотах работ.
+func TestMaterialRename(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, _ := mats.UpsertByCode(models.Material{Code: "PETG-OLD", Type: "PETG", Density: 1.27})
+	if _, err := db.Jobs().Upsert(models.Job{Filename: "r.gcode", StartAt: "2026-01-01 10:00",
+		Origin: "manual", CostSnapshot: `{"v":2,"material":"PETG-OLD","cost":10}`}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mats.Update(models.Material{ID: mid, Code: "PETG-NEW", Type: "PETG", Density: 1.27}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if _, err := mats.GetByCode("PETG-NEW"); err != nil {
+		t.Fatalf("новый код: %v", err)
+	}
+	if _, err := mats.GetByCode("PETG-OLD"); err == nil {
+		t.Fatal("старый код остался")
+	}
+	jobs, _ := db.Jobs().List(0)
+	if len(jobs) != 1 || jobs[0].CostSnapshot != `{"v":2,"material":"PETG-NEW","cost":10}` {
+		t.Fatalf("снапшот не переписан: %+v", jobs)
+	}
+	// Конфликт и пусто — ошибки, данные целы.
+	other, _ := mats.UpsertByCode(models.Material{Code: "PETG-BUSY", Density: 1.27})
+	_ = other
+	if err := mats.Update(models.Material{ID: mid, Code: "PETG-BUSY", Density: 1.27}); err == nil {
+		t.Fatal("дубль кода обязан блокироваться")
+	}
+	if err := mats.Update(models.Material{ID: mid, Code: "", Density: 1.27}); err == nil {
+		t.Fatal("пустой код обязан блокироваться")
+	}
+	got, _ := mats.GetByCode("PETG-NEW")
+	if got.Density != 1.27 {
+		t.Fatalf("данные побиты: %+v", got)
 	}
 }
 

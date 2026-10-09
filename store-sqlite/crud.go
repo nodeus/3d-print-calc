@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -21,18 +22,49 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// Update правит материал (код неизменен — ключ и сидит в снапшотах).
+// Update правит материал. Код правится тоже: уникальность проверяется,
+// material в снапшотах работ переписывается (история сохраняет связь).
 func (r *materialsRepo) Update(m models.Material) error {
 	if m.ID == 0 {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: пустой id")
 	}
-	if _, err := r.db.Exec(`UPDATE materials SET type=?, vendor=?, color_hex=?,
+	if m.Code == "" {
+		return fmt.Errorf("ERR_MATERIAL_CODE: пустой код")
+	}
+	var old string
+	if err := r.db.QueryRow(`SELECT code FROM materials WHERE id=?`, m.ID).Scan(&old); err != nil {
+		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+	}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+	}
+	defer tx.Rollback()
+	if m.Code != old {
+		var clash int64
+		if err := tx.QueryRow(`SELECT id FROM materials WHERE code=? AND id<>?`, m.Code, m.ID).Scan(&clash); err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+		}
+		if clash != 0 {
+			return fmt.Errorf("ERR_MATERIAL_CODE_USED: код %q занят", m.Code)
+		}
+		if _, err := tx.Exec(`UPDATE materials SET code=? WHERE id=?`, m.Code, m.ID); err != nil {
+			return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+		}
+		// Перепривязка истории: битые/пустые снапшоты пропускаются сами.
+		if _, err := tx.Exec(`UPDATE jobs SET cost_snapshot = json_replace(cost_snapshot,
+			'$.material', ?) WHERE json_extract(COALESCE(cost_snapshot, '{}'), '$.material') = ?`,
+			m.Code, old); err != nil {
+			return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`UPDATE materials SET type=?, vendor=?, color_hex=?,
 		density=?, diameter=?, default_spool_weight_g=?, note=?, bought_at=?, archived=? WHERE id=?`,
 		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.DefaultSpoolWeightG, m.Note,
 		m.BoughtAt, boolInt(m.Archived), m.ID); err != nil {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // Delete удаляет материал. Пустые катушки (без привязанных работ) удаляются
