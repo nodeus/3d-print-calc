@@ -603,7 +603,7 @@
 </div>
 
 <style>
-  .cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; }
+  .cols { display: grid; grid-template-columns: 1fr; gap: 12px; }
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; }
   .row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; }
