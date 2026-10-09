@@ -72,6 +72,31 @@ export const calcFormDefaults: CalcForm = {
 
 export const calcForm = writable<CalcForm>({ ...calcFormDefaults });
 
+// Заводские значения + пользовательские (из файла настроек).
+// Сброс «к заводским» возвращает calcFormDefaults, «к моим» — factoryWithUser.
+let userDefaults: Partial<CalcForm> = {};
+
+export function factoryValues(): CalcForm {
+  return { ...calcFormDefaults, ...userDefaults };
+}
+
+// applyCalcDefaults кладёт дефолты пользователя поверх заводских
+// (только известные ключи, типы — как в форме).
+export function applyCalcDefaults(m: Record<string, unknown>): void {
+  const next: Partial<CalcForm> = {};
+  for (const k of Object.keys(calcFormDefaults) as (keyof CalcForm)[]) {
+    if (k in m && m[k] != null) {
+      (next as Record<string, unknown>)[k] = m[k];
+    }
+  }
+  userDefaults = next;
+}
+
+// resetCalcForm возвращает форму к дефолтам (заводским или пользовательским).
+export function resetCalcForm(): void {
+  calcForm.set(factoryValues());
+}
+
 const LS_KEY = 'calcform.v1';
 
 // Загрузка сохранённого (пережить перезапуск приложения).

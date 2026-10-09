@@ -6,10 +6,46 @@
   import { askConfirm } from '../lib/confirm';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num } from '../lib/format';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
 
   let printers: PrinterDTO[] = $state([]);
   let error = $state('');
   let editId = $state(0);
+  let sortKey = $state('name');
+  let sortDir: 1 | -1 = $state(1);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+    else { sortKey = key; sortDir = 1; }
+  }
+
+  function arrow(key: string): string {
+    return sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  function sortVal(p: PrinterDTO): string | number {
+    switch (sortKey) {
+      case 'name': return p.Name.toLowerCase();
+      case 'model': return (p.Model || '').toLowerCase();
+      case 'price': return p.PurchasePrice;
+      case 'amort': return p.amortPerHour;
+      case 'method': return p.AmortMethod || '';
+      default: return p.Name.toLowerCase();
+    }
+  }
+
+  let shown = $derived([...printers].sort((a, b) => {
+    const va = sortVal(a);
+    const vb = sortVal(b);
+    const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+    return cmp * sortDir;
+  }));
+
+  const printerCols = [
+    { key: 'name', label: 'printer.name' }, { key: 'model', label: 'printer.model' },
+    { key: 'price', label: 'printer.price' }, { key: 'amort', label: 'printer.amort' },
+    { key: 'method', label: 'printer.method' },
+  ];
   let form: Printer = $state(blank());
   let isNew = $state(false);
 
@@ -185,10 +221,18 @@
   </div>
 {/if}
 
-<table>
-  <thead><tr><th>{$t('printer.name')}</th><th>{$t('printer.model')}</th><th>{$t('printer.price')}</th><th>{$t('printer.amort')}</th><th>{$t('printer.method')}</th><th class="no-print"></th></tr></thead>
+<table class="tw">
+  <thead><tr>
+    {#each printerCols as c}
+      <th style={thWidth('printers', c.key)}>
+        <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'printers', c.key)} ondblclick={() => resetColWidth('printers', c.key)}></span>
+      </th>
+    {/each}
+    <th class="no-print"></th>
+  </tr></thead>
   <tbody>
-    {#each printers as p}
+    {#each shown as p}
       <tr><td>{p.Name}</td><td>{p.Model}</td><td class="n">{money(p.PurchasePrice / 100, p.Currency, 'ru')}</td><td class="n">{num(p.amortPerHour)}</td><td>{p.AmortMethod}</td>
         <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(p)}>✎</button> <button onclick={() => remove(p)}>✕</button>{/if}</td>
       </tr>
@@ -222,6 +266,7 @@
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 120px; }
   input, select, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; margin-bottom: 12px; }
+  button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 14px; }
   button.warn { border-color: var(--err); color: var(--err); }
   .ok { color: green; }
   .err { color: var(--err); }

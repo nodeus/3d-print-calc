@@ -5,7 +5,8 @@
   import { money } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
-  import { calcForm } from '../lib/calcform';
+  import { calcForm, factoryValues, resetCalcForm, applyCalcDefaults } from '../lib/calcform';
+  import { saveMySettingsPatch } from '../lib/usersettings';
   import { get } from 'svelte/store';
 
   let materials: MaterialDTO[] = $state([]);
@@ -51,6 +52,8 @@
   let result = $state<CalcResult | null>(null);
   let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
   let density = $derived(materials.find((m) => m.code === matCode)?.density ?? 1.27);
+  // Архивные материалы скрыты из селекта, но выбранный ранее (история/форма) виден.
+  let activeMaterials = $derived(materials.filter((m) => !m.archived || m.code === matCode));
   let historyJobs: JobDTO[] = $state([]);
   let historyId = $state(0);
   let stubWarn = $state('');
@@ -175,40 +178,77 @@
     };
   });
 
+  // pullForm переносит стор формы в локальные поля (монтирование, сброс).
+  function pullForm() {
+    const saved = get(calcForm);
+    matCode = saved.matCode;
+    printerId = saved.printerId;
+    timeH = saved.timeH;
+    timeM = saved.timeM;
+    weightG = saved.weightG;
+    filamentMM = saved.filamentMM;
+    tariff = saved.tariff;
+    powerKW = saved.powerKW;
+    amortPerHour = saved.amortPerHour;
+    opRate = saved.opRate;
+    prepH = saved.prepH;
+    postH = saved.postH;
+    designerRate = saved.designerRate;
+    modelH = saved.modelH;
+    modelPrice = saved.modelPrice;
+    extraMat = saved.extraMat;
+    failPct = saved.failPct;
+    marginProfitPct = saved.marginProfitPct;
+    marginDevPct = saved.marginDevPct;
+    copies = saved.copies;
+    vatPct = saved.vatPct;
+    roundStep = saved.roundStep;
+    fees = saved.fees;
+    maintPerHour = saved.maintPerHour;
+    purgeG = saved.purgeG;
+    filename = saved.filename;
+    customerId = saved.customerId;
+    orderId = saved.orderId;
+    orderTitle = saved.orderTitle;
+    orderQty = saved.orderQty;
+    historyId = saved.historyId;
+  }
+
+  // Текущие значения как дефолты (без контекста заказа/истории/файла).
+  function currentDefaults(): Record<string, unknown> {
+    return {
+      matCode, printerId, timeH, timeM, weightG, filamentMM,
+      tariff, powerKW, amortPerHour, opRate, prepH, postH,
+      designerRate, modelH, modelPrice, extraMat, failPct,
+      marginProfitPct, marginDevPct, copies, vatPct, roundStep, fees,
+      maintPerHour, purgeG,
+    };
+  }
+
+  let defMsg = $state(false);
+
+  async function saveAsDefaults() {
+    const d = currentDefaults();
+    try {
+      await saveMySettingsPatch({ calcDefaults: d });
+      applyCalcDefaults(d);
+      defMsg = true;
+      setTimeout(() => (defMsg = false), 2500);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function resetToDefaults() {
+    resetCalcForm();
+    pullForm();
+    await recalc();
+  }
+
   async function loadAll() {
     try {
       // Восстановить форму с прошлого визита вкладки.
-      const saved = get(calcForm);
-      matCode = saved.matCode;
-      timeH = saved.timeH;
-      timeM = saved.timeM;
-      weightG = saved.weightG;
-      filamentMM = saved.filamentMM;
-      tariff = saved.tariff;
-      powerKW = saved.powerKW;
-      amortPerHour = saved.amortPerHour;
-      opRate = saved.opRate;
-      prepH = saved.prepH;
-      postH = saved.postH;
-      designerRate = saved.designerRate;
-      modelH = saved.modelH;
-      modelPrice = saved.modelPrice;
-      extraMat = saved.extraMat;
-      failPct = saved.failPct;
-      marginProfitPct = saved.marginProfitPct;
-      marginDevPct = saved.marginDevPct;
-      copies = saved.copies;
-      vatPct = saved.vatPct;
-      roundStep = saved.roundStep;
-      fees = saved.fees;
-      maintPerHour = saved.maintPerHour;
-      purgeG = saved.purgeG;
-      filename = saved.filename;
-      customerId = saved.customerId;
-      orderId = saved.orderId;
-      orderTitle = saved.orderTitle;
-      orderQty = saved.orderQty;
-      historyId = saved.historyId;
+      pullForm();
       materials = (await wails.materials()) ?? [];
       printers = (await wails.printers()) ?? [];
       currency = await wails.getBaseCurrency();
@@ -462,7 +502,7 @@
     <div class="row">
       <label>{$t('calc.material')}
         <select bind:value={matCode} onchange={recalc}>
-          {#each materials as m}<option value={m.code}>{m.code} — {money(m.pricePerKg, m.currency, $locale)}/кг</option>{/each}
+          {#each activeMaterials as m}<option value={m.code}>{m.code}{m.archived ? ` (${$t('mat.archived')})` : ''} — {money(m.pricePerKg, m.currency, $locale)}/кг</option>{/each}
         </select>
       </label>
       <label>{$t('calc.printer')}
@@ -535,6 +575,11 @@
         <button onclick={save}>{$t('calc.save_calc')}</button>
       </div>
       {#if savedMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
+      <div class="row no-print">
+        <button onclick={saveAsDefaults}>{$t('calc.setdefault')}</button>
+        <button onclick={resetToDefaults}>{$t('calc.resetdef')}</button>
+      </div>
+      {#if defMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
       {#if orders.length}
         <div class="row">
           <label>{$t('cust.name')}

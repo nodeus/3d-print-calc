@@ -6,9 +6,36 @@
   import { askConfirm } from '../lib/confirm';
   import { gotoCustomerOrders } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
 
   let list: Customer[] = $state([]);
   let error = $state('');
+  let sortKey = $state('name');
+  let sortDir: 1 | -1 = $state(1);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+    else { sortKey = key; sortDir = 1; }
+  }
+
+  function arrow(key: string): string {
+    return sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  function sortVal(c: Customer): string {
+    switch (sortKey) {
+      case 'contact': return (c.Contact || '').toLowerCase();
+      case 'note': return (c.Note || '').toLowerCase();
+      default: return c.Name.toLowerCase();
+    }
+  }
+
+  let shown = $derived([...list].sort((a, b) => sortVal(a).localeCompare(sortVal(b)) * sortDir));
+
+  const custCols = [
+    { key: 'name', label: 'cust.name' }, { key: 'contact', label: 'cust.contact' },
+    { key: 'note', label: 'cust.note' },
+  ];
   let name = $state('');
   let contact = $state('');
   let note = $state('');
@@ -90,10 +117,18 @@
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
 
-<table>
-  <thead><tr><th>{$t('cust.name')}</th><th>{$t('cust.contact')}</th><th>{$t('cust.note')}</th><th class="no-print"></th></tr></thead>
+<table class="tw">
+  <thead><tr>
+    {#each custCols as c}
+      <th style={thWidth('customers', c.key)}>
+        <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'customers', c.key)} ondblclick={() => resetColWidth('customers', c.key)}></span>
+      </th>
+    {/each}
+    <th class="no-print"></th>
+  </tr></thead>
   <tbody>
-    {#each list as c}
+    {#each shown as c}
       {#if editId === c.ID}
         <tr>
           <td><input bind:value={edit.Name} placeholder={$t('cust.name')} /></td>
@@ -114,6 +149,7 @@
   .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
   input, button { padding: 6px; font-size: 14px; }
   table { font-size: 14px; }
+  button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 14px; }
   .err { color: var(--err); }
   button.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
 </style>

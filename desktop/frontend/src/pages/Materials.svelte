@@ -6,6 +6,7 @@
   import { askConfirm } from '../lib/confirm';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
+  import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
 
   let materials: MaterialDTO[] = $state([]);
   let error = $state('');
@@ -17,7 +18,7 @@
   let newWeight = $state(1000);
   // Редактирование
   let editId = $state(0);
-  let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '' });
+  let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '', BoughtAt: '', Archived: false });
   let editPrice = $state(0);
 
   let knownTypes = $derived([...new Set(materials.map((m) => m.type))].sort());
@@ -27,6 +28,47 @@
     '#00c000', '#00c0ff', '#0000ff', '#8000ff', '#ff40c0', '#804000',
   ];
   let favs: string[] = $state([]);
+  // Сортировка по клику на заголовок.
+  let sortKey = $state('code');
+  let sortDir: 1 | -1 = $state(1);
+
+  function toggleSort(key: string) {
+    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+    else { sortKey = key; sortDir = 1; }
+  }
+
+  function arrow(key: string): string {
+    return sortKey === key ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  function sortVal(m: MaterialDTO): string | number {
+    switch (sortKey) {
+      case 'code': return m.code.toLowerCase();
+      case 'type': return (m.type || '').toLowerCase();
+      case 'price': return m.pricePerKg;
+      case 'density': return m.density;
+      case 'weight': return m.defaultWeightG || 1000;
+      case 'bought': return m.boughtAt || '';
+      case 'archived': return m.archived ? 1 : 0;
+      case 'vendor': return (m.vendor || '').toLowerCase();
+      default: return m.code.toLowerCase();
+    }
+  }
+
+  let shown = $derived([...materials].sort((a, b) => {
+    const va = sortVal(a);
+    const vb = sortVal(b);
+    const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+    return cmp * sortDir;
+  }));
+
+  const matCols = [
+    { key: 'code', label: 'mat.code' }, { key: 'color', label: 'mat.color' },
+    { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.price' },
+    { key: 'density', label: 'mat.density' }, { key: 'weight', label: 'mat.weight' },
+    { key: 'bought', label: 'mat.bought' }, { key: 'archived', label: 'mat.archived' },
+    { key: 'vendor', label: 'mat.vendor' },
+  ];
 
   function validHex(s: string): boolean {
     return /^#[0-9a-fA-F]{6}$/.test(s.trim());
@@ -76,7 +118,7 @@
 
   function startEdit(m: MaterialDTO) {
     editId = m.id;
-    edit = { ID: m.id, Code: m.code, Type: m.type, Vendor: m.vendor, ColorHex: m.colorHex, Density: m.density, Diameter: m.diameter, DefaultSpoolWeightG: m.defaultWeightG || 1000, Note: m.note };
+    edit = { ID: m.id, Code: m.code, Type: m.type, Vendor: m.vendor, ColorHex: m.colorHex, Density: m.density, Diameter: m.diameter, DefaultSpoolWeightG: m.defaultWeightG || 1000, Note: m.note, BoughtAt: m.boughtAt || '', Archived: m.archived };
     editPrice = m.pricePerKg;
   }
 
@@ -116,8 +158,8 @@
     await downloadPDF($t('nav.materials'), [
       {
         Title: '',
-        Headers: [$t('mat.code'), $t('mat.color'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.weight'), $t('mat.vendor')],
-        Rows: materials.map((m) => [m.code, m.colorHex, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), String(m.defaultWeightG || 1000), m.vendor]),
+        Headers: [$t('mat.code'), $t('mat.color'), $t('mat.type'), $t('mat.price'), $t('mat.density'), $t('mat.weight'), $t('mat.bought'), $t('mat.archived'), $t('mat.vendor')],
+        Rows: materials.map((m) => [m.code, m.colorHex, m.type, money(m.pricePerKg, m.currency, 'ru'), String(m.density), String(m.defaultWeightG || 1000), m.boughtAt || '—', m.archived ? '+' : '', m.vendor]),
       },
     ]);
   }
@@ -138,10 +180,22 @@
 {/if}
 {#if error}<p class="err">{error}</p>{/if}
 
-<table>
-  <thead><tr><th>{$t('mat.code')}</th><th>{$t('mat.color')}</th><th>{$t('mat.type')}</th><th>{$t('mat.price')}</th><th>{$t('mat.density')}</th><th class="n">{$t('mat.weight')}</th><th>{$t('mat.vendor')}</th><th class="no-print"></th></tr></thead>
+<table class="tw">
+  <thead><tr>
+    {#each matCols as c}
+      <th style={thWidth('materials', c.key)}>
+        {#if c.key === 'color'}
+          {$t(c.label)}
+        {:else}
+          <button class="th" onclick={() => toggleSort(c.key)}>{$t(c.label)}{arrow(c.key)}</button>
+        {/if}
+        <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'materials', c.key)} ondblclick={() => resetColWidth('materials', c.key)}></span>
+      </th>
+    {/each}
+    <th class="no-print"></th>
+  </tr></thead>
   <tbody>
-    {#each materials as m}
+    {#each shown as m}
       {#if editId === m.id}
         <tr>
           <td>{m.code}</td>
@@ -164,11 +218,13 @@
           <td><input placeholder="869" type="number" min="0" bind:value={editPrice} /></td>
           <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
           <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
+          <td><input type="date" bind:value={edit.BoughtAt} title={$t('mat.bought')} /></td>
+          <td><input type="checkbox" bind:checked={edit.Archived} title={$t('mat.archived')} /></td>
           <td><input bind:value={edit.Vendor} /></td>
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr><td>{m.code}</td><td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td class="n">{m.defaultWeightG || 1000}</td><td>{m.vendor}</td>
+        <tr><td>{m.code}</td><td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td><td>{m.type}</td><td class="n">{money(m.pricePerKg, m.currency, 'ru')}</td><td class="n">{m.density}</td><td class="n">{m.defaultWeightG || 1000}</td><td>{m.boughtAt || '—'}</td><td>{m.archived ? '✓' : ''}</td><td>{m.vendor}</td>
           <td class="no-print">
             {#if canWrite($user)}<button onclick={() => startEdit(m)}>✎</button> <button onclick={() => remove(m)}>✕</button>{/if}
           </td>
@@ -188,6 +244,7 @@
   .err { color: var(--err); }
   .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; padding: 0; vertical-align: middle; print-color-adjust: exact; }
   button.sw { cursor: pointer; margin: 1px; }
+  button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 14px; }
   .colorrow { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
   input[type='color'] { width: 40px; height: 30px; padding: 2px; }
   input.hex { width: 90px; font-family: monospace; }

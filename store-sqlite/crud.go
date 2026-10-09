@@ -13,14 +13,23 @@ import (
 // Снапшоты в jobs хранят код материала строкой, поэтому удаление материала
 // блокируется только живыми катушками (история при этом не портится).
 
+// boolInt — bool в 0/1 для SQLite.
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // Update правит материал (код неизменен — ключ и сидит в снапшотах).
 func (r *materialsRepo) Update(m models.Material) error {
 	if m.ID == 0 {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: пустой id")
 	}
 	if _, err := r.db.Exec(`UPDATE materials SET type=?, vendor=?, color_hex=?,
-		density=?, diameter=?, default_spool_weight_g=?, note=? WHERE id=?`,
-		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.DefaultSpoolWeightG, m.Note, m.ID); err != nil {
+		density=?, diameter=?, default_spool_weight_g=?, note=?, bought_at=?, archived=? WHERE id=?`,
+		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.DefaultSpoolWeightG, m.Note,
+		m.BoughtAt, boolInt(m.Archived), m.ID); err != nil {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
 	}
 	return nil

@@ -50,6 +50,8 @@ export interface MaterialDTO {
   vendor: string;
   colorHex: string;
   note: string;
+  boughtAt: string;
+  archived: boolean;
   density: number;
   diameter: number;
   defaultWeightG: number;
@@ -81,6 +83,8 @@ export interface Material {
   Diameter: number;
   DefaultSpoolWeightG: number;
   Note: string;
+  BoughtAt: string;
+  Archived: boolean;
 }
 
 export interface Printer {
@@ -345,6 +349,15 @@ export interface PDFSection {
   Rows: string[][];
 }
 
+// Секция пользовательских настроек из user_settings.json (см. desktop/uisettings.go).
+export interface UserUISettings {
+  theme: string;
+  locale: string;
+  historyColumns: string[];
+  widths: Record<string, Record<string, number>>;
+  calcDefaults: Record<string, unknown>;
+}
+
 declare global {
   interface Window {
     runtime: {
@@ -431,6 +444,9 @@ declare global {
           ImportThemeFile(): Promise<string>;
           GetHistoryColumns(): Promise<string[]>;
           SetHistoryColumns(cols: string[]): Promise<void>;
+          GetMyUISettings(): Promise<UserUISettings>;
+          SaveMyUISettings(s: UserUISettings): Promise<void>;
+          GetWindowSettings(): Promise<{ w: number; h: number; x: number; y: number }>;
           ExportPDF(title: string, filename: string, sections: PDFSection[]): Promise<string>;
         };
       };
@@ -524,6 +540,8 @@ export const wails = {
   importThemeFile: () => api().ImportThemeFile(),
   historyColumns: () => api().GetHistoryColumns(),
   setHistoryColumns: (cols: string[]) => api().SetHistoryColumns(cols),
+  getMyUISettings: () => api().GetMyUISettings(),
+  saveMyUISettings: (s: UserUISettings) => api().SaveMyUISettings(s),
   exportPDF: (title: string, filename: string, sections: PDFSection[]) =>
     api().ExportPDF(title, filename, sections),
   onImportProgress: (cb: (done: number, total: number) => void): void => {
