@@ -418,9 +418,11 @@
   async function addToOrder() {
     if (!result || !orderId || !orderTitle.trim()) return;
     try {
+      // Цена/себестоимость — ЗА КОПИЮ: итог заказа считает price×qty.
+      // (Раньше уходила цена за весь стол — при qty>1 итог кратно завышался.)
       await wails.addOrderItem({
         orderId, jobId: 0, title: orderTitle.trim(), qty: orderQty,
-        cost: Math.round(result.Cost * 100), price: Math.round(result.PriceVAT * 100),
+        cost: Math.round(result.CostPerCopy * 100), price: Math.round(result.PricePerCopy * 100),
       });
       orderMsg = true;
       setTimeout(() => (orderMsg = false), 2500);

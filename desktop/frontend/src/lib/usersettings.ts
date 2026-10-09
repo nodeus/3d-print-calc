@@ -12,6 +12,7 @@ export const mySettings = writable<UserUISettings>({
   historyColumns: [],
   widths: {},
   colOrder: {},
+  ordersPerPage: 0,
   calcDefaults: {},
 });
 

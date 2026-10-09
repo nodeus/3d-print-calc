@@ -340,3 +340,53 @@ func TestSpoolStatsNullAttribution(t *testing.T) {
 		t.Fatalf("вторая катушка: %+v", stats[1])
 	}
 }
+
+// TestOrderTotalsMixed: смешанный заказ — ручные позиции (цена×кол-во),
+// позиция с пустой ценой (вклад 0), частичная оплата.
+func TestOrderTotalsMixed(t *testing.T) {
+	db := openTestDB(t)
+	repo := db.Orders()
+	cid, _ := db.Customers().Save(models.Customer{Name: "K"})
+	oid, _ := repo.Create(models.Order{CustomerID: cid, Currency: "RUB", CreatedAt: "2026-10-01"})
+	// Ручная: 2 шт × 250.00 = 500.00.
+	if _, err := repo.AddItem(models.OrderItem{OrderID: oid, Title: "A", Qty: 2, Cost: 30000, Price: 25000}); err != nil {
+		t.Fatal(err)
+	}
+	// Ручная без цены: вклад 0.
+	if _, err := repo.AddItem(models.OrderItem{OrderID: oid, Title: "B", Qty: 1, Cost: 10000, Price: 0}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := repo.Get(oid)
+	if got.TotalBase != 50000 {
+		t.Fatalf("total = %d, хочу 50000", got.TotalBase)
+	}
+	// Частичная оплата 200.00.
+	if _, err := repo.AddPayment(models.Payment{OrderID: oid, Amount: 20000, PaidAt: "2026-10-02"}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := repo.PaidTotal(oid); p != 20000 {
+		t.Fatalf("paid = %d, хочу 20000", p)
+	}
+}
+
+// TestDeleteOrderItemCascadesPayments: удаление позиции удаляет её оплаты.
+func TestDeleteOrderItemCascadesPayments(t *testing.T) {
+	db := openTestDB(t)
+	repo := db.Orders()
+	cid, _ := db.Customers().Save(models.Customer{Name: "K"})
+	oid, _ := repo.Create(models.Order{CustomerID: cid, Currency: "RUB", CreatedAt: "2026-10-01"})
+	iid, _ := repo.AddItem(models.OrderItem{OrderID: oid, Title: "A", Qty: 1, Price: 50000})
+	if _, err := repo.AddPayment(models.Payment{OrderID: oid, OrderItem: iid, Amount: 50000, PaidAt: "2026-10-02"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DeleteOrderItem(iid); err != nil {
+		t.Fatalf("DeleteOrderItem: %v", err)
+	}
+	if p, _ := repo.PaidTotal(oid); p != 0 {
+		t.Fatalf("оплаты позиции остались: %d", p)
+	}
+	got, _ := repo.Get(oid)
+	if got.TotalBase != 0 {
+		t.Fatalf("total = %d, хочу 0", got.TotalBase)
+	}
+}

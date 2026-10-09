@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { get } from 'svelte/store';
   import { wails, type OrderRow, type OrderDetail, type Customer, type OrderItem } from '../lib/wails';
   import { t } from '../lib/i18n';
@@ -9,7 +9,7 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
-  import { mySettings } from '../lib/usersettings';
+  import { mySettings, saveMySettingsPatch } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
 
@@ -98,8 +98,8 @@
     switch (k) {
       case 'title': return it.Title;
       case 'qty': return String(it.Qty);
-      case 'cost': return money(it.Cost / 100, cur, 'ru');
-      case 'price': return money(it.Price / 100, cur, 'ru');
+      case 'cost': return money(itemCostSum(it) / 100, cur, 'ru');
+      case 'price': return money(itemPriceSum(it) / 100, cur, 'ru');
       case 'paid': return money(itemPaid(it.ID) / 100, cur, 'ru');
       case 'state': return payStateLabel(itemState(it)) + (it.PaidManual ? ' ✓' : '');
       default: return '';
@@ -205,9 +205,19 @@
     if (it.PaidManual) return 'paid';
     const total = Math.round(it.Price * it.Qty);
     const paid = itemPaid(it.ID);
+    if (total <= 0 && paid <= 0) return 'unknown';
     if (paid >= total) return 'paid';
     if (paid <= 0) return 'unpaid';
     return 'partial';
+  }
+
+  // Построчные суммы позиции (итог заказа — их сумма, см. RecalcTotal).
+  function itemCostSum(it: OrderItem): number {
+    return Math.round(it.Cost * it.Qty);
+  }
+
+  function itemPriceSum(it: OrderItem): number {
+    return Math.round(it.Price * it.Qty);
   }
 
   async function togglePaid(it: OrderItem) {
@@ -258,6 +268,21 @@
       const vb = sortVal(b);
       const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
       return cmp * sortDir;
+    });
+  });
+
+  // Пагинация списка заказов; размер — из настроек пользователя (дефолт 20).
+  let page = $state(0);
+  let perPage = $derived($mySettings.ordersPerPage > 0 ? $mySettings.ordersPerPage : 20);
+  let pages = $derived(Math.max(1, Math.ceil(visibleRows.length / perPage)));
+  let paged = $derived(visibleRows.slice(page * perPage, page * perPage + perPage));
+
+  $effect(() => {
+    void visibleRows.length;
+    void perPage;
+    untrack(() => {
+      if (page > pages - 1) page = pages - 1;
+      if (page < 0) page = 0;
     });
   });
 
@@ -355,7 +380,7 @@
   async function removeItem(id: number, title: string) {
     if (!detail) return;
     error = '';
-    if (!(await askConfirm(`${$t("common.delete_q")} «${title}»?`))) return;
+    if (!(await askConfirm(`${$t("common.delete_q")} «${title}»? ${$t("ord.del_item_note")}`))) return;
     try {
       await wails.deleteOrderItem(id);
       await load();
@@ -435,13 +460,21 @@
         {/each}
       </tr></thead>
       <tbody>
-        {#each visibleRows as r}
+        {#each paged as r}
           <tr class:sel={detail?.order.ID === r.order.ID} onclick={() => openDetail(r.order.ID)}>
             {#each listOrd as k}<td class:n={orderNum(k)}>{orderText(r, k)}</td>{/each}
           </tr>
         {/each}
       </tbody>
     </table>
+    </div>
+    <div class="row no-print" style="margin-top:6px;align-items:center;">
+      <span class="count">{$t('hist.shown')}: {paged.length} / {visibleRows.length} / {rows.length}</span>
+      <span class="pager">
+        <button disabled={page === 0} onclick={() => page--}>‹</button>
+        {page + 1} / {pages}
+        <button disabled={page >= pages - 1} onclick={() => page++}>›</button>
+      </span>
     </div>
   </section>
 
@@ -499,10 +532,10 @@
       </div>
       {#if canWrite($user)}
         <div class="row no-print">
-          <input placeholder={$t('ord.item_ph')} bind:value={itemTitle} />
-          <input placeholder="1" type="number" min="0" step="0.5" bind:value={itemQty} />
-          <input type="number" min="0" placeholder={$t('calc.cost')} bind:value={itemCost} />
-          <input type="number" min="0" placeholder={$t('calc.price')} bind:value={itemPrice} />
+          <input placeholder={$t('ord.ph_title')} bind:value={itemTitle} />
+          <input placeholder={$t('ord.ph_qty')} type="number" min="0" step="0.5" bind:value={itemQty} />
+          <input type="number" min="0" placeholder={$t('ord.ph_cost')} bind:value={itemCost} />
+          <input type="number" min="0" placeholder={$t('ord.ph_price')} bind:value={itemPrice} />
           <button onclick={addItem}>+</button>
         </div>
       {/if}
@@ -534,6 +567,8 @@
   tr.sel td { background: var(--sel-bg); }
   tbody tr { cursor: pointer; }
   .filterchip { background: var(--sel-bg); border-radius: 4px; padding: 4px 8px; display: inline-block; }
+  .count { color: var(--muted); font-size: 13px; }
+  .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
   .pay { color: var(--muted); font-size: 13px; margin: 2px 0; }
   .err { color: var(--err); }
 </style>
