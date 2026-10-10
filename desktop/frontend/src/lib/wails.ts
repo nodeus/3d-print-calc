@@ -409,6 +409,7 @@ declare global {
     runtime: {
       EventsOn(event: string, callback: (data: never) => void): void;
       EventsOff(event: string): void;
+      WindowGetSize(): Promise<{ w: number; h: number }>;
     };
     go: {
       main: {
@@ -504,6 +505,7 @@ declare global {
           GetMyUISettings(): Promise<UserUISettings>;
           SaveMyUISettings(s: UserUISettings): Promise<void>;
           GetWindowSettings(): Promise<{ w: number; h: number; x: number; y: number }>;
+          SaveWindowSize(w: number, h: number): Promise<void>;
           ExportPDF(title: string, filename: string, sections: PDFSection[]): Promise<string>;
         };
       };
@@ -610,6 +612,7 @@ export const wails = {
   setHistoryColumns: (cols: string[]) => api().SetHistoryColumns(cols),
   getMyUISettings: () => api().GetMyUISettings(),
   saveMyUISettings: (s: UserUISettings) => api().SaveMyUISettings(s),
+  saveWindowSize: (w: number, h: number) => api().SaveWindowSize(w, h),
   exportPDF: (title: string, filename: string, sections: PDFSection[]) =>
     api().ExportPDF(title, filename, sections),
   onImportProgress: (cb: (done: number, total: number) => void): void => {
