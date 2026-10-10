@@ -45,6 +45,10 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 		return nil, err
 	}
 	out := make([]MaterialDTO, 0, len(mats))
+	used, err := a.db.SpoolUsedG()
+	if err != nil {
+		return nil, err
+	}
 	for _, m := range mats {
 		dto := MaterialDTO{
 			ID: m.ID, Code: m.Code, Type: m.Type, Vendor: m.Vendor,
@@ -60,7 +64,9 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 			dto.SpoolCount = len(spools)
 			dto.Spools = make([]SpoolDTO, 0, len(spools))
 			for _, s := range spools {
-				dto.Spools = append(dto.Spools, toSpoolDTO(s))
+				d := toSpoolDTO(s)
+				d.LeftG = spoolLeftG(s, used)
+				dto.Spools = append(dto.Spools, d)
 				if !s.Archived {
 					dto.HasLiveSpool = true
 				}
@@ -169,6 +175,7 @@ type SpoolDTO struct {
 	BoughtAt    string  `json:"boughtAt"`
 	WeightInitG float64 `json:"weightInitG"`
 	WeightLeftG float64 `json:"weightLeftG"`
+	LeftG       float64 `json:"leftG"`
 	Archived    bool    `json:"archived"`
 }
 
@@ -180,15 +187,32 @@ func toSpoolDTO(s models.Spool) SpoolDTO {
 	}
 }
 
-// GetSpools возвращает партии материала.
+// spoolLeftG — вычисляемый остаток катушки: партия минус расход по истории
+// (та же атрибуция, что SpoolStats), пол — ноль. Хранимое weight_left_g
+// в показе не участвует (автосписания нет, правка его не меняет).
+func spoolLeftG(s models.Spool, used map[int64]float64) float64 {
+	left := s.WeightInitG - used[s.ID]
+	if left < 0 {
+		return 0
+	}
+	return left
+}
+
+// GetSpools возвращает партии материала с вычисленными остатками.
 func (a *App) GetSpools(materialID int64) ([]SpoolDTO, error) {
 	list, err := a.db.Materials().ListSpools(materialID)
 	if err != nil {
 		return nil, err
 	}
+	used, err := a.db.SpoolUsedG()
+	if err != nil {
+		return nil, err
+	}
 	out := make([]SpoolDTO, 0, len(list))
 	for _, s := range list {
-		out = append(out, toSpoolDTO(s))
+		d := toSpoolDTO(s)
+		d.LeftG = spoolLeftG(s, used)
+		out = append(out, d)
 	}
 	return out, nil
 }

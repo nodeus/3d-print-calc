@@ -290,3 +290,62 @@ func TestSaveJobSpoolNo(t *testing.T) {
 		t.Fatalf("spoolNo: %+v", snap.Input)
 	}
 }
+
+// TestSpoolLeftComputed: остаток катушки вычисляемый (партия минус расход
+// по истории), а не хранимое weight_left_g. Работа с явным spool_id идёт
+// на свою катушку, без линка — на первую живую того же материала,
+// перерасход ограничен нулём.
+func TestSpoolLeftComputed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{db: db, dbPath: path}
+	mid, err := db.Materials().UpsertByCode(models.Material{Code: "PETG-L", Type: "PETG", Density: 1.27})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s1, err := db.Materials().AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2, err := db.Materials().AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	addJob := func(fn string, spoolID int64, weight float64, snap string) {
+		if _, err := db.Jobs().Upsert(models.Job{Filename: fn, StartAt: "2026-10-01 10:00",
+			Status: "completed", TotalSec: 60, WeightG: weight, SpoolID: spoolID,
+			Origin: "import", CostSnapshot: snap}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	addJob("a.gcode", s1, 60, `{"v":2,"material":"PETG-L","cost":1}`)
+	addJob("b.gcode", 0, 40, `{"v":2,"material":"PETG-L","cost":1}`)
+	addJob("c.gcode", s2, 1200, `{"v":2,"material":"PETG-L","cost":1}`)
+	mats, err := app.GetMaterials()
+	if err != nil || len(mats) != 1 {
+		t.Fatalf("GetMaterials: %v %d", err, len(mats))
+	}
+	byID := map[int64]SpoolDTO{}
+	for _, s := range mats[0].Spools {
+		byID[s.ID] = s
+	}
+	if got := byID[s1].LeftG; got != 900 {
+		t.Fatalf("s1 leftG = %v, хочу 900 (60 своих + 40 без линка)", got)
+	}
+	if got := byID[s2].LeftG; got != 0 {
+		t.Fatalf("s2 leftG = %v, хочу 0 (перерасход 1200 при партии 1000)", got)
+	}
+	spools, err := app.GetSpools(mid)
+	if err != nil || len(spools) != 2 {
+		t.Fatalf("GetSpools: %v %d", err, len(spools))
+	}
+	for _, s := range spools {
+		if want := byID[s.ID].LeftG; s.LeftG != want {
+			t.Fatalf("GetSpools leftG = %v, GetMaterials дал %v", s.LeftG, want)
+		}
+	}
+}
