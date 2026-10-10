@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
@@ -120,6 +121,7 @@
       const pid = partEdit.printerId;
       partEdit = null;
       await loadParts(pid);
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -201,6 +203,7 @@
       editId = 0;
       isNew = false;
       await load();
+      notify($t('printer.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -222,6 +225,7 @@
     try {
       await wails.setMoonrakerURL(p.ID, (urls[p.ID] ?? '').trim());
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -339,7 +343,7 @@
     {#each shown as p}
       <tr>
         {#each printerOrd as k}<td class:n={printerNum(k)}>{printerText(p, k)}</td>{/each}
-        <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(p)}>✎</button> <button onclick={() => remove(p)}>✕</button>{/if}</td>
+        <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(p)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => remove(p)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
       </tr>
     {/each}
   </tbody>
@@ -377,7 +381,7 @@
             </tr>
           {:else}
             <tr><td>{pt.boughtAt || '—'}</td><td>{pt.name}</td><td class="n">{money(pt.price, 'RUB', 'ru')}</td><td class="n">{pt.qty}</td><td class="n">{money(pt.total, 'RUB', 'ru')}</td><td>{pt.note}</td>
-              <td class="no-print">{#if canWrite($user)}<button onclick={() => editPart(pt)}>✎</button> <button onclick={() => removePart(pt)}>✕</button>{/if}</td>
+              <td class="no-print">{#if canWrite($user)}<button onclick={() => editPart(pt)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => removePart(pt)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
             </tr>
           {/if}
         {/each}

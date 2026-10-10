@@ -7,6 +7,8 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { calcForm, factoryValues, resetCalcForm, applyCalcDefaults } from '../lib/calcform';
   import { saveMySettingsPatch } from '../lib/usersettings';
+  import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { splitHours, joinHours, normHM } from '../lib/hm';
   import { get } from 'svelte/store';
 
@@ -42,14 +44,13 @@
   let maintPerHour: number | null = $state(0);
   let purgeG: number | null = $state(0);
   let filename = $state('');
-  let savedMsg = $state(false);
+  let error = $state('');
   let orders: Order[] = $state([]);
   let customers: Customer[] = $state([]);
   let customerId = $state(0);
   let orderId = $state(0);
   let orderTitle = $state('');
   let orderQty = $state(1);
-  let orderMsg = $state(false);
   let addedInfo = $state('');
 
   let result = $state<CalcResult | null>(null);
@@ -199,10 +200,15 @@
     filamentMM = Math.round(j.LengthM * 1000 * 100) / 100 || null;
     timeH = Math.floor(j.TotalSec / 3600);
     timeM = Math.round((j.TotalSec % 3600) / 60);
+    if (timeM >= 60) {
+      timeH += 1;
+      timeM = 0;
+    }
     filename = j.Filename;
     // Название позиции для заказа — из имени файла без расширения.
     orderTitle = j.Filename.replace(/\.gcode$/i, '');
     recalc();
+    notify(`${$t('calc.applied_job')}: ${j.Filename}`);
   }
 
   function applyHistorySelect(id: number) {
@@ -306,21 +312,19 @@
     };
   }
 
-  let defMsg = $state(false);
-
   async function saveAsDefaults() {
     const d = currentDefaults();
     try {
       await saveMySettingsPatch({ calcDefaults: d });
       applyCalcDefaults(d);
-      defMsg = true;
-      setTimeout(() => (defMsg = false), 2500);
+      notify($t('common.saved'));
     } catch (e) {
       console.error(e);
     }
   }
 
   async function resetToDefaults() {
+    if (!(await askConfirm($t('calc.resetdef_q')))) return;
     resetCalcForm();
     pullForm();
     await recalc();
@@ -370,12 +374,34 @@
     }
   }
 
+  // Подпись метода амортизации человеческим языком (в селекте — не код).
+  function amortMethodLabel(m: string): string {
+    if (m === 'workdays') return $t('calc.amort_workdays');
+    if (m === 'resource') return $t('calc.amort_resource');
+    return $t('calc.amort_calendar');
+  }
+
+  // Первая живая катушка материала — «расчётная» для подсказки.
+  let isCalcSpool = $derived.by(() => {
+    if (!selSpool) return false;
+    return (selSpool.mat.spools ?? []).find((s) => !s.archived)?.id === selSpool.spool.id;
+  });
+
+  // Смена принтера пользователем: ставки берутся с принтера — говорим об этом.
+  // Программные вызовы selectPrinter (загрузка) молчат.
+  function onPrinterChange(id: number) {
+    selectPrinter(id);
+    const p = printers.find((x) => x.ID === id);
+    if (p) notify(`${$t('calc.printer_rates')}: ${p.Name}`);
+    recalc();
+  }
+
   async function syncWeightFromFilament() {
     if (filamentMM == null || filamentMM <= 0) return;
     try {
       weightG = Math.round((await wails.weightFromLength(density, 1.75, filamentMM)) * 100) / 100;
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 
@@ -429,7 +455,7 @@
         result = await wails.calc(buildInput());
         persist();
       } catch (e) {
-        console.error(e);
+        error = String(e);
       }
     }, 120);
   }
@@ -492,15 +518,19 @@
         roundStep: roundStep ?? 0,
       });
       persist();
-      savedMsg = true;
-      setTimeout(() => (savedMsg = false), 2500);
+      notify($t('calc.saved'));
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 
   async function addToOrder() {
-    if (!result || !orderId || !orderTitle.trim()) return;
+    if (!result) return;
+    error = '';
+    if (!orderId || !orderTitle.trim()) {
+      error = $t('calc.need_order_title');
+      return;
+    }
     try {
       // Цена/себестоимость — за копию: итог заказа считает price×qty.
       // (Раньше уходила цена за весь стол — при qty>1 итог кратно завышался.)
@@ -510,11 +540,10 @@
         cost: Math.round(result.CostPerCopy * 100), price: Math.round(result.PricePerCopy * 100),
       });
       addedInfo = `${orderTitle.trim()} — ${q} × ${money(result.PricePerCopy, currency, $locale)} = ${money(result.PricePerCopy * q, currency, $locale)}`;
-      orderMsg = true;
-      setTimeout(() => (orderMsg = false), 2500);
+      notify(`${$t('ord.added')}: ${addedInfo}`);
       persist();
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 
@@ -576,6 +605,7 @@
 
 <div class="grid">
   <section class="card">
+    {#if error}<p class="err">{error}</p>{/if}
     {#if !materials.length}<p class="warn">{$t('calc.no_materials')}</p>{/if}
     {#if materials.length && !spoolOptions.length}<p class="warn">{$t('calc.no_spools')}</p>{/if}
     {#if !printers.length}<p class="warn">{$t('calc.no_printers')}</p>{/if}
@@ -588,6 +618,7 @@
       </label>
     </div>
     {#if stubWarn}<p class="warn">{stubWarn}</p>{/if}
+    <h3 class="sec">{$t('calc.grp_material')}</h3>
     <div class="row">
       <label>{$t('calc.spool')}
         <select value={spoolId} onchange={(e) => onSpoolChange(Number(e.currentTarget.value))}>
@@ -603,11 +634,12 @@
         </select>
       </label>
       <label>{$t('calc.printer')}
-        <select value={printerId} onchange={(e) => { selectPrinter(Number(e.currentTarget.value)); recalc(); }}>
-          {#each printers as p}<option value={p.ID}>{p.Name} ({p.AmortMethod})</option>{/each}
+        <select value={printerId} onchange={(e) => onPrinterChange(Number(e.currentTarget.value))}>
+          {#each printers as p}<option value={p.ID}>{p.Name} ({amortMethodLabel(p.AmortMethod)})</option>{/each}
         </select>
       </label>
     </div>
+    {#if selSpool}<p class="note">{selSpool.mat.code} · {money(selSpool.spool.price, selSpool.spool.currency, $locale)}/кг{#if (selSpool.spool.leftG ?? selSpool.spool.weightLeftG) > 0}, {Math.round(selSpool.spool.leftG ?? selSpool.spool.weightLeftG)} {$locale === 'ru' ? 'г' : 'g'}{/if}{#if isCalcSpool} · ★ {$t('spool.calc')}{/if}</p>{/if}
     <div class="row">
       <label>{$t('calc.time_h')}<input placeholder="3" type="number" min="0" bind:value={timeH} oninput={recalc} /></label>
       <label>{$t('calc.time_m')}<input placeholder="30" type="number" min="0" max="59" bind:value={timeM} oninput={recalc} /></label>
@@ -617,26 +649,30 @@
       <label>{$t('calc.filament')}<input placeholder="42000" type="number" min="0" step="0.01" bind:value={filamentMM} oninput={() => { syncWeightFromFilament().then(recalc); }} /></label>
       <label>{$t('calc.purge')}<input placeholder="10" type="number" min="0" step="0.1" bind:value={purgeG} oninput={recalc} /></label>
     </div>
+    <p class="note">{$t('calc.weight_filament_note')}</p>
+    <h3 class="sec">{$t('calc.grp_machine')}</h3>
     <div class="row">
       <label>{$t('calc.tariff')}<input placeholder="7.08" type="number" min="0" step="0.01" bind:value={tariff} oninput={recalc} /></label>
       <label>{$t('calc.power')}<input placeholder="0.35" type="number" min="0" step="0.01" bind:value={powerKW} oninput={recalc} /></label>
       <label>{$t('calc.amort')}<input placeholder="5.41" type="number" min="0" step="0.01" bind:value={amortPerHour} oninput={recalc} /></label>
       <label>{$t('calc.maint')}<input placeholder="0" type="number" min="0" step="0.1" bind:value={maintPerHour} oninput={recalc} /></label>
     </div>
+    <h3 class="sec">{$t('calc.grp_labor')}</h3>
     <div class="row">
       <label>{$t('calc.op_rate')}<input placeholder="100" type="number" min="0" bind:value={opRate} oninput={recalc} /></label>
       <label>{$t('calc.prep_h')}<input placeholder="0" type="number" min="0" bind:value={prep.h} oninput={() => { prep = normHM(prep.h, prep.m); recalc(); }} /></label>
-      <label>{$t('calc.prep_m')}<input placeholder="0" type="number" min="0" bind:value={prep.m} oninput={() => { prep = normHM(prep.h, prep.m); recalc(); }} /></label>
+      <label>{$t('calc.prep_m')}<input placeholder="0" type="number" min="0" max="59" bind:value={prep.m} oninput={() => { prep = normHM(prep.h, prep.m); recalc(); }} /></label>
       <label>{$t('calc.post_h')}<input placeholder="0" type="number" min="0" bind:value={post.h} oninput={() => { post = normHM(post.h, post.m); recalc(); }} /></label>
-      <label>{$t('calc.post_m')}<input placeholder="0" type="number" min="0" bind:value={post.m} oninput={() => { post = normHM(post.h, post.m); recalc(); }} /></label>
+      <label>{$t('calc.post_m')}<input placeholder="0" type="number" min="0" max="59" bind:value={post.m} oninput={() => { post = normHM(post.h, post.m); recalc(); }} /></label>
     </div>
     <div class="row">
       <label>{$t('calc.designer_rate')}<input placeholder="600" type="number" min="0" bind:value={designerRate} oninput={recalc} /></label>
       <label>{$t('calc.model_h')}<input placeholder="0" type="number" min="0" bind:value={model.h} oninput={() => { model = normHM(model.h, model.m); recalc(); }} /></label>
-      <label>{$t('calc.model_m')}<input placeholder="0" type="number" min="0" bind:value={model.m} oninput={() => { model = normHM(model.h, model.m); recalc(); }} /></label>
+      <label>{$t('calc.model_m')}<input placeholder="0" type="number" min="0" max="59" bind:value={model.m} oninput={() => { model = normHM(model.h, model.m); recalc(); }} /></label>
       <label>{$t('calc.model_price')}<input placeholder="0" type="number" min="0" bind:value={modelPrice} oninput={recalc} /></label>
       <label>{$t('calc.extra')}<input placeholder="50" type="number" min="0" bind:value={extraMat} oninput={recalc} /></label>
     </div>
+    <h3 class="sec">{$t('calc.grp_margins')}</h3>
     <div class="row">
       <label>{$t('calc.fail')}<input placeholder="5" type="number" min="0" max="100" bind:value={failPct} oninput={recalc} /></label>
       <label>{$t('calc.margin_profit')}<input placeholder="80" type="number" min="0" bind:value={marginProfitPct} oninput={recalc} /></label>
@@ -672,12 +708,10 @@
         <label>{$t('calc.filename')}<input placeholder="part_PETG-NIT-W4_2h1m.gcode" bind:value={filename} /></label>
         <button onclick={save}>{$t('calc.save_calc')}</button>
       </div>
-      {#if savedMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
       <div class="row no-print">
         <button onclick={saveAsDefaults}>{$t('calc.setdefault')}</button>
         <button onclick={resetToDefaults}>{$t('calc.resetdef')}</button>
       </div>
-      {#if defMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
       {#if orders.length}
         <div class="row">
           <label>{$t('cust.name')}
@@ -695,7 +729,7 @@
           <label>{$t('ord.qty')}<input placeholder="1" type="number" min="0.5" step="0.5" bind:value={orderQty} /></label>
           <button onclick={addToOrder}>{$t('ord.add')}</button>
         </div>
-        {#if orderMsg}<p class="ok">{$t('ord.added')}: {addedInfo}</p>{/if}
+        {#if addedInfo}<p class="ok">{$t('ord.added')}: {addedInfo}</p>{/if}
       {/if}
     {:else}<p>…</p>{/if}
   </section>
@@ -703,7 +737,11 @@
 
 <style>
   .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; }
+  h3.sec { font-size: 14px; margin: 12px 0 4px; color: var(--muted); }
+  .note { color: var(--muted); font-size: 13px; margin: 2px 0 8px; }
+  .err { color: var(--err); }
   .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 110px; }
   input, select { padding: 6px; font-size: 14px; }
@@ -711,6 +749,7 @@
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
   .final { font-size: 18px; border-top: 2px solid var(--final-border); margin-top: 4px; padding-top: 8px; }
   .ok { color: green; }
+  .err { color: var(--err); }
   .warn { color: var(--warn); }
   button { padding: 8px 14px; align-self: end; }
 </style>

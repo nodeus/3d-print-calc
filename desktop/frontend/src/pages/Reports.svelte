@@ -59,7 +59,9 @@
       case 'used':
         return s.usedG;
       case 'left':
-        return s.usedG;
+        return s.leftG;
+      case 'color':
+        return (s.colorHex || '').toLowerCase();
       default:
         return `${s.code.toLowerCase()}|${String(s.spoolNo).padStart(6, '0')}`;
     }
@@ -127,6 +129,9 @@
   let revenueSorted = $derived([...revenue].sort((a, b) => cmpVals(revVal(a), revVal(b), revSort.dir)));
   let debtsSorted = $derived([...debts].sort((a, b) => cmpVals(debtVal(a), debtVal(b), debtSort.dir)));
   let topsSorted = $derived([...tops].sort((a, b) => cmpVals(topVal(a), topVal(b), topSort.dir)));
+  let revTotalSum = $derived(revenueSorted.reduce((s, r) => s + r.total, 0));
+  let revOrdersSum = $derived(revenueSorted.reduce((s, r) => s + r.orders, 0));
+  let debtBalanceSum = $derived(debtsSorted.reduce((s, d) => s + d.balance, 0));
   let loadSorted = $derived([...load].sort((a, b) => cmpVals(loadVal(a), loadVal(b), loadSort.dir)));
 
   // Порядок колонок (drag за грип), тексты ячеек, PDF — в экранном порядке.
@@ -295,9 +300,9 @@
   function purText(r: PurRow, k: string): string {
     switch (k) {
       case 'period': return r.period;
-      case 'parts': return money(r.parts, 'RUB', 'ru');
-      case 'plastic': return money(r.plastic, 'RUB', 'ru');
-      case 'total': return money(r.total, 'RUB', 'ru');
+      case 'parts': return money(r.parts, baseCur, $locale);
+      case 'plastic': return money(r.plastic, baseCur, $locale);
+      case 'total': return money(r.total, baseCur, $locale);
       default: return '';
     }
   }
@@ -406,6 +411,7 @@
 <div class="grid">
   <section class="card">
     <h3>{$t('rep.revenue')}</h3>
+    {#if !revenueSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapRev}>
     {#if dragTable === 'repRevenue' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repRevenue' && dragKey != null}>
@@ -419,11 +425,15 @@
         {/each}
       </tr></thead>
       <tbody>{#each revenueSorted as r}<tr>{#each revOrd as k}<td class:n={repIsNum('repRevenue', k)}>{revText(r, k)}</td>{/each}</tr>{/each}</tbody>
+      <tfoot><tr>
+        {#each revOrd as k}<td class:n={repIsNum('repRevenue', k)}><b>{k === 'month' ? $t('hist.total') : k === 'total' ? money(revTotalSum / 100, baseCur, $locale) : k === 'orders' ? String(revOrdersSum) : ''}</b></td>{/each}
+      </tr></tfoot>
     </table>
     </div>
   </section>
   <section class="card">
     <h3>{$t('rep.debts')}</h3>
+    {#if !debtsSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapDebt}>
     {#if dragTable === 'repDebts' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repDebts' && dragKey != null}>
@@ -436,12 +446,16 @@
           </th>
         {/each}
       </tr></thead>
-      <tbody>{#each debtsSorted as d}<tr class="link" onclick={() => gotoOrder(d.orderId)}>{#each debtOrd as k}<td class:n={repIsNum('repDebts', k)}>{debtText(d, k)}</td>{/each}</tr>{/each}</tbody>
+      <tbody>{#each debtsSorted as d}<tr class="link" onclick={() => gotoOrder(d.orderId)} tabindex={0} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); gotoOrder(d.orderId); } }}>{#each debtOrd as k}<td class:n={repIsNum('repDebts', k)}>{debtText(d, k)}</td>{/each}</tr>{/each}</tbody>
+      <tfoot><tr>
+        {#each debtOrd as k}<td class:n={repIsNum('repDebts', k)}><b>{k === 'balance' ? money(debtBalanceSum / 100, baseCur, $locale) : k === 'orderId' ? $t('hist.total') : ''}</b></td>{/each}
+      </tr></tfoot>
     </table>
     </div>
   </section>
   <section class="card">
     <h3>{$t('rep.topmats')}</h3>
+    {#if !topsSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapTop}>
     {#if dragTable === 'repTopmats' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repTopmats' && dragKey != null}>
@@ -460,6 +474,7 @@
   </section>
   <section class="card">
     <h3>{$t('rep.load')}</h3>
+    {#if !loadSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapLoad}>
     {#if dragTable === 'repLoad' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repLoad' && dragKey != null}>
@@ -478,6 +493,7 @@
   </section>
   <section class="card wide">
     <h3>{$t('rep.spools')}</h3>
+    {#if !spoolsSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapSpool}>
     {#if dragTable === 'repSpools' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repSpools' && dragKey != null}>
@@ -486,7 +502,7 @@
           <th class:n={repIsNum('repSpools', k)} style={thWidth('repSpools', k)} data-col={k} class:dragsrc={dragTable === 'repSpools' && dragKey === k}>
             {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repSpools', wrapSpool, k, spoolOrd)}>⋮⋮</span>{/if}
             {#if k === 'color'}
-              {$t(repLabel('repSpools', k))}
+              <button class="th" onclick={() => spoolSortBy(k)}>{$t(repLabel('repSpools', k))}{spoolArrow(k)}</button>
             {:else}
               <button class="th" onclick={() => spoolSortBy(k)}>{$t(repLabel('repSpools', k))}{spoolArrow(k)}</button>
             {/if}
@@ -500,9 +516,10 @@
   </section>
   <section class="card wide">
     <h3>{$t('rep.purchases')}</h3>
+    {#if !purShown.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="row no-print">
       {#each [['day', 'rep.grp_day'], ['week', 'rep.grp_week'], ['month', 'rep.grp_month'], ['year', 'rep.grp_year']] as [g, label]}
-        <button class:on={purGroup === g} onclick={() => (purGroup = g as typeof purGroup)}>{$t(label)}</button>
+        <button class:on={purGroup === g} aria-pressed={purGroup === g} onclick={() => (purGroup = g as typeof purGroup)}>{$t(label)}</button>
       {/each}
     </div>
     <div class="twrap" bind:this={wrapPur}>
@@ -522,7 +539,7 @@
       </tbody>
       <tfoot><tr>
         {#each purOrd as k}
-          <td class:n={purNum(k)}><b>{k === 'period' ? $t('hist.total') : k === 'parts' ? money(purPartsTotal, 'RUB', 'ru') : k === 'plastic' ? money(purPlasticTotal, 'RUB', 'ru') : money(purTotal, 'RUB', 'ru')}</b></td>
+          <td class:n={purNum(k)}><b>{k === 'period' ? $t('hist.total') : k === 'parts' ? money(purPartsTotal, baseCur, $locale) : k === 'plastic' ? money(purPlasticTotal, baseCur, $locale) : money(purTotal, baseCur, $locale)}</b></td>
         {/each}
       </tr></tfoot>
     </table>
@@ -542,4 +559,5 @@
   .row button.on { outline: 2px solid var(--accent); font-weight: bold; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
   .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; vertical-align: middle; print-color-adjust: exact; }
+  .note { color: var(--muted); font-size: 13px; }
 </style>

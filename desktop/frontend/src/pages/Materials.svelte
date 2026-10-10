@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
@@ -88,6 +89,7 @@
       spoolEdit = null;
       await loadSpools(mid);
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -282,6 +284,7 @@
       newColor = '#808080';
       newNote = '';
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -306,6 +309,7 @@
       await wails.updateMaterial(edit);
       editId = 0;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -428,7 +432,7 @@
           {/each}
           <td class="no-print">
             <button onclick={() => toggleSpools(m)} title={$t('spool.title')}>{expanded === m.id ? '▾' : '▸'} {(spools[m.id] ?? []).length || ''}</button>
-            {#if canWrite($user)}<button onclick={() => startEdit(m)}>✎</button> <button onclick={() => remove(m)}>✕</button>{/if}
+            {#if canWrite($user)}<button onclick={() => startEdit(m)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => remove(m)} aria-label={$t('common.delete_q')}>✕</button>{/if}
           </td>
         </tr>
       {/if}
@@ -474,7 +478,7 @@
                     {#each spoolOrd as k}
                       <td class:n={spoolNum(k)}>{spoolText(s, spools[m.id] ?? [], k)}</td>
                     {/each}
-                    <td class="no-print">{#if canWrite($user)}<button onclick={() => editSpool(s)}>✎</button> <button onclick={() => removeSpool(s)}>✕</button>{/if}</td>
+                    <td class="no-print">{#if canWrite($user)}<button onclick={() => editSpool(s)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => removeSpool(s)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
                   </tr>
                 {/if}
               {/each}

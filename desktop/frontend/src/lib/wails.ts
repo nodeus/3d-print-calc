@@ -363,6 +363,14 @@ export interface FxRate {
   day: string;
 }
 
+export interface ConvertInspect {
+  spools: number;
+  printers: number;
+  orders: number;
+  items: number;
+  payments: number;
+}
+
 export interface PDFSection {
   Title: string;
   Headers: string[];
@@ -428,6 +436,7 @@ declare global {
           SetFxRate(currency: string, rate: number): Promise<void>;
           DeleteFxRate(currency: string, day: string): Promise<void>;
           ConvertCurrency(target: string, rate: number): Promise<void>;
+          InspectConvert(): Promise<ConvertInspect>;
           ExportBackup(): Promise<string>;
           PreviewBackup(): Promise<BackupManifest>;
           ApplyBackup(): Promise<BackupManifest>;
@@ -464,6 +473,8 @@ declare global {
           DeleteOrderItem(id: number): Promise<void>;
           ToggleItemPaid(id: number, paid: boolean): Promise<void>;
           AddPayment(orderId: number, itemId: number, amount: number, note: string): Promise<number>;
+          UpdatePayment(id: number, itemId: number, amount: number, note: string): Promise<void>;
+          DeletePayment(id: number): Promise<void>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
           TopMaterials(): Promise<MaterialStat[]>;
           PrinterLoad(): Promise<PrinterStat[]>;
@@ -531,6 +542,7 @@ export const wails = {
   setFxRate: (currency: string, rate: number) => api().SetFxRate(currency, rate),
   deleteFxRate: (currency: string, day: string) => api().DeleteFxRate(currency, day),
   convertCurrency: (target: string, rate: number) => api().ConvertCurrency(target, rate),
+  inspectConvert: () => api().InspectConvert(),
   exportBackup: () => api().ExportBackup(),
   previewBackup: () => api().PreviewBackup(),
   applyBackup: () => api().ApplyBackup(),
@@ -570,6 +582,9 @@ export const wails = {
   toggleItemPaid: (id: number, paid: boolean) => api().ToggleItemPaid(id, paid),
   addPayment: (orderId: number, itemId: number, amount: number, note: string) =>
     api().AddPayment(orderId, itemId, amount, note),
+  updatePayment: (id: number, itemId: number, amount: number, note: string) =>
+    api().UpdatePayment(id, itemId, amount, note),
+  deletePayment: (id: number) => api().DeletePayment(id),
   revenueByMonth: () => api().RevenueByMonth(),
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),

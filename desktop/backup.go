@@ -222,7 +222,7 @@ func (a *App) PreviewMaterialsCSV() (sqlite.ImportReport, error) {
 	if err != nil {
 		return rep, err
 	}
-	rep, err = a.db.ImportMaterials(bytes.NewReader(data), true)
+	rep, err = a.db.ImportMaterials(bytes.NewReader(data), true, nil)
 	if err != nil {
 		return rep, err
 	}
@@ -239,7 +239,7 @@ func (a *App) ApplyMaterialsCSV() (sqlite.ImportReport, error) {
 	if len(a.pendingMats) == 0 {
 		return rep, errNoPending()
 	}
-	rep, err := a.db.ImportMaterials(bytes.NewReader(a.pendingMats), false)
+	rep, err := a.db.ImportMaterials(bytes.NewReader(a.pendingMats), false, a.emitProgress)
 	if err != nil {
 		return rep, err
 	}

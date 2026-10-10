@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { get } from 'svelte/store';
-  import { wails, type OrderRow, type OrderDetail, type Customer, type OrderItem } from '../lib/wails';
+  import { wails, type OrderRow, type OrderDetail, type Customer, type OrderItem, type Payment } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { openOrderId, customerFilter } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
@@ -164,6 +165,7 @@
   let payAmount: number | null = $state(null);
   let payNote = $state('');
   let payItemId = $state(0);
+  let editPayId = $state(0);
   let error = $state('');
   // Правка шапки
   let editOpen = $state(false);
@@ -369,6 +371,7 @@
       newTitle = '';
       await load();
       detail = await wails.orderDetail(id);
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -396,6 +399,7 @@
       });
       editOpen = false;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -415,7 +419,12 @@
   }
 
   async function addItem() {
-    if (!detail || !itemTitle.trim()) return;
+    if (!detail) return;
+    error = '';
+    if (!itemTitle.trim()) {
+      error = $t('ord.need_title');
+      return;
+    }
     try {
       await wails.addOrderItem({
         orderId: detail.order.ID, jobId: 0, title: itemTitle.trim(),
@@ -426,19 +435,58 @@
       itemCost = null;
       itemPrice = null;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
   }
 
   async function addPay() {
-    if (!detail || (payAmount ?? 0) <= 0) return;
+    if (!detail) return;
+    error = '';
+    if ((payAmount ?? 0) <= 0) {
+      error = $t('ord.need_amount');
+      return;
+    }
     try {
-      await wails.addPayment(detail.order.ID, payItemId, Math.round((payAmount ?? 0) * 100), payNote);
+      if (editPayId) {
+        await wails.updatePayment(editPayId, payItemId, Math.round((payAmount ?? 0) * 100), payNote);
+        editPayId = 0;
+      } else {
+        await wails.addPayment(detail.order.ID, payItemId, Math.round((payAmount ?? 0) * 100), payNote);
+      }
       payAmount = null;
       payNote = '';
       payItemId = 0;
       await load();
+      notify($t('common.saved'));
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function startEditPay(p: Payment) {
+    payItemId = p.OrderItem;
+    payAmount = p.Amount / 100;
+    payNote = p.Note;
+    editPayId = p.ID;
+  }
+
+  function cancelPayEdit() {
+    editPayId = 0;
+    payAmount = null;
+    payNote = '';
+    payItemId = 0;
+  }
+
+  async function removePay(p: Payment) {
+    if (!detail) return;
+    error = '';
+    if (!(await askConfirm(`${$t('common.delete_q')} +${money(p.Amount / 100, detail.order.Currency, 'ru')} · ${p.PaidAt}?`))) return;
+    try {
+      await wails.deletePayment(p.ID);
+      await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -450,11 +498,20 @@
     payAmount = Math.max(0, Math.round(itemTotal(it) - itemPaid(it.ID)) / 100);
   }
 
-  // Подставить весь заказ (итог со скидкой) как оплату всего заказа.
-  function fillWholePay() {
+  // Оплатить весь остаток сразу (с подтверждением суммы).
+  async function payWhole() {
     if (!detail) return;
-    payItemId = 0;
-    payAmount = Math.round(detail.order.TotalBase) / 100;
+    error = '';
+    const rest = detail.balance;
+    if (rest <= 0) return;
+    if (!(await askConfirm(`${$t('ord.pay_all_q')}: ${money(rest / 100, detail.order.Currency, 'ru')}?`))) return;
+    try {
+      await wails.addPayment(detail.order.ID, 0, rest, '');
+      await load();
+      notify($t('common.saved'));
+    } catch (e) {
+      error = String(e);
+    }
   }
 
   async function removeItem(id: number, title: string) {
@@ -474,6 +531,7 @@
     try {
       await wails.setOrderStatus(detail.order.ID, s);
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -513,16 +571,18 @@
 
 {#if error}<p class="err">{error}</p>{/if}
 {#if $customerFilter}
-  <p class="filterchip no-print">{$t('ord.filtered_by')}: {custName($customerFilter)} <button onclick={clearCustomerFilter}>✕</button></p>
+  <p class="filterchip no-print">{$t('ord.filtered_by')}: {custName($customerFilter)} <button onclick={clearCustomerFilter} aria-label={$t('common.clear')}>✕</button></p>
 {/if}
 <div class="cols">
   <section>
     {#if canWrite($user)}
       <div class="row no-print">
-        <select bind:value={newCustomerId}>
-          <option value={0}>—</option>
-          {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
-        </select>
+        <label>{$t('ord.customer')}
+          <select bind:value={newCustomerId}>
+            <option value={0}>—</option>
+            {#each customers as c}<option value={c.ID}>{c.Name}</option>{/each}
+          </select>
+        </label>
         <input placeholder={$t('ord.title')} bind:value={newTitle} />
         <button onclick={create}>{$t('ord.new')}</button>
       </div>
@@ -541,13 +601,14 @@
       </tr></thead>
       <tbody>
         {#each paged as r}
-          <tr class:sel={detail?.order.ID === r.order.ID} onclick={() => openDetail(r.order.ID)}>
+          <tr class:sel={detail?.order.ID === r.order.ID} onclick={() => openDetail(r.order.ID)} tabindex={0} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(r.order.ID); } }}>
             {#each listOrd as k}<td class:n={orderNum(k)}>{orderText(r, k)}</td>{/each}
           </tr>
         {/each}
       </tbody>
     </table>
     </div>
+    {#if !rows.length}<p class="note">{$t('ord.empty_orders')}</p>{/if}
     <div class="row no-print" style="margin-top:6px;align-items:center;">
       <span class="count">{$t('hist.shown')}: {paged.length} / {visibleRows.length} / {rows.length}</span>
       <span class="pager">
@@ -566,8 +627,8 @@
           <select value={detail.order.Status} onchange={(e) => setStatus(e.currentTarget.value)}>
             {#each statuses as s}<option value={s}>{$t('st.' + s)}</option>{/each}
           </select>
-          <button onclick={startEditHead}>✎</button>
-          <button onclick={removeOrder}>✕</button>
+          <button onclick={startEditHead} aria-label={$t('common.edit')}>✎</button>
+          <button onclick={removeOrder} aria-label={$t('common.delete_q')}>✕</button>
         </div>
         {#if editOpen}
           <div class="row no-print">
@@ -605,7 +666,7 @@
           {#each shownItems(detail.items) as it, i}<tr>
             <td>{i + 1}</td>
             {#each itemOrd as k}<td class:n={itemNum(k)} title={itemBreakdown(it, k)}>{itemText(it, k)}</td>{/each}
-            <td class="no-print">{#if canWrite($user)}<button onclick={() => fillItemPay(it)} title={$t('ord.pay_item')}>₽</button> <button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td>
+            <td class="no-print">{#if canWrite($user)}<button onclick={() => fillItemPay(it)} title={$t('ord.pay_item')} aria-label={$t('ord.pay_item')}>₽</button> <button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')} aria-label={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
           </tr>{/each}
         </tbody>
       </table>
@@ -627,21 +688,28 @@
         {/if}
       {/if}
       <p>{$t('ord.paid')}: {money(detail.paid / 100, detail.order.Currency, 'ru')} · {$t('ord.balance')}: <b>{money(detail.balance / 100, detail.order.Currency, 'ru')}</b>
-        {#if canWrite($user)} <button class="no-print" onclick={fillWholePay}>{$t('ord.pay_all')}</button>{/if}
+        {#if canWrite($user)} <button class="no-print" onclick={payWhole} disabled={detail.balance <= 0}>{$t('ord.pay_all')}</button>{/if}
       </p>
-      {#each detail.payments as p}<p class="pay">+{money(p.Amount / 100, detail.order.Currency, 'ru')} · {p.PaidAt} · {p.OrderItem ? itemTitleOf(p.OrderItem) : $t('ord.whole_order')} {p.Note}</p>{/each}
+      {#each detail.payments as p}<p class="pay">+{money(p.Amount / 100, detail.order.Currency, 'ru')} · {p.PaidAt} · {p.OrderItem ? itemTitleOf(p.OrderItem) : $t('ord.whole_order')} {p.Note}
+        {#if canWrite($user)} <button class="no-print" onclick={() => startEditPay(p)} aria-label={$t('common.edit')}>✎</button> <button class="no-print" onclick={() => removePay(p)} aria-label={$t('common.delete_q')}>✕</button>{/if}
+      </p>{/each}
       {#if canWrite($user)}
         <div class="row no-print">
-          <select bind:value={payItemId}>
-            <option value={0}>{$t('ord.whole_order')}</option>
-            {#each detail.items as it, i}<option value={it.ID}>#{i + 1} {it.Title}</option>{/each}
-          </select>
+          <label>{$t('ord.pay_item')}
+            <select bind:value={payItemId}>
+              <option value={0}>{$t('ord.whole_order')}</option>
+              {#each detail.items as it, i}<option value={it.ID}>#{i + 1} {it.Title}</option>{/each}
+            </select>
+          </label>
           <input type="number" min="0" placeholder={$t('ord.pay')} bind:value={payAmount} />
           <input placeholder={$t('ord.note')} bind:value={payNote} />
           <button onclick={addPay}>{$t('ord.pay_add')}</button>
+          {#if editPayId}<button onclick={cancelPayEdit}>{$t('common.cancel')}</button>{/if}
         </div>
       {/if}
     </section>
+  {:else}
+    <p class="note">{$t('ord.no_detail')}</p>
   {/if}
 </div>
 

@@ -347,6 +347,49 @@ func (r *ordersRepo) AddPayment(p models.Payment) (int64, error) {
 	return id, nil
 }
 
+// UpdatePayment правит оплату: сумма обязана быть положительной, позиция —
+// из того же заказа (заказ берётся из самой оплаты). Несуществующая — ошибка.
+func (r *ordersRepo) UpdatePayment(p models.Payment) error {
+	if p.ID == 0 {
+		return fmt.Errorf("ERR_PAYMENT: пустой id")
+	}
+	if p.Amount <= 0 {
+		return fmt.Errorf("ERR_PAYMENT: сумма обязана быть положительной")
+	}
+	var orderID int64
+	if err := r.db.QueryRow(`SELECT order_id FROM payments WHERE id=?`, p.ID).Scan(&orderID); err != nil {
+		return fmt.Errorf("ERR_PAYMENT: оплата не найдена")
+	}
+	if p.OrderItem > 0 {
+		var n int
+		if err := r.db.QueryRow(`SELECT COUNT(*) FROM order_items WHERE id=? AND order_id=?`,
+			p.OrderItem, orderID).Scan(&n); err != nil {
+			return fmt.Errorf("ERR_PAYMENT: %w", err)
+		}
+		if n == 0 {
+			return fmt.Errorf("ERR_PAYMENT: позиция не из этого заказа")
+		}
+	}
+	res, err := r.db.Exec(`UPDATE payments SET order_item_id=?, amount=?, note=? WHERE id=?`,
+		nullInt(p.OrderItem), p.Amount, p.Note, p.ID)
+	if err != nil {
+		return fmt.Errorf("ERR_PAYMENT: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("ERR_PAYMENT: оплата не найдена")
+	}
+	return nil
+}
+
+// DeletePayment удаляет оплату. Итоги (PaidTotal/Debts) считаются на чтении,
+// хранить нечего — удаление безопасно.
+func (r *ordersRepo) DeletePayment(id int64) error {
+	if _, err := r.db.Exec(`DELETE FROM payments WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_PAYMENT: %w", err)
+	}
+	return nil
+}
+
 // Payments возвращает оплаты заказа.
 func (r *ordersRepo) Payments(orderID int64) ([]models.Payment, error) {
 	rows, err := r.db.Query(`SELECT id, order_id, order_item_id, amount, paid_at, note FROM payments
