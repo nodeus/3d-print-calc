@@ -109,6 +109,8 @@ type Orders interface {
 	DeleteOrderItem(id int64) error
 	SetItemPaid(id int64, paid bool) error // ручная отметка (сумм не меняет)
 	AddPayment(p models.Payment) (int64, error)
+	UpdatePayment(p models.Payment) error // сумма/примечание/привязка (валидация как в AddPayment)
+	DeletePayment(id int64) error         // удаление оплаты (итоги считаются на чтении)
 	Payments(orderID int64) ([]models.Payment, error)
 	PaidTotal(orderID int64) (int64, error)
 	RecalcTotal(orderID int64) (int64, error) // price*qty → orders.total_base

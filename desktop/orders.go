@@ -252,6 +252,25 @@ func (a *App) AddPayment(orderID, itemID, amount int64, note string) (int64, err
 	})
 }
 
+// UpdatePayment — правка оплаты: сумма/примечание/привязка (manager+).
+// Дата оплаты не меняется.
+func (a *App) UpdatePayment(id, itemID, amount int64, note string) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().UpdatePayment(models.Payment{
+		ID: id, OrderItem: itemID, Amount: amount, Note: note,
+	})
+}
+
+// DeletePayment — удалить оплату (manager+). Итоги считаются на чтении.
+func (a *App) DeletePayment(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Orders().DeletePayment(id)
+}
+
 // RevenueByMonth — выручка по месяцам.
 func (a *App) RevenueByMonth() ([]sqlite.MonthRevenue, error) {
 	return a.db.RevenueByMonth()

@@ -473,6 +473,8 @@ declare global {
           DeleteOrderItem(id: number): Promise<void>;
           ToggleItemPaid(id: number, paid: boolean): Promise<void>;
           AddPayment(orderId: number, itemId: number, amount: number, note: string): Promise<number>;
+          UpdatePayment(id: number, itemId: number, amount: number, note: string): Promise<void>;
+          DeletePayment(id: number): Promise<void>;
           RevenueByMonth(): Promise<MonthRevenue[]>;
           TopMaterials(): Promise<MaterialStat[]>;
           PrinterLoad(): Promise<PrinterStat[]>;
@@ -580,6 +582,9 @@ export const wails = {
   toggleItemPaid: (id: number, paid: boolean) => api().ToggleItemPaid(id, paid),
   addPayment: (orderId: number, itemId: number, amount: number, note: string) =>
     api().AddPayment(orderId, itemId, amount, note),
+  updatePayment: (id: number, itemId: number, amount: number, note: string) =>
+    api().UpdatePayment(id, itemId, amount, note),
+  deletePayment: (id: number) => api().DeletePayment(id),
   revenueByMonth: () => api().RevenueByMonth(),
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
