@@ -41,9 +41,9 @@ type Parts interface {
 type Jobs interface {
 	Upsert(j models.Job) (int64, error)
 	List(limit int) ([]models.Job, error)
-	DeleteJob(id int64) error                                          // manual — удалить; edited import — откат; чистый import — блок
-	UpdateManual(j models.Job, material string, in JobCalcInput) error // правка + автопересчёт (manual и import)
-	RevertJob(id int64) error                                          // откат изменённой к импорту
+	DeleteJob(id int64) error                                                         // manual — удалить; edited import — откат; чистый import — блок
+	UpdateManual(j models.Job, material string, spoolID int64, in JobCalcInput) error // правка + автопересчёт (manual и import)
+	RevertJob(id int64) error                                                         // откат изменённой к импорту
 }
 
 // JobCalcInput — расчётный контекст правки работы.

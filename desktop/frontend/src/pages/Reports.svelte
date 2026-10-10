@@ -50,7 +50,8 @@
   function spoolVal(s: SpoolStat): string | number {
     switch (spoolSort) {
       case 'code':
-        return s.code.toLowerCase();
+        // Код, затем номер численно (BLACK-10 после BLACK-9).
+        return `${s.code.toLowerCase()}|${String(s.spoolNo).padStart(6, '0')}`;
       case 'vendor':
         return (s.vendor || '').toLowerCase();
       case 'jobs':
@@ -58,9 +59,9 @@
       case 'used':
         return s.usedG;
       case 'left':
-        return s.leftG;
+        return s.usedG;
       default:
-        return s.code.toLowerCase();
+        return `${s.code.toLowerCase()}|${String(s.spoolNo).padStart(6, '0')}`;
     }
   }
 
@@ -183,9 +184,14 @@
     }
   }
 
+  // Код катушки в остатках: КОД-N (номер пишется в отчёт всегда).
+  function spoolCode(s: SpoolStat): string {
+    return s.spoolNo > 0 ? `${s.code}-${s.spoolNo}` : s.code;
+  }
+
   function spoolText(s: SpoolStat, k: string): string {
     switch (k) {
-      case 'code': return s.code;
+      case 'code': return spoolCode(s);
       case 'vendor': return s.vendor;
       case 'jobs': return String(s.jobs);
       case 'used': return num(s.usedG);

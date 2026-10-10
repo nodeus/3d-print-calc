@@ -4,6 +4,7 @@ import { writable } from 'svelte/store';
 // (страницы размонтируются из-за {#key tab} в App.svelte).
 export interface CalcForm {
   matCode: string;
+  spoolId: number;
   printerId: number;
   timeH: number | null;
   timeM: number | null;
@@ -37,6 +38,7 @@ export interface CalcForm {
 
 export const calcFormDefaults: CalcForm = {
   matCode: 'PETG-NIT-W4',
+  spoolId: 0,
   printerId: 0,
   timeH: 3,
   timeM: 54,

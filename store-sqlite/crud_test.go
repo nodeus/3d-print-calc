@@ -215,6 +215,39 @@ func TestSpoolDeleteGuard(t *testing.T) {
 	}
 }
 
+// TestSpoolStatsSpoolNo: остатки идут строками КОД-N с раздельными суммами.
+func TestSpoolStatsSpoolNo(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, _ := mats.UpsertByCode(models.Material{Code: "PETG-N", Type: "PETG", Density: 1.27})
+	s1, _ := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	s2, _ := mats.AddSpool(models.Spool{MaterialID: mid, Price: 200000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	if _, err := db.Jobs().Upsert(models.Job{Filename: "a.gcode", StartAt: "2026-01-01 10:00",
+		Origin: "manual", SpoolID: s1, WeightG: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Jobs().Upsert(models.Job{Filename: "b.gcode", StartAt: "2026-01-02 10:00",
+		Origin: "manual", SpoolID: s2, WeightG: 200}); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := db.SpoolStats()
+	if err != nil {
+		t.Fatalf("SpoolStats: %v", err)
+	}
+	if len(stats) != 2 {
+		t.Fatalf("строк: %+v", stats)
+	}
+	if stats[0].SpoolNo != 1 || stats[1].SpoolNo != 2 {
+		t.Fatalf("номера: %+v", stats)
+	}
+	if stats[0].UsedG != 100 || stats[1].UsedG != 200 {
+		t.Fatalf("суммы: %+v", stats)
+	}
+	if stats[0].Code != "PETG-N" || stats[1].Code != "PETG-N" {
+		t.Fatalf("коды: %+v", stats)
+	}
+}
+
 // TestMaterialBoughtArchived: дата закупа и флаг архивности материала.
 func TestMaterialBoughtArchived(t *testing.T) {
 	db := openTestDB(t)
@@ -310,7 +343,7 @@ func TestUpdateManualReprice(t *testing.T) {
 	if err := jobs.UpdateManual(models.Job{
 		ID: id, Filename: "r.gcode", StartAt: "2026-01-01 10:00", Status: "completed",
 		TotalSec: 3600, WeightG: 20,
-	}, "PETG-R", store.JobCalcInput{
+	}, "PETG-R", 0, store.JobCalcInput{
 		Tariff: 7.08, PowerKW: 0.35, AmortPerHour: 5.41, OpRate: 100, Copies: 1,
 	}); err != nil {
 		t.Fatalf("UpdateManual: %v", err)
@@ -372,7 +405,7 @@ func TestUpdateManualFullInput(t *testing.T) {
 	if err := jobs.UpdateManual(models.Job{
 		ID: id, Filename: "f.gcode", StartAt: "2026-01-01 10:00", Status: "completed",
 		TotalSec: 7200, WeightG: 100,
-	}, "PETG-F", in); err != nil {
+	}, "PETG-F", 0, in); err != nil {
 		t.Fatalf("UpdateManual: %v", err)
 	}
 	list, _ := jobs.List(0)
@@ -433,5 +466,73 @@ func TestUpdateManualFullInput(t *testing.T) {
 	}
 	if got.Edited != 0 || got.WeightG != 10 || got.CostSnapshot != `{"v":1}` {
 		t.Fatalf("откат: %+v", got)
+	}
+}
+
+// TestUpdateManualSpool: правка с выбранной катушкой — цена именно её,
+// линк spool_id обновляется, номер пишется в снапшот.
+func TestUpdateManualSpool(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, err := mats.UpsertByCode(models.Material{Code: "PETG-S", Type: "PETG", Density: 1.27, Diameter: 1.75})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s1, _ := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	s2, _ := mats.AddSpool(models.Spool{MaterialID: mid, Price: 300000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	jobs := db.Jobs()
+	id, err := jobs.Upsert(models.Job{Filename: "s.gcode", StartAt: "2026-01-01 10:00",
+		Origin: "manual", TotalSec: 3600, WeightG: 10, SpoolID: s1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Правим со второй катушкой (3000 ₽/кг → 3 ₽/г, 10 г → мат 30 ₽).
+	// Остальной контекст нулевой: cost = 30 ровно.
+	if err := jobs.UpdateManual(models.Job{
+		ID: id, Filename: "s.gcode", StartAt: "2026-01-01 10:00", Status: "completed",
+		TotalSec: 3600, WeightG: 10,
+	}, "PETG-S", s2, store.JobCalcInput{Copies: 1}); err != nil {
+		t.Fatalf("UpdateManual: %v", err)
+	}
+	list, _ := jobs.List(0)
+	var got models.Job
+	for _, j := range list {
+		if j.ID == id {
+			got = j
+		}
+	}
+	if got.SpoolID != s2 {
+		t.Fatalf("spool_id = %d, хочу %d", got.SpoolID, s2)
+	}
+	var snap struct {
+		Material string             `json:"material"`
+		Cost     float64            `json:"cost"`
+		Input    map[string]float64 `json:"input"`
+	}
+	if err := json.Unmarshal([]byte(got.CostSnapshot), &snap); err != nil {
+		t.Fatalf("снапшот битый: %v", err)
+	}
+	// mat=30 (3000 ₽/кг × 10 г), остальное по нулям.
+	if snap.Cost != 30 {
+		t.Fatalf("cost = %v, хочу 30 (цена второй катушки)", snap.Cost)
+	}
+	if snap.Input["spoolNo"] != 2 {
+		t.Fatalf("spoolNo в снапшоте: %+v", snap.Input)
+	}
+	// Без катушки (0): старая логика — первая + линк не трогаем.
+	if err := jobs.UpdateManual(models.Job{
+		ID: id, Filename: "s.gcode", StartAt: "2026-01-01 10:00", Status: "completed",
+		TotalSec: 3600, WeightG: 10,
+	}, "PETG-S", 0, store.JobCalcInput{Copies: 1}); err != nil {
+		t.Fatalf("UpdateManual: %v", err)
+	}
+	list, _ = jobs.List(0)
+	for _, j := range list {
+		if j.ID == id {
+			got = j
+		}
+	}
+	if got.SpoolID != s2 {
+		t.Fatalf("линк затёрт: %d", got.SpoolID)
 	}
 }

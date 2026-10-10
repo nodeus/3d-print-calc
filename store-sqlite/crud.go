@@ -210,22 +210,31 @@ func snapshotCurrency(raw string) string {
 
 // UpdateManual правит работу истории (manual и import) и пересчитывает
 // себестоимость И цену строго по переданному расчётному контексту in.
-// Цена материала — текущая (первая катушка). Снапшот — v2, валюта — из
-// старого снапшота (RUB по умолчанию). Первая правка импортированной
-// фиксирует первозданное в orig_snapshot для отката (edited=1).
-func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcInput) error {
+// Цена материала — выбранной катушки (spoolID), иначе первая живого материала.
+// Линк spool_id обновляется, номер катушки пишется в снапшот (input.spoolNo).
+// Снапшот — v2, валюта — из старого снапшота (RUB по умолчанию).
+// Первая правка импортированной фиксирует первозданное в orig_snapshot
+// для отката (edited=1).
+func (r *jobsRepo) UpdateManual(j models.Job, material string, spoolID int64, in store.JobCalcInput) error {
 	if j.ID == 0 {
 		return fmt.Errorf("ERR_JOB_SAVE: пустой id")
 	}
 	var cur models.Job
 	var edited int
 	var orig string
+	var spoolNull sql.NullInt64
 	err := r.db.QueryRow(`SELECT filename, status, start_at, end_at, print_sec, total_sec,
-		estimated_sec, size_bytes, weight_g, length_m, slicer, cost_snapshot, origin, edited, orig_snapshot
-		FROM jobs WHERE id=?`, j.ID).Scan(
+		estimated_sec, size_bytes, weight_g, length_m, slicer, cost_snapshot, origin, edited, orig_snapshot,
+		spool_id FROM jobs WHERE id=?`, j.ID).Scan(
 		&cur.Filename, &cur.Status, &cur.StartAt, &cur.EndAt, &cur.PrintSec, &cur.TotalSec,
 		&cur.EstimatedSec, &cur.SizeBytes, &cur.WeightG, &cur.LengthM, &cur.Slicer,
-		&cur.CostSnapshot, &cur.Origin, &edited, &orig)
+		&cur.CostSnapshot, &cur.Origin, &edited, &orig, &spoolNull)
+	if err != nil {
+		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
+	}
+	if spoolNull.Valid {
+		cur.SpoolID = spoolNull.Int64
+	}
 	if err != nil {
 		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
 	}
@@ -247,7 +256,19 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcI
 		edited = 1
 	}
 	pricePerKg := 0.0
-	if material != "" {
+	spoolNo := 0
+	newSpoolID := cur.SpoolID
+	if spoolID > 0 {
+		var price int64
+		var mno int
+		if err := r.db.QueryRow(`SELECT price, COALESCE(spool_no, 0)
+			FROM spools WHERE id=?`, spoolID).Scan(&price, &mno); err == nil {
+			pricePerKg = float64(price) / 100
+			spoolNo = mno
+			newSpoolID = spoolID
+		}
+	}
+	if pricePerKg == 0 && material != "" {
 		if m, err := r.materialPrice(material); err == nil {
 			pricePerKg = m
 		}
@@ -276,6 +297,7 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcI
 		"marginDev": in.MarginDev, "fees": in.Fees,
 		"maintPerHour": in.MaintPerHour, "purgeWasteG": in.PurgeWasteG,
 		"copies": copies, "vatRate": in.VATRate, "roundStep": in.RoundStep,
+		"spoolNo": spoolNo,
 	}
 	currency := snapshotCurrency(cur.CostSnapshot)
 	snap, _ := json.Marshal(map[string]any{
@@ -284,10 +306,10 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcI
 	})
 	if _, err := r.db.Exec(`UPDATE jobs SET filename=?, status=?, start_at=?, end_at=?,
 		print_sec=?, total_sec=?, estimated_sec=?, size_bytes=?, weight_g=?, length_m=?,
-		slicer=?, cost_snapshot=?, edited=?, orig_snapshot=? WHERE id=?`,
+		slicer=?, spool_id=?, cost_snapshot=?, edited=?, orig_snapshot=? WHERE id=?`,
 		j.Filename, j.Status, j.StartAt, j.EndAt, j.PrintSec, j.TotalSec,
-		j.EstimatedSec, j.SizeBytes, j.WeightG, j.LengthM, j.Slicer, string(snap),
-		edited, orig, j.ID); err != nil {
+		j.EstimatedSec, j.SizeBytes, j.WeightG, j.LengthM, j.Slicer,
+		nullInt(newSpoolID), string(snap), edited, orig, j.ID); err != nil {
 		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
 	}
 	return nil

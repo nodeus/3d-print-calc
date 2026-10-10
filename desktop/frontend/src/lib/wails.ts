@@ -61,6 +61,7 @@ export interface MaterialDTO {
   spoolLeftG: number;
   hasLiveSpool: boolean;
   spoolCount: number;
+  spools: SpoolDTO[];
 }
 
 export interface Spool {
@@ -204,6 +205,7 @@ export interface JobEdit {
   lengthM: number;
   slicer: string;
   material: string;
+  spoolId: number;
   tariff: number;
   powerKW: number;
   amortPerHour: number;
@@ -344,6 +346,7 @@ export interface Debt {
 
 export interface SpoolStat {
   code: string;
+  spoolNo: number;
   colorHex: string;
   vendor: string;
   jobs: number;
