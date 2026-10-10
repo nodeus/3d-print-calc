@@ -355,7 +355,7 @@
         <input placeholder="http://192.168.1.50:7125" bind:value={urls[p.ID]} />
         <button onclick={() => saveURL(p)}>{$t('common.save')}</button>
         <button onclick={() => ping(p)}>{$t('moon.check')}</button>
-        <input type="number" min="1" step="1" bind:value={moonLimit} placeholder={$t('moon.limit')} title={$t('moon.limit')} />
+        <input type="number" min="1" step="1" bind:value={moonLimit} placeholder={$t('moon.limit')} title={$t('moon.limit')} style={`width:${$t('moon.limit').length + 5}ch`} />
         <button onclick={() => preview(p)}>{$t('moon.import')}</button>
       </div>
     {/if}
