@@ -262,8 +262,6 @@
   "mat.vendor": "Vendor",
   "mat.color": "Color",
   "mat.weight": "Weight, g",
-  "mat.bought": "Bought on",
-  "mat.archived": "Archived",
   "mat.price_spool_note": "First spool price — edit in spools below",
   "mat.code_rename_note": "Renaming re-links job history",
   "spool.title": "Spools",

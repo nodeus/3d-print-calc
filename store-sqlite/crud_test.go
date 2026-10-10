@@ -248,8 +248,9 @@ func TestSpoolStatsSpoolNo(t *testing.T) {
 	}
 }
 
-// TestMaterialBoughtArchived: дата закупа и флаг архивности материала.
-func TestMaterialBoughtArchived(t *testing.T) {
+// TestMaterialUpdateRoundtrip: правка материала сохраняется; архивность —
+// уровень катушки (полей даты/архива у материала нет с 0014).
+func TestMaterialUpdateRoundtrip(t *testing.T) {
 	db := openTestDB(t)
 	mats := db.Materials()
 	mid, err := mats.UpsertByCode(models.Material{Code: "PETG-A", Type: "PETG", Density: 1.27})
@@ -257,18 +258,17 @@ func TestMaterialBoughtArchived(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := mats.Update(models.Material{ID: mid, Code: "PETG-A", Type: "PETG",
-		Density: 1.27, BoughtAt: "2026-10-01", Archived: true}); err != nil {
+		Vendor: "NIT", Density: 1.24}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	got, err := mats.GetByCode("PETG-A")
 	if err != nil {
 		t.Fatalf("GetByCode: %v", err)
 	}
-	if got.BoughtAt != "2026-10-01" || !got.Archived {
+	if got.Vendor != "NIT" || got.Density != 1.24 {
 		t.Fatalf("поля не сохранились: %+v", got)
 	}
-	// Катушка архивного материала видна: архив — уровень катушки,
-	// флаг материала остатки не фильтрует.
+	// Катушка материала видна в остатках: фильтр — только архив катушки.
 	if _, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000}); err != nil {
 		t.Fatal(err)
 	}

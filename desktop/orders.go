@@ -299,7 +299,7 @@ func (a *App) SpoolPurchases() ([]SpoolPurchase, error) {
 			out = append(out, SpoolPurchase{
 				Code: m.Code, Vendor: m.Vendor, BoughtAt: s.BoughtAt,
 				Price: float64(s.Price) / 100, Currency: s.Currency,
-				WeightG: s.WeightInitG, Archived: m.Archived,
+				WeightG: s.WeightInitG, Archived: s.Archived,
 			})
 		}
 	}

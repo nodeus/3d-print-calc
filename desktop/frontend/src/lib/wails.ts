@@ -50,8 +50,6 @@ export interface MaterialDTO {
   vendor: string;
   colorHex: string;
   note: string;
-  boughtAt: string;
-  archived: boolean;
   density: number;
   diameter: number;
   defaultWeightG: number;
@@ -98,8 +96,6 @@ export interface Material {
   Diameter: number;
   DefaultSpoolWeightG: number;
   Note: string;
-  BoughtAt: string;
-  Archived: boolean;
 }
 
 export interface Printer {

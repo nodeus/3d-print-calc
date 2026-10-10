@@ -169,22 +169,20 @@ func (r *materialsRepo) UpsertByCode(m models.Material) (int64, error) {
 // GetByCode возвращает материал по коду.
 func (r *materialsRepo) GetByCode(code string) (models.Material, error) {
 	var m models.Material
-	var archived int
 	err := r.db.QueryRow(`SELECT id, code, type, vendor, color_hex, density, diameter,
-		default_spool_weight_g, note, bought_at, archived FROM materials WHERE code=?`, code).
+		default_spool_weight_g, note FROM materials WHERE code=?`, code).
 		Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density, &m.Diameter,
-			&m.DefaultSpoolWeightG, &m.Note, &m.BoughtAt, &archived)
+			&m.DefaultSpoolWeightG, &m.Note)
 	if err != nil {
 		return m, fmt.Errorf("ERR_MATERIAL_GET: %w", err)
 	}
-	m.Archived = archived != 0
 	return m, nil
 }
 
 // List возвращает все материалы по коду.
 func (r *materialsRepo) List() ([]models.Material, error) {
 	rows, err := r.db.Query(`SELECT id, code, type, vendor, color_hex, density, diameter,
-		default_spool_weight_g, note, bought_at, archived FROM materials ORDER BY code`)
+		default_spool_weight_g, note FROM materials ORDER BY code`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_MATERIAL_LIST: %w", err)
 	}
@@ -192,12 +190,10 @@ func (r *materialsRepo) List() ([]models.Material, error) {
 	out := []models.Material{}
 	for rows.Next() {
 		var m models.Material
-		var archived int
 		if err := rows.Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density,
-			&m.Diameter, &m.DefaultSpoolWeightG, &m.Note, &m.BoughtAt, &archived); err != nil {
+			&m.Diameter, &m.DefaultSpoolWeightG, &m.Note); err != nil {
 			return nil, fmt.Errorf("ERR_MATERIAL_LIST: %w", err)
 		}
-		m.Archived = archived != 0
 		out = append(out, m)
 	}
 	return out, rows.Err()

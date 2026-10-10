@@ -47,6 +47,8 @@ type Maker struct {
 }
 
 // Material — справочник пластика (код уникален).
+// Значимые дата закупа и архивность живут на катушке (Spool);
+// материал — лишь тип, в котором находятся катушки.
 type Material struct {
 	ID                  int64
 	Code                string // напр. PETG-NIT-W4
@@ -57,8 +59,6 @@ type Material struct {
 	Diameter            float64 // мм, напр. 1.75
 	DefaultSpoolWeightG float64 // вес новых катушек, г (дефолт 1000)
 	Note                string
-	BoughtAt            string // дата закупа, '' = отсутствует
-	Archived            bool   // архивные скрыты из остатков и селекта калькулятора
 }
 
 // Spool — закупочная партия (катушка) с ценой и остатком.
