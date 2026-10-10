@@ -149,6 +149,22 @@ func (c *Client) HistoryAll(ctx context.Context, pageSize int64, onPage func(fet
 	if pageSize <= 0 || pageSize > 500 {
 		pageSize = 250
 	}
+	return c.walkHistory(ctx, pageSize, 0, onPage)
+}
+
+// HistoryRecent забирает N последних работ (новые первыми), не качая всю
+// историю. Тот же постраничный обход и стоп-правила, что в HistoryAll,
+// плюс ранняя остановка при наборе n. n <= 0 — вся история.
+func (c *Client) HistoryRecent(ctx context.Context, n int64, onPage func(fetched, total int)) ([]Job, error) {
+	if n <= 0 {
+		return c.HistoryAll(ctx, 250, onPage)
+	}
+	return c.walkHistory(ctx, 250, n, onPage)
+}
+
+// walkHistory — общий постраничный обход (новые первыми). maxJobs > 0 —
+// остановиться при наборе (для HistoryRecent), иначе идти до конца данных.
+func (c *Client) walkHistory(ctx context.Context, pageSize, maxJobs int64, onPage func(fetched, total int)) ([]Job, error) {
 	const maxPages = 2000 // 2000 × 500 = до 1 млн работ, дальше — точно зациклились
 	out := []Job{}
 	seen := map[string]bool{}
@@ -178,6 +194,13 @@ func (c *Client) HistoryAll(ctx context.Context, pageSize int64, onPage func(fet
 				out = append(out, j)
 				fresh++
 			}
+		}
+		if maxJobs > 0 && int64(len(out)) >= maxJobs {
+			out = out[:maxJobs]
+			if onPage != nil {
+				onPage(len(out), total)
+			}
+			return out, nil
 		}
 		if onPage != nil {
 			onPage(len(out), total)

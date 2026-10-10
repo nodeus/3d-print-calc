@@ -432,7 +432,7 @@ declare global {
           ApplyBackup(): Promise<BackupManifest>;
           ExportJobsCSV(): Promise<string>;
           ExportMaterialsCSV(): Promise<string>;
-          PreviewHistoryCSV(): Promise<ImportReport>;
+          PreviewHistoryCSV(limitRows: number): Promise<ImportReport>;
           ApplyHistoryCSV(): Promise<ImportReport>;
           PreviewMaterialsCSV(): Promise<ImportReport>;
           ApplyMaterialsCSV(): Promise<ImportReport>;
@@ -534,7 +534,7 @@ export const wails = {
   applyBackup: () => api().ApplyBackup(),
   exportJobsCSV: () => api().ExportJobsCSV(),
   exportMaterialsCSV: () => api().ExportMaterialsCSV(),
-  previewHistoryCSV: () => api().PreviewHistoryCSV(),
+  previewHistoryCSV: (limitRows: number) => api().PreviewHistoryCSV(limitRows),
   applyHistoryCSV: () => api().ApplyHistoryCSV(),
   previewMaterialsCSV: () => api().PreviewMaterialsCSV(),
   applyMaterialsCSV: () => api().ApplyMaterialsCSV(),

@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"3dprint-calc/core/importers"
 	"3dprint-calc/core/models"
 	"3dprint-calc/store-sqlite/seed"
 )
@@ -137,7 +139,7 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 	if err := db2.Migrate("../migrations"); err != nil {
 		t.Fatal(err)
 	}
-	rep, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true, nil)
+	rep, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true, 0, nil)
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}
@@ -148,7 +150,7 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 		t.Fatalf("dry-run обязан ничего не писать: %v", n)
 	}
 	// Apply без принтера — ошибка с понятным кодом.
-	if _, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false, nil); err == nil {
+	if _, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false, 0, nil); err == nil {
 		t.Fatal("apply без принтера обязан вернуть ошибку")
 	}
 	// Apply с принтером.
@@ -156,7 +158,7 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	prog, calls := progressCounter(t, 490)
-	rep2, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false, prog)
+	rep2, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false, 0, prog)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -167,7 +169,7 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 		t.Fatal("progress ни разу не вызван")
 	}
 	// Повторный импорт тех же данных: всё существующее, дублей нет.
-	rep3, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true, nil)
+	rep3, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), true, 0, nil)
 	if err != nil {
 		t.Fatalf("reimport: %v", err)
 	}
@@ -306,5 +308,68 @@ func TestImportMaterialsSpools(t *testing.T) {
 	}
 	if rep.New != 0 || rep.Existing != 3 {
 		t.Fatalf("идемпотентность: %+v", rep)
+	}
+}
+
+// TestImportHistoryLimit: лимит берёт N последних по времени старта
+// независимо от порядка строк в файле; 0 — всё.
+func TestImportHistoryLimit(t *testing.T) {
+	db := seedTestDB(t, t.TempDir())
+	if _, err := db.Printers().Save(models.Printer{Name: "K1C", HoursPerDay: 8,
+		LifeYears: 3, CalendarMode: "calendar", AmortMethod: "calendar"}); err != nil {
+		t.Fatal(err)
+	}
+	raw := "filename;type;status;size;start_time;end_time;estimated_time;print_duration;" +
+		"total_duration;filament_total;filament_used;slicer\n" +
+		"b.gcode;job;completed;1;02.10.2026 10:00;02.10.2026 11:00;3600;3600;3600;1000;1000;Orca\n" +
+		"a.gcode;job;completed;1;03.10.2026 10:00;03.10.2026 11:00;3600;3600;3600;1000;1000;Orca\n" +
+		"c.gcode;job;completed;1;01.10.2026 10:00;01.10.2026 11:00;3600;3600;3600;1000;1000;Orca\n"
+	rep, err := db.ImportHistory(strings.NewReader(raw), true, 2, nil)
+	if err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	if rep.Total != 2 || rep.New != 2 {
+		t.Fatalf("report = %+v, хочу total/new = 2", rep)
+	}
+	if _, err := db.ImportHistory(strings.NewReader(raw), false, 2, nil); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	jobs, err := db.Jobs().List(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, j := range jobs {
+		got[j.Filename] = true
+	}
+	if len(got) != 2 || !got["a.gcode"] || !got["b.gcode"] {
+		t.Fatalf("импортированы: %v, хочу a+b (новейшие)", got)
+	}
+	// Лимит 0 — всё.
+	rep0, err := db.ImportHistory(strings.NewReader(raw), true, 0, nil)
+	if err != nil {
+		t.Fatalf("dry-run 0: %v", err)
+	}
+	if rep0.Total != 3 || rep0.New != 1 || rep0.Existing != 2 {
+		t.Fatalf("report 0 = %+v", rep0)
+	}
+}
+
+// TestTakeLastJobs: срез по времени старта, стабильный; N<=0 и N>=len — как есть.
+func TestTakeLastJobs(t *testing.T) {
+	mk := func(fn string, day int) importers.PrintJob {
+		return importers.PrintJob{Filename: fn,
+			StartTime: time.Date(2026, 10, day, 10, 0, 0, 0, time.UTC)}
+	}
+	rows := []importers.PrintJob{mk("b", 2), mk("a", 3), mk("c", 1)}
+	got := takeLastJobs(rows, 2)
+	if len(got) != 2 || got[0].Filename != "a" || got[1].Filename != "b" {
+		t.Fatalf("срез: %+v", got)
+	}
+	if full := takeLastJobs(rows, 0); len(full) != 3 || full[0].Filename != "b" {
+		t.Fatalf("лимит 0 меняет порядок: %+v", full)
+	}
+	if full := takeLastJobs(rows, 99); len(full) != 3 {
+		t.Fatalf("большой лимит: %+v", full)
 	}
 }

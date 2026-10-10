@@ -140,6 +140,8 @@
   let applied: ImportReport | null = $state(null);
   let importing = $state(false);
   let progress = $state({ done: 0, total: 0 });
+  // Лимит последних работ Moonraker (null — пусто, т.е. вся история).
+  let moonLimit: number | null = $state(null);
 
   function blank(): PrinterForm {
     return {
@@ -239,7 +241,7 @@
     error = '';
     applied = null;
     try {
-      report = await wails.moonrakerPreview(p.ID, 100);
+      report = await wails.moonrakerPreview(p.ID, moonLimit ?? 0);
     } catch (e) {
       error = String(e);
     }
@@ -353,6 +355,7 @@
         <input placeholder="http://192.168.1.50:7125" bind:value={urls[p.ID]} />
         <button onclick={() => saveURL(p)}>{$t('common.save')}</button>
         <button onclick={() => ping(p)}>{$t('moon.check')}</button>
+        <input type="number" min="1" step="1" bind:value={moonLimit} placeholder={$t('moon.limit')} title={$t('moon.limit')} />
         <button onclick={() => preview(p)}>{$t('moon.import')}</button>
       </div>
     {/if}
