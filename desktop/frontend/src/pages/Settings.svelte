@@ -555,7 +555,7 @@
   <h3>{$t('set.calcdef')}</h3>
   <p class="note">{$t('set.calcdef_note')}</p>
   {#each defGroups as g, gi}
-    <details open={gi === 0}>
+    <details class="acc" open={gi === 0}>
       <summary>{$t(g.label)}</summary>
       <div class="defs">
         {#each g.keys as d}
@@ -579,7 +579,7 @@
 <div class="card">
   <h3>{$t('set.columns')} · {colSel.length}/{allColKeys.length}</h3>
   {#each colGroups as g, gi}
-    <details open={gi === 0}>
+    <details class="acc" open={gi === 0}>
       <summary>{$t(g.label)} · {g.keys.filter((k) => colSel.includes(k)).length}/{g.keys.length}</summary>
       <div class="checks">
         {#each g.keys as k}
@@ -667,7 +667,7 @@
     </button>
   </div>
   <h4>{$t('set.theme_dark_presets')} ({THEME_PRESET_DARK.length})</h4>
-  <details>
+  <details class="acc">
     <summary>{$t('set.theme_show')}</summary>
   <div class="swatches">
     {#each THEME_PRESET_DARK as p}
@@ -679,7 +679,7 @@
   </div>
   </details>
   <h4>{$t('set.theme_light_presets')} ({THEME_PRESET_LIGHT.length})</h4>
-  <details>
+  <details class="acc">
     <summary>{$t('set.theme_show')}</summary>
   <div class="swatches">
     {#each THEME_PRESET_LIGHT as p}

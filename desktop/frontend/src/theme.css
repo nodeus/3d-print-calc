@@ -79,6 +79,57 @@ label {
   gap: 3px;
 }
 
+/* Спокойные микроанимации (всё ≤200мс, ease-out), кроме вспышки строки.
+   Печать и prefers-reduced-motion — без движения. */
+@keyframes ui-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ui-pop {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ui-row-flash {
+  0% { background-color: var(--sel-bg); }
+  100% { background-color: transparent; }
+}
+tr.row-flash > td {
+  animation: ui-row-flash 600ms ease-out;
+}
+/* Появление содержимого вкладки при переключении (перемонтирование {#key}). */
+.tab-fade {
+  animation: ui-fade-in 120ms ease-out;
+}
+/* Плавное раскрытие <details class="acc"> (без поддержки — просто откроется). */
+:root {
+  interpolate-size: allow-keywords;
+}
+details.acc::details-content {
+  block-size: 0;
+  overflow: hidden;
+  transition:
+    block-size 180ms ease-out,
+    content-visibility 180ms allow-discrete;
+}
+details.acc[open]::details-content {
+  block-size: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+@media print {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 @media print {
   :root {
     --bg: #ffffff;
