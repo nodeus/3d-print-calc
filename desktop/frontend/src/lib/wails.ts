@@ -83,6 +83,7 @@ export interface SpoolDTO {
   boughtAt: string;
   weightInitG: number;
   weightLeftG: number;
+  leftG?: number;
   archived: boolean;
 }
 

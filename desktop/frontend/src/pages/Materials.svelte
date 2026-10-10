@@ -173,7 +173,8 @@
       case 'date': return s.boughtAt || '—';
       case 'price': return money(s.price, s.currency, 'ru');
       case 'weight': return String(s.weightInitG);
-      case 'left': return String(s.weightLeftG);
+      // Остаток — вычисляемый (партия минус расход по истории), не поле БД.
+      case 'left': return String(Math.round(s.leftG ?? s.weightLeftG));
       case 'flag': {
         const star = calcSpool(list)?.id === s.id ? `★ ${$t('spool.calc')}` : '';
         const arch = s.archived ? ` · ${$t('spool.archived')}` : '';
@@ -440,7 +441,7 @@
                       {:else if k === 'weight'}
                         <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
                       {:else if k === 'left'}
-                        <td class="n">{s.weightLeftG}</td>
+                        <td class="n">{Math.round(s.leftG ?? s.weightLeftG)}</td>
                       {:else if k === 'flag'}
                         <td><input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} />{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
                       {/if}

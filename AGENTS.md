@@ -147,7 +147,10 @@ spools(material_id, price, currency, bought_at, weight_left_g, spool_no),
 materials.code правится с переписью снапшота (`json_replace`);
 дата закупа и архивность — только spools.bought_at/spools.archived
 (остатки, цена, селект); колонки materials.bought_at/materials.archived
-удалены миграцией `0014` (были мертвы с `0011`), printers(...,
+удалены миграцией `0014` (были мертвы с `0011`).
+Остаток катушки — вычисляемый (`SpoolUsedG`: партия минус Σ веса работ,
+атрибуция как в `SpoolStats`); хранимое `spools.weight_left_g` в показе
+не участвует (автосписания нет), printers(...,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),

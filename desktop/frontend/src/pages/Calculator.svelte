@@ -595,7 +595,7 @@
             {#if (m.spools ?? []).some((s) => !s.archived || s.id === spoolId)}
               <optgroup label={m.code}>
                 {#each (m.spools ?? []).filter((s) => !s.archived || s.id === spoolId) as s}
-                  <option value={s.id}>{m.code}-{s.spoolNo || '?'} — {money(s.price, s.currency, $locale)}/кг{#if s.weightLeftG > 0}, {Math.round(s.weightLeftG)}{/if}</option>
+                  <option value={s.id}>{m.code}-{s.spoolNo || '?'} — {money(s.price, s.currency, $locale)}/кг{#if (s.leftG ?? s.weightLeftG) > 0}, {Math.round(s.leftG ?? s.weightLeftG)}{/if}</option>
                 {/each}
               </optgroup>
             {/if}
