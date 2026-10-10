@@ -6,6 +6,7 @@
   import { setBaseSym } from '../lib/currency';
   import { user, isAdmin, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { THEME_PRESET_DARK, THEME_PRESET_LIGHT, applyTheme, persistTheme } from '../lib/theme';
   import { saveMySettingsPatch, mySettings } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
@@ -97,7 +98,6 @@
   ];
   const defKeys = defGroups.flatMap((g) => g.keys);
   let defVals: Record<string, string> = $state({});
-  let defMsg = $state(false);
 
   function loadCalcDefaults() {
     const saved = (get(mySettings).calcDefaults ?? {}) as Record<string, unknown>;
@@ -125,8 +125,7 @@
     try {
       await saveMySettingsPatch({ calcDefaults: out });
       applyCalcDefaults(out);
-      defMsg = true;
-      setTimeout(() => (defMsg = false), 2500);
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -134,6 +133,7 @@
 
   async function resetCalcDefaults() {
     error = '';
+    if (!(await askConfirm($t('set.calcdef_reset_q')))) return;
     try {
       await saveMySettingsPatch({ calcDefaults: {} });
       applyCalcDefaults({});
@@ -146,7 +146,6 @@
   // Строк на странице списка заказов и истории.
   let ordersPerPage = $state(20);
   let historyPerPage = $state(50);
-  let pageMsg = $state(false);
 
   function loadOrdersPerPage() {
     const v = get(mySettings).ordersPerPage;
@@ -161,8 +160,7 @@
     historyPerPage = Math.max(1, Math.round(Number(historyPerPage)) || 50);
     try {
       await saveMySettingsPatch({ ordersPerPage, historyPerPage });
-      pageMsg = true;
-      setTimeout(() => (pageMsg = false), 2500);
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -178,7 +176,6 @@
   ];
   const allColKeys = colGroups.flatMap((g) => g.keys);
   let colSel: string[] = $state([...DEFAULT_COLS]);
-  let colMsg = $state(false);
 
   function colLabel(key: string): string {
     const map: Record<string, string> = {
@@ -223,8 +220,7 @@
       await wails.setHistoryColumns(ordered);
       await saveMySettingsPatch({ historyColumns: ordered });
       colSel = ordered;
-      colMsg = true;
-      setTimeout(() => (colMsg = false), 2500);
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -493,7 +489,7 @@
       <th class="no-print"></th>
     </tr></thead>
     <tbody>
-      {#each ratesShown as r}<tr>{#each fxOrd as k}<td class:n={fxNum(k)}>{fxText(r, k)}</td>{/each}<td class="no-print"><button onclick={() => removeRate(r)}>✕</button></td></tr>{/each}
+      {#each ratesShown as r}<tr>{#each fxOrd as k}<td class:n={fxNum(k)}>{fxText(r, k)}</td>{/each}<td class="no-print"><button onclick={() => removeRate(r)} aria-label={$t('common.delete_q')}>✕</button></td></tr>{/each}
     </tbody>
   </table>
   </div>
@@ -545,7 +541,6 @@
     <button onclick={saveCalcDefaults}>{$t('common.save')}</button>
     <button onclick={resetCalcDefaults}>{$t('set.calcdef_reset')}</button>
   </div>
-  {#if defMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
 </div>
 
 <div class="card">
@@ -567,7 +562,6 @@
       <button onclick={() => { colSel = [...DEFAULT_COLS]; }}>{$t('set.col_reset')}</button>
     </div>
   {/if}
-  {#if colMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
 </div>
 <div class="card">
   <h3>{$t('set.orderspage')}</h3>
@@ -576,7 +570,6 @@
     <label>{$t('set.orderspage_history')}<input type="number" min="1" max="500" step="1" bind:value={historyPerPage} /></label>
     <button onclick={saveOrdersPerPage}>{$t('common.save')}</button>
   </div>
-  {#if pageMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
 </div>
 {:else if setTab === 'data'}
 <div class="card">
@@ -600,14 +593,12 @@
     <button onclick={() => run(() => wails.previewHistoryCSV(csvLimit ?? 0), (r) => (csvReport = r))}>{$t('set.csv_in')}</button>
     <input type="number" min="1" step="1" bind:value={csvLimit} placeholder={$t('set.csv_limit')} title={$t('set.csv_limit')} style={`width:${$t('set.csv_limit').length + 5}ch`} />
     {#if csvReport?.dryRun}<button class="warn" onclick={applyCSV} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
+    <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
+    {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
   </div>
   {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
   {#if csvReport}<p>{$t('set.csv_preview')}: total {csvReport.total}, new {csvReport.new}, existing {csvReport.existing}</p>{/if}
   {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs}, {$t('set.csv_spool_stubs')} {csvApplied.spoolStubs ?? 0})</p>{/if}
-  <div class="row">
-    <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
-    {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
-  </div>
   {#if matsReport}<p>{$t('set.csv_preview')}: total {matsReport.total}, new {matsReport.new}, existing {matsReport.existing}</p>{/if}
   {#if matsApplied}<p class="ok">{$t('set.csv_done')}: +{matsApplied.new}</p>{/if}
 </div>

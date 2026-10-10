@@ -148,7 +148,7 @@
             <td>{u.login}</td>
           {/if}
         {/each}
-        <td class="no-print"><button onclick={() => remove(u)}>✕</button></td>
+        <td class="no-print"><button onclick={() => remove(u)} aria-label={$t('common.delete_q')}>✕</button></td>
       </tr>
     {/each}
   </tbody>

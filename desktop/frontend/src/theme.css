@@ -64,6 +64,20 @@ button {
   color: var(--btn-fg);
   border: 1px solid var(--btn-border);
 }
+button:not(:disabled):active {
+  filter: brightness(0.9);
+}
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-color: color-mix(in srgb, var(--accent) 65%, var(--input-bg, #ffffff));
+  outline-offset: 1px;
+}
+/* Зазор подписи над полем: рамка фокуса не должна налезать на текст.
+   Действует только на flex/grid-контейнеры; label.check не задет
+   (у него свой gap с большей специфичностью). */
+label {
+  gap: 3px;
+}
 
 @media print {
   :root {

@@ -415,7 +415,12 @@
   }
 
   async function addItem() {
-    if (!detail || !itemTitle.trim()) return;
+    if (!detail) return;
+    error = '';
+    if (!itemTitle.trim()) {
+      error = $t('ord.need_title');
+      return;
+    }
     try {
       await wails.addOrderItem({
         orderId: detail.order.ID, jobId: 0, title: itemTitle.trim(),
@@ -432,7 +437,12 @@
   }
 
   async function addPay() {
-    if (!detail || (payAmount ?? 0) <= 0) return;
+    if (!detail) return;
+    error = '';
+    if ((payAmount ?? 0) <= 0) {
+      error = $t('ord.need_amount');
+      return;
+    }
     try {
       await wails.addPayment(detail.order.ID, payItemId, Math.round((payAmount ?? 0) * 100), payNote);
       payAmount = null;
@@ -513,7 +523,7 @@
 
 {#if error}<p class="err">{error}</p>{/if}
 {#if $customerFilter}
-  <p class="filterchip no-print">{$t('ord.filtered_by')}: {custName($customerFilter)} <button onclick={clearCustomerFilter}>✕</button></p>
+  <p class="filterchip no-print">{$t('ord.filtered_by')}: {custName($customerFilter)} <button onclick={clearCustomerFilter} aria-label={$t('common.clear')}>✕</button></p>
 {/if}
 <div class="cols">
   <section>
@@ -548,6 +558,7 @@
       </tbody>
     </table>
     </div>
+    {#if !rows.length}<p class="note">{$t('ord.empty_orders')}</p>{/if}
     <div class="row no-print" style="margin-top:6px;align-items:center;">
       <span class="count">{$t('hist.shown')}: {paged.length} / {visibleRows.length} / {rows.length}</span>
       <span class="pager">
@@ -566,8 +577,8 @@
           <select value={detail.order.Status} onchange={(e) => setStatus(e.currentTarget.value)}>
             {#each statuses as s}<option value={s}>{$t('st.' + s)}</option>{/each}
           </select>
-          <button onclick={startEditHead}>✎</button>
-          <button onclick={removeOrder}>✕</button>
+          <button onclick={startEditHead} aria-label={$t('common.edit')}>✎</button>
+          <button onclick={removeOrder} aria-label={$t('common.delete_q')}>✕</button>
         </div>
         {#if editOpen}
           <div class="row no-print">
@@ -605,7 +616,7 @@
           {#each shownItems(detail.items) as it, i}<tr>
             <td>{i + 1}</td>
             {#each itemOrd as k}<td class:n={itemNum(k)} title={itemBreakdown(it, k)}>{itemText(it, k)}</td>{/each}
-            <td class="no-print">{#if canWrite($user)}<button onclick={() => fillItemPay(it)} title={$t('ord.pay_item')}>₽</button> <button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)}>✕</button>{/if}</td>
+            <td class="no-print">{#if canWrite($user)}<button onclick={() => fillItemPay(it)} title={$t('ord.pay_item')} aria-label={$t('ord.pay_item')}>₽</button> <button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')} aria-label={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
           </tr>{/each}
         </tbody>
       </table>
@@ -642,6 +653,8 @@
         </div>
       {/if}
     </section>
+  {:else}
+    <p class="note">{$t('ord.no_detail')}</p>
   {/if}
 </div>
 

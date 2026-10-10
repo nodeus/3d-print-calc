@@ -406,6 +406,7 @@
 <div class="grid">
   <section class="card">
     <h3>{$t('rep.revenue')}</h3>
+    {#if !revenueSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapRev}>
     {#if dragTable === 'repRevenue' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repRevenue' && dragKey != null}>
@@ -424,6 +425,7 @@
   </section>
   <section class="card">
     <h3>{$t('rep.debts')}</h3>
+    {#if !debtsSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapDebt}>
     {#if dragTable === 'repDebts' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repDebts' && dragKey != null}>
@@ -442,6 +444,7 @@
   </section>
   <section class="card">
     <h3>{$t('rep.topmats')}</h3>
+    {#if !topsSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapTop}>
     {#if dragTable === 'repTopmats' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repTopmats' && dragKey != null}>
@@ -460,6 +463,7 @@
   </section>
   <section class="card">
     <h3>{$t('rep.load')}</h3>
+    {#if !loadSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapLoad}>
     {#if dragTable === 'repLoad' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repLoad' && dragKey != null}>
@@ -478,6 +482,7 @@
   </section>
   <section class="card wide">
     <h3>{$t('rep.spools')}</h3>
+    {#if !spoolsSorted.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="twrap" bind:this={wrapSpool}>
     {#if dragTable === 'repSpools' && dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
     <table class="tw" class:dragging={dragTable === 'repSpools' && dragKey != null}>
@@ -500,6 +505,7 @@
   </section>
   <section class="card wide">
     <h3>{$t('rep.purchases')}</h3>
+    {#if !purShown.length}<p class="note">{$t('rep.empty')}</p>{/if}
     <div class="row no-print">
       {#each [['day', 'rep.grp_day'], ['week', 'rep.grp_week'], ['month', 'rep.grp_month'], ['year', 'rep.grp_year']] as [g, label]}
         <button class:on={purGroup === g} onclick={() => (purGroup = g as typeof purGroup)}>{$t(label)}</button>
@@ -542,4 +548,5 @@
   .row button.on { outline: 2px solid var(--accent); font-weight: bold; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
   .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; vertical-align: middle; print-color-adjust: exact; }
+  .note { color: var(--muted); font-size: 13px; }
 </style>

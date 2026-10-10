@@ -428,7 +428,7 @@
           {/each}
           <td class="no-print">
             <button onclick={() => toggleSpools(m)} title={$t('spool.title')}>{expanded === m.id ? '▾' : '▸'} {(spools[m.id] ?? []).length || ''}</button>
-            {#if canWrite($user)}<button onclick={() => startEdit(m)}>✎</button> <button onclick={() => remove(m)}>✕</button>{/if}
+            {#if canWrite($user)}<button onclick={() => startEdit(m)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => remove(m)} aria-label={$t('common.delete_q')}>✕</button>{/if}
           </td>
         </tr>
       {/if}
@@ -474,7 +474,7 @@
                     {#each spoolOrd as k}
                       <td class:n={spoolNum(k)}>{spoolText(s, spools[m.id] ?? [], k)}</td>
                     {/each}
-                    <td class="no-print">{#if canWrite($user)}<button onclick={() => editSpool(s)}>✎</button> <button onclick={() => removeSpool(s)}>✕</button>{/if}</td>
+                    <td class="no-print">{#if canWrite($user)}<button onclick={() => editSpool(s)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => removeSpool(s)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
                   </tr>
                 {/if}
               {/each}

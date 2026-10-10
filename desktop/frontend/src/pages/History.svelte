@@ -349,6 +349,14 @@
   let statuses = $derived([...new Set(jobs.map((j) => j.Status))].sort());
   let origins = $derived([...new Set(jobs.map((j) => j.Origin || 'import'))].sort());
 
+  // Подпись статуса для фильтра: известные — перевод, чужие строки принтера — как есть.
+  function statusLabel(status: string): string {
+    if (status === 'completed') return $t('jobst.completed');
+    if (status === 'cancelled') return $t('jobst.cancelled');
+    if (status === 'error') return $t('jobst.error');
+    return status;
+  }
+
   // Подпись источника для фильтра (как originBadge, без пометки «изменена»).
   function originLabel(origin: string): string {
     if (origin === 'manual') return $t('hist.manual');
@@ -726,7 +734,7 @@
   <input placeholder={$t('hist.search')} bind:value={query} oninput={() => (page = 0)} />
   <select bind:value={statusFilter} onchange={() => (page = 0)}>
     <option value="">— {$t('hist.status')} —</option>
-    {#each statuses as s}<option value={s}>{s}</option>{/each}
+    {#each statuses as s}<option value={s}>{statusLabel(s)}</option>{/each}
   </select>
   <select bind:value={originFilter} onchange={() => (page = 0)}>
     <option value="">— {$t('hist.origin')} —</option>
@@ -774,9 +782,9 @@
         <td class="no-print">
           <button onclick={() => toCalc(j)}>{$t('hist.to_calc')}</button>
           {#if canWrite($user)}
-            <button onclick={() => startEdit(j)} title={$t('hist.edit_title')}>✎</button>
+            <button onclick={() => startEdit(j)} title={$t('hist.edit_title')} aria-label={$t('hist.edit_title')}>✎</button>
             {#if j.Origin === 'manual' || j.Edited}
-              <button onclick={() => remove(j)} title={j.Origin === 'manual' ? $t('common.delete_q') : $t('common.revert_q')}>{j.Origin === 'manual' ? '✕' : '↩'}</button>
+              <button onclick={() => remove(j)} title={j.Origin === 'manual' ? $t('common.delete_q') : $t('common.revert_q')} aria-label={j.Origin === 'manual' ? $t('common.delete_q') : $t('common.revert_q')}>{j.Origin === 'manual' ? '✕' : '↩'}</button>
             {/if}
           {/if}
         </td>
