@@ -217,7 +217,7 @@ func TestDeleteJobOriginGuard(t *testing.T) {
 		t.Fatal("удаление чистого import обязано блокироваться")
 	}
 	// Правим import → edited=1 → удаление = откат, строка остаётся.
-	if err := db.Jobs().UpdateManual(models.Job{ID: imp, Filename: "i.gcode", StartAt: "2026-01-01 10:00", WeightG: 999}, "", store.JobCalcInput{Copies: 1}); err != nil {
+	if err := db.Jobs().UpdateManual(models.Job{ID: imp, Filename: "i.gcode", StartAt: "2026-01-01 10:00", WeightG: 999}, "", 0, store.JobCalcInput{Copies: 1}); err != nil {
 		t.Fatalf("правка import: %v", err)
 	}
 	if err := db.Jobs().DeleteJob(imp); err != nil {

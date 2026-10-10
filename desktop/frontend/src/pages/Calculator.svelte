@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type PrinterDTO, type Order, type JobDTO, type Customer } from '../lib/wails';
+  import { wails, type CalcInput, type CalcResult, type MaterialDTO, type SpoolDTO, type PrinterDTO, type Order, type JobDTO, type Customer } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
   import { money } from '../lib/format';
   import { prefillJob } from '../lib/prefill';
@@ -53,11 +53,33 @@
   let addedInfo = $state('');
 
   let result = $state<CalcResult | null>(null);
-  let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
+  // Выбранная катушка: id; материал выводится из неё. 0 — не выбрана.
+  let spoolId = $state(0);
+
+  function spoolOf(id: number) {
+    for (const m of materials) {
+      const s = (m.spools ?? []).find((x) => x.id === id);
+      if (s) return { mat: m, spool: s };
+    }
+    return null;
+  }
+
+  // Живые катушки для селекта: свои данные + подпись КОД-N.
+  let selSpool = $derived(spoolOf(spoolId));
+  let pricePerKg = $derived(selSpool?.spool.price ?? materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
   let density = $derived(materials.find((m) => m.code === matCode)?.density ?? 1.27);
-  // Архив — уровень катушки: виден материал с живыми катушками,
-  // без катушек вообще или уже выбранный.
-  let activeMaterials = $derived(materials.filter((m) => m.spoolCount === 0 || m.hasLiveSpool || m.code === matCode));
+  // Материалы с живыми катушками (плюс уже выбранный для совместимости).
+  let activeMaterials = $derived(materials.filter((m) => m.hasLiveSpool || m.code === matCode));
+  // Опции селекта: живые катушки видимых материалов + текущая (если архивная).
+  let spoolOptions = $derived.by(() => {
+    const out: { mat: MaterialDTO; spool: SpoolDTO }[] = [];
+    for (const m of activeMaterials) {
+      for (const s of m.spools ?? []) {
+        if (!s.archived || s.id === spoolId) out.push({ mat: m, spool: s });
+      }
+    }
+    return out;
+  });
   let historyJobs: JobDTO[] = $state([]);
   let historyId = $state(0);
   let stubWarn = $state('');
@@ -91,6 +113,14 @@
     roundStep?: number;
   }
 
+  function snapSpoolNo(j: JobDTO): number {
+    try {
+      return Number(JSON.parse(j.CostSnapshot)?.input?.spoolNo) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
   function snapInput(j: JobDTO): SnapInput {
     try {
       return JSON.parse(j.CostSnapshot)?.input ?? {};
@@ -120,6 +150,22 @@
       matCode = code;
     } else if (code) {
       stubWarn = `${code}: ${$t('calc.stub_warn')}`;
+    }
+    // Катушка из работы: явный линк, иначе номер из снапшота, иначе первая живая.
+    spoolId = 0;
+    if (j.SpoolID && spoolOf(j.SpoolID)) {
+      const found = spoolOf(j.SpoolID)!;
+      spoolId = found.spool.id;
+      matCode = found.mat.code;
+    } else if (code) {
+      const no = snapSpoolNo(j);
+      const m = materials.find((x) => x.code === code);
+      const hit = no > 0 ? (m?.spools ?? []).find((s) => s.spoolNo === no && !s.archived) : undefined;
+      if (hit) {
+        spoolId = hit.id;
+      } else {
+        pickSpool();
+      }
     }
     // Принтер — только привязка (ставки берём из снапшота, они точнее текущих).
     if (j.PrinterID && printers.some((p) => p.ID === j.PrinterID)) {
@@ -181,10 +227,41 @@
     };
   });
 
+  // pickSpool чинит выбор после загрузки справочника/работы:
+  // валидный оставляем (и matCode из него), иначе первая живая текущего
+  // материала, иначе первая живая вообще.
+  function pickSpool() {
+    const found = spoolId ? spoolOf(spoolId) : null;
+    if (found) {
+      matCode = found.mat.code;
+      return;
+    }
+    spoolId = 0;
+    const m = materials.find((x) => x.code === matCode);
+    const live = (m?.spools ?? []).find((s) => !s.archived);
+    if (live) {
+      spoolId = live.id;
+      return;
+    }
+    const any = spoolOptions[0];
+    if (any) {
+      spoolId = any.spool.id;
+      matCode = any.mat.code;
+    }
+  }
+
+  function onSpoolChange(id: number) {
+    spoolId = id;
+    const found = spoolOf(id);
+    if (found) matCode = found.mat.code;
+    recalc();
+  }
+
   // pullForm переносит стор формы в локальные поля (монтирование, сброс).
   function pullForm() {
     const saved = get(calcForm);
     matCode = saved.matCode;
+    spoolId = saved.spoolId ?? 0;
     printerId = saved.printerId;
     timeH = saved.timeH;
     timeM = saved.timeM;
@@ -261,6 +338,7 @@
       if (orders.length) orderId = orders[0].ID;
       historyJobs = (await wails.jobs(0)) ?? [];
       if (materials.length && !materials.some((m) => m.code === matCode)) matCode = materials[0].code;
+      pickSpool();
       if (!printers.some((p) => p.ID === printerId)) {
         printerId = 0;
         if (printers.length) selectPrinter(printers[0].ID);
@@ -334,7 +412,7 @@
   // Время — десятичными часами.
   function persist() {
     calcForm.set({
-      matCode, printerId, timeH, timeM, weightG, filamentMM,
+      matCode, spoolId, printerId, timeH, timeM, weightG, filamentMM,
       tariff, powerKW, amortPerHour, opRate,
       prepH: joinHours(prep.h, prep.m), postH: joinHours(post.h, post.m),
       designerRate, modelH: joinHours(model.h, model.m), modelPrice, extraMat, failPct,
@@ -384,7 +462,7 @@
       await wails.saveJob({
         filename,
         printerId,
-        spoolId: 0, // резолвится бэкендом по материалу
+        spoolId,
         status: 'completed',
         totalSec: Math.round((timeH ?? 0) * 3600 + (timeM ?? 0) * 60),
         weightG: weightG ?? 0,
@@ -499,6 +577,7 @@
 <div class="grid">
   <section class="card">
     {#if !materials.length}<p class="warn">{$t('calc.no_materials')}</p>{/if}
+    {#if materials.length && !spoolOptions.length}<p class="warn">{$t('calc.no_spools')}</p>{/if}
     {#if !printers.length}<p class="warn">{$t('calc.no_printers')}</p>{/if}
     <div class="row">
       <label>{$t('calc.job')}
@@ -510,9 +589,17 @@
     </div>
     {#if stubWarn}<p class="warn">{stubWarn}</p>{/if}
     <div class="row">
-      <label>{$t('calc.material')}
-        <select bind:value={matCode} onchange={recalc}>
-          {#each activeMaterials as m}<option value={m.code}>{m.code} — {money(m.pricePerKg, m.currency, $locale)}/кг</option>{/each}
+      <label>{$t('calc.spool')}
+        <select value={spoolId} onchange={(e) => onSpoolChange(Number(e.currentTarget.value))}>
+          {#each activeMaterials as m}
+            {#if (m.spools ?? []).some((s) => !s.archived || s.id === spoolId)}
+              <optgroup label={m.code}>
+                {#each (m.spools ?? []).filter((s) => !s.archived || s.id === spoolId) as s}
+                  <option value={s.id}>{m.code}-{s.spoolNo || '?'} — {money(s.price, s.currency, $locale)}/кг{#if s.weightLeftG > 0}, {Math.round(s.weightLeftG)}{/if}</option>
+                {/each}
+              </optgroup>
+            {/if}
+          {/each}
         </select>
       </label>
       <label>{$t('calc.printer')}

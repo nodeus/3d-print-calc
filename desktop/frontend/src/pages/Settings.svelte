@@ -169,7 +169,7 @@
   // Колонки истории: группы-аккордеоны, выбор локально, применение кнопкой.
   const DEFAULT_COLS = ['filename', 'start', 'status', 'duration', 'weight', 'cost', 'price', 'origin'];
   const colGroups: { id: string; label: string; keys: string[] }[] = [
-    { id: 'main', label: 'set.colgroup_main', keys: ['filename', 'start', 'status', 'material', 'slicer', 'origin'] },
+    { id: 'main', label: 'set.colgroup_main', keys: ['filename', 'start', 'status', 'material', 'spool', 'slicer', 'origin'] },
     { id: 'files', label: 'set.colgroup_files', keys: ['end', 'duration', 'weight', 'length', 'size', 'filament'] },
     { id: 'calc', label: 'set.colgroup_calc', keys: ['cost', 'price', 'tariff', 'power', 'amort', 'maint', 'purge', 'oprate', 'prep', 'post', 'designer', 'modelh', 'modelprice', 'extra', 'fees'] },
     { id: 'totals', label: 'set.colgroup_totals', keys: ['fail', 'marginprofit', 'margindev', 'copies', 'vat', 'round'] },
@@ -184,7 +184,7 @@
       status: $t('hist.status'), duration: $t('hist.duration'), weight: $t('hist.weight'),
       length: $t('hist.length'), size: $t('hist.size'), filament: $t('hist.filament'),
       slicer: $t('hist.slicer'), cost: $t('hist.cost'), price: $t('calc.price'),
-      origin: $t('hist.origin'), material: $t('calc.material'), tariff: $t('calc.tariff'),
+      origin: $t('hist.origin'), material: $t('calc.material'), spool: $t('calc.spool'), tariff: $t('calc.tariff'),
       power: $t('calc.power'), amort: $t('calc.amort'), maint: $t('calc.maint'),
       purge: $t('calc.purge'), oprate: $t('calc.op_rate'), prep: $t('calc.prep'),
       post: $t('calc.post'), designer: $t('calc.designer_rate'), modelh: $t('calc.model_h'),
