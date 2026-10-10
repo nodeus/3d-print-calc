@@ -72,6 +72,12 @@ button:not(:disabled):active {
   outline-color: color-mix(in srgb, var(--accent) 65%, var(--input-bg, #ffffff));
   outline-offset: 1px;
 }
+/* Зазор подписи над полем: рамка фокуса не должна налезать на текст.
+   Действует только на flex/grid-контейнеры; label.check не задет
+   (у него свой gap с большей специфичностью). */
+label {
+  gap: 3px;
+}
 
 @media print {
   :root {
