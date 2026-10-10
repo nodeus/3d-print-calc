@@ -355,8 +355,8 @@
         <input placeholder="http://192.168.1.50:7125" bind:value={urls[p.ID]} />
         <button onclick={() => saveURL(p)}>{$t('common.save')}</button>
         <button onclick={() => ping(p)}>{$t('moon.check')}</button>
-        <input type="number" min="1" step="1" bind:value={moonLimit} placeholder={$t('moon.limit')} title={$t('moon.limit')} style={`width:${$t('moon.limit').length + 5}ch`} />
         <button onclick={() => preview(p)}>{$t('moon.import')}</button>
+        <input type="number" min="1" step="1" bind:value={moonLimit} placeholder={$t('moon.limit')} title={$t('moon.limit')} style={`width:${$t('moon.limit').length + 5}ch`} />
       </div>
     {/if}
     {#if status[p.ID]}<p class="ok">Moonraker {status[p.ID]}</p>{/if}
@@ -406,7 +406,7 @@
   {#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs}, {$t('set.csv_spool_stubs')} {applied.spoolStubs ?? 0})</p>{/if}
 
 <style>
-  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; margin-bottom: 8px; max-width: 720px; }
+  .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
   h4 { margin: 10px 0 6px; font-size: 13px; color: var(--muted); }
   .row { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
   label { display: flex; flex-direction: column; font-size: 12px; flex: 1; min-width: 120px; }

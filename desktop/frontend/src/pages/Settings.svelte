@@ -597,8 +597,8 @@
   <div class="row">
     <button onclick={() => run(wails.exportJobsCSV, (p) => (backupPath = p))}>{$t('set.csv_jobs_out')}</button>
     <button onclick={() => run(wails.exportMaterialsCSV, (p) => (backupPath = p))}>{$t('set.csv_mats_out')}</button>
-    <input type="number" min="1" step="1" bind:value={csvLimit} placeholder={$t('set.csv_limit')} title={$t('set.csv_limit')} style={`width:${$t('set.csv_limit').length + 5}ch`} />
     <button onclick={() => run(() => wails.previewHistoryCSV(csvLimit ?? 0), (r) => (csvReport = r))}>{$t('set.csv_in')}</button>
+    <input type="number" min="1" step="1" bind:value={csvLimit} placeholder={$t('set.csv_limit')} title={$t('set.csv_limit')} style={`width:${$t('set.csv_limit').length + 5}ch`} />
     {#if csvReport?.dryRun}<button class="warn" onclick={applyCSV} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
   </div>
   {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
