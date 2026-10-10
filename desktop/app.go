@@ -20,21 +20,22 @@ var migrationsFS embed.FS
 
 // MaterialDTO — материал с ценой первой катушки для калькулятора.
 type MaterialDTO struct {
-	ID             int64   `json:"id"`
-	Code           string  `json:"code"`
-	Type           string  `json:"type"`
-	Vendor         string  `json:"vendor"`
-	ColorHex       string  `json:"colorHex"`
-	Note           string  `json:"note"`
-	BoughtAt       string  `json:"boughtAt"`
-	Archived       bool    `json:"archived"`
-	Density        float64 `json:"density"`
-	Diameter       float64 `json:"diameter"`
-	DefaultWeightG float64 `json:"defaultWeightG"`
-	PricePerKg     float64 `json:"pricePerKg"`
-	Currency       string  `json:"currency"`
-	SpoolID        int64   `json:"spoolId"`
-	SpoolLeftG     float64 `json:"spoolLeftG"`
+	ID             int64      `json:"id"`
+	Code           string     `json:"code"`
+	Type           string     `json:"type"`
+	Vendor         string     `json:"vendor"`
+	ColorHex       string     `json:"colorHex"`
+	Note           string     `json:"note"`
+	Density        float64    `json:"density"`
+	Diameter       float64    `json:"diameter"`
+	DefaultWeightG float64    `json:"defaultWeightG"`
+	PricePerKg     float64    `json:"pricePerKg"`
+	Currency       string     `json:"currency"`
+	SpoolID        int64      `json:"spoolId"`
+	SpoolLeftG     float64    `json:"spoolLeftG"`
+	HasLiveSpool   bool       `json:"hasLiveSpool"` // есть неархивные катушки
+	SpoolCount     int        `json:"spoolCount"`   // всего катушек
+	Spools         []SpoolDTO `json:"spools"`       // катушки для выбора (пусто = нет)
 }
 
 // GetMaterials возвращает справочник с ценами.
@@ -44,18 +45,32 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 		return nil, err
 	}
 	out := make([]MaterialDTO, 0, len(mats))
+	used, err := a.db.SpoolUsedG()
+	if err != nil {
+		return nil, err
+	}
 	for _, m := range mats {
 		dto := MaterialDTO{
 			ID: m.ID, Code: m.Code, Type: m.Type, Vendor: m.Vendor,
 			ColorHex: m.ColorHex, Note: m.Note, DefaultWeightG: m.DefaultSpoolWeightG,
 			Density: m.Density, Diameter: m.Diameter, Currency: "RUB",
-			BoughtAt: m.BoughtAt, Archived: m.Archived,
+			Spools: []SpoolDTO{},
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
 			dto.PricePerKg = float64(spools[0].Price) / 100
 			dto.Currency = spools[0].Currency
 			dto.SpoolID = spools[0].ID
 			dto.SpoolLeftG = spools[0].WeightLeftG
+			dto.SpoolCount = len(spools)
+			dto.Spools = make([]SpoolDTO, 0, len(spools))
+			for _, s := range spools {
+				d := toSpoolDTO(s)
+				d.LeftG = spoolLeftG(s, used)
+				dto.Spools = append(dto.Spools, d)
+				if !s.Archived {
+					dto.HasLiveSpool = true
+				}
+			}
 		}
 		out = append(out, dto)
 	}
@@ -125,7 +140,8 @@ func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG flo
 	if pricePerKg > 0 {
 		if _, err := a.db.Materials().AddSpool(models.Spool{
 			MaterialID: id, Price: int64(pricePerKg*100 + 0.5),
-			Currency: "RUB", FxRate: 1, WeightInitG: weightG, WeightLeftG: weightG,
+			Currency: "RUB", FxRate: 1, BoughtAt: time.Now().Format("2006-01-02"),
+			WeightInitG: weightG, WeightLeftG: weightG,
 		}); err != nil {
 			return 0, err
 		}
@@ -147,6 +163,90 @@ func (a *App) UpdateSpool(s models.Spool) error {
 		return err
 	}
 	return a.db.Materials().UpdateSpool(s)
+}
+
+// SpoolDTO — партия для фронта (деньги — основные единицы).
+type SpoolDTO struct {
+	ID          int64   `json:"id"`
+	MaterialID  int64   `json:"materialId"`
+	SpoolNo     int     `json:"spoolNo"`
+	Price       float64 `json:"price"`
+	Currency    string  `json:"currency"`
+	BoughtAt    string  `json:"boughtAt"`
+	WeightInitG float64 `json:"weightInitG"`
+	WeightLeftG float64 `json:"weightLeftG"`
+	LeftG       float64 `json:"leftG"`
+	Archived    bool    `json:"archived"`
+}
+
+func toSpoolDTO(s models.Spool) SpoolDTO {
+	return SpoolDTO{
+		ID: s.ID, MaterialID: s.MaterialID, SpoolNo: s.SpoolNo, Price: float64(s.Price) / 100,
+		Currency: s.Currency, BoughtAt: s.BoughtAt,
+		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightLeftG, Archived: s.Archived,
+	}
+}
+
+// spoolLeftG — вычисляемый остаток катушки: партия минус расход по истории
+// (та же атрибуция, что SpoolStats), пол — ноль. Хранимое weight_left_g
+// в показе не участвует (автосписания нет, правка его не меняет).
+func spoolLeftG(s models.Spool, used map[int64]float64) float64 {
+	left := s.WeightInitG - used[s.ID]
+	if left < 0 {
+		return 0
+	}
+	return left
+}
+
+// GetSpools возвращает партии материала с вычисленными остатками.
+func (a *App) GetSpools(materialID int64) ([]SpoolDTO, error) {
+	list, err := a.db.Materials().ListSpools(materialID)
+	if err != nil {
+		return nil, err
+	}
+	used, err := a.db.SpoolUsedG()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SpoolDTO, 0, len(list))
+	for _, s := range list {
+		d := toSpoolDTO(s)
+		d.LeftG = spoolLeftG(s, used)
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// AddSpool добавляет партию-закупку (manager+). Пустая дата — сегодня.
+func (a *App) AddSpool(s SpoolDTO) (int64, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return 0, err
+	}
+	if s.MaterialID == 0 {
+		return 0, fmt.Errorf("ERR_SPOOL_SAVE: нет материала")
+	}
+	if s.BoughtAt == "" {
+		s.BoughtAt = time.Now().Format("2006-01-02")
+	}
+	if s.Currency == "" {
+		s.Currency = "RUB"
+	}
+	if s.WeightInitG <= 0 {
+		s.WeightInitG = 1000
+	}
+	return a.db.Materials().AddSpool(models.Spool{
+		MaterialID: s.MaterialID, Price: int64(s.Price*100 + 0.5), Currency: s.Currency,
+		FxRate: 1, BoughtAt: s.BoughtAt,
+		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightInitG,
+	})
+}
+
+// DeleteSpool удаляет партию (manager+). Блок при привязанных работах — в store.
+func (a *App) DeleteSpool(id int64) error {
+	if err := a.need(models.RoleManager); err != nil {
+		return err
+	}
+	return a.db.Materials().DeleteSpool(id)
 }
 
 // SetMaterialPrice ставит цену материала: обновляет первую катушку
@@ -307,6 +407,8 @@ type JobInput struct {
 }
 
 // SaveJob сохраняет расчёт (manager+). StartAt — сейчас (импорт истории — через CSV).
+// SpoolID — выбранная катушка; 0 — первая живого материала. Номер катушки
+// пишется в снапшот (input.spoolNo) для отображения в истории.
 func (a *App) SaveJob(in JobInput) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
 		return 0, err
@@ -317,12 +419,22 @@ func (a *App) SaveJob(in JobInput) (int64, error) {
 	if in.Status == "" {
 		in.Status = "completed"
 	}
-	// Катушка по материалу (вместо вечного 0): для привязки и пересчёта.
+	// Катушка: явный выбор фронта, иначе первая живого материала.
+	// Номер выбранной пишется в снапшот (input.spoolNo).
 	spoolID := in.SpoolID
-	if spoolID == 0 && in.Material != "" {
+	spoolNo := 0
+	if in.Material != "" {
 		if m, err := a.db.Materials().GetByCode(in.Material); err == nil {
 			if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
-				spoolID = spools[0].ID
+				if spoolID == 0 {
+					spoolID = spools[0].ID
+				}
+				for _, s := range spools {
+					if s.ID == spoolID {
+						spoolNo = s.SpoolNo
+						break
+					}
+				}
 			}
 		}
 	}
@@ -339,6 +451,7 @@ func (a *App) SaveJob(in JobInput) (int64, error) {
 			"marginDev": in.MarginDev, "fees": in.Fees,
 			"maintPerHour": in.MaintPerHour, "purgeWasteG": in.PurgeWasteG,
 			"copies": in.Copies, "vatRate": in.VATRate, "roundStep": in.RoundStep,
+			"spoolNo": spoolNo,
 		},
 	})
 	return a.db.Jobs().Upsert(models.Job{
@@ -374,6 +487,7 @@ type JobEdit struct {
 	LengthM      float64 `json:"lengthM"`
 	Slicer       string  `json:"slicer"`
 	Material     string  `json:"material"`
+	SpoolID      int64   `json:"spoolId"`
 	Tariff       float64 `json:"tariff"`
 	PowerKW      float64 `json:"powerKW"`
 	AmortPerHour float64 `json:"amortPerHour"`
@@ -397,6 +511,7 @@ type JobEdit struct {
 
 // UpdateManualJob правит работу истории с автопересчётом (manager+).
 // Расчёт идёт строго по переданным полям (см. JobEdit), не по старому снапшоту.
+// Цена — выбранной катушки (SpoolID), номер пишется в снапшот.
 func (a *App) UpdateManualJob(in JobEdit) error {
 	if err := a.need(models.RoleManager); err != nil {
 		return err
@@ -406,7 +521,7 @@ func (a *App) UpdateManualJob(in JobEdit) error {
 		StartAt: in.StartAt, EndAt: in.EndAt,
 		PrintSec: in.PrintSec, TotalSec: in.TotalSec, EstimatedSec: in.EstimatedSec,
 		SizeBytes: in.SizeBytes, WeightG: in.WeightG, LengthM: in.LengthM, Slicer: in.Slicer,
-	}, in.Material, store.JobCalcInput{
+	}, in.Material, in.SpoolID, store.JobCalcInput{
 		Tariff: in.Tariff, PowerKW: in.PowerKW, AmortPerHour: in.AmortPerHour,
 		MaintPerHour: in.MaintPerHour, PurgeWasteG: in.PurgeWasteG,
 		OpRate: in.OpRate, PrepH: in.PrepH, PostH: in.PostH,
@@ -497,7 +612,7 @@ var HistoryColumns = []string{
 	"material", "tariff", "power", "amort", "maint", "purge",
 	"oprate", "prep", "post", "designer", "modelh", "modelprice",
 	"extra", "fail", "marginprofit", "margindev", "fees",
-	"copies", "vat", "round",
+	"copies", "vat", "round", "spool",
 }
 
 // DefaultHistoryColumns — видимые по умолчанию.

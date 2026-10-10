@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { get } from 'svelte/store';
-  import { wails, type JobDTO, type MaterialDTO } from '../lib/wails';
+  import { wails, type JobDTO, type MaterialDTO, type SpoolDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
-  import { num, hms } from '../lib/format';
+  import { num, hms, money } from '../lib/format';
+  import { locale } from '../lib/i18n';
   import { askConfirm } from '../lib/confirm';
   import { prefillJob } from '../lib/prefill';
   import { goTab } from '../lib/nav';
@@ -61,6 +62,7 @@
     copies: 'copies',
     vat: 'vat',
     round: 'round',
+    spool: 'spool',
   };
 
   // Вход расчёта из снапшота (v2); импорт без правок — пусто.
@@ -115,8 +117,17 @@
       copies: $t('calc.copies'),
       vat: $t('calc.vat'),
       round: $t('calc.round'),
+      spool: $t('calc.spool'),
     };
     return map[key] ?? key;
+  }
+
+  // Катушка работы: КОД-N из снапшота; старые без номера — голый код.
+  function snapSpool(j: JobDTO): string {
+    const code = snapMaterialOf(j);
+    if (!code) return '—';
+    const no = snapSpoolNo(j);
+    return no > 0 ? `${code}-${no}` : code;
   }
 
   // Маппинг колонка → ключ snapshot.input.
@@ -169,6 +180,8 @@
         return originBadge(j);
       case 'material':
         return snapMaterialOf(j) || '—';
+      case 'spool':
+        return snapSpool(j);
       case 'fail':
       case 'marginprofit':
       case 'margindev':
@@ -283,6 +296,8 @@
           return j.Origin || 'import';
         case 'material':
           return snapMaterialOf(j).toLowerCase();
+        case 'spool':
+          return snapSpool(j).toLowerCase();
         case 'tariff':
         case 'power':
         case 'amort':
@@ -453,7 +468,9 @@
 
   // Правка работы истории (manual и import) с автопересчётом на бэкенде.
   // Расчётные поля — как в Калькуляторе (проценты — %, в snapshot уйдут долями).
+  // Катушка — отдельным селектом (editSpoolId), материал выводится из неё.
   let editId = $state(0);
+  let editSpoolId = $state(0);
   let edit = $state({
     filename: '', status: 'completed', startAt: '', endAt: '',
     printSec: 0, totalSec: 0, weightG: 0, lengthM: 0, slicer: '', material: '',
@@ -463,9 +480,48 @@
     copies: 1, vatPct: 0, roundStep: 0,
   });
 
+  function snapSpoolNo(j: JobDTO): number {
+    try {
+      return Number(JSON.parse(j.CostSnapshot)?.input?.spoolNo) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function spoolFind(id: number): { mat: MaterialDTO; spool: SpoolDTO } | null {
+    for (const m of materials) {
+      const s = (m.spools ?? []).find((x) => x.id === id);
+      if (s) return { mat: m, spool: s };
+    }
+    return null;
+  }
+
+  function spoolExists(id: number): boolean {
+    return spoolFind(id) != null;
+  }
+
   function startEdit(j: JobDTO) {
     error = '';
     editId = j.ID;
+    // Катушка из работы: явный линк, иначе номер из снапшота, иначе первая живая.
+    // Материал выводится из катушки (снапшот — фолбэк).
+    editSpoolId = 0;
+    let code = snapMaterial(j);
+    if (j.SpoolID && spoolExists(j.SpoolID)) {
+      const f = spoolFind(j.SpoolID)!;
+      editSpoolId = f.spool.id;
+      code = f.mat.code;
+    } else {
+      const no = snapSpoolNo(j);
+      const m = materials.find((x) => x.code === code);
+      const hit = no > 0 ? (m?.spools ?? []).find((s) => s.spoolNo === no && !s.archived) : undefined;
+      if (hit) {
+        editSpoolId = hit.id;
+      } else {
+        const live = (m?.spools ?? []).find((s) => !s.archived);
+        if (live) editSpoolId = live.id;
+      }
+    }
     // Вход из снапшота; чего нет (импорт) — дефолты Калькулятора.
     const d = calcFormDefaults;
     let inp: Record<string, number> = {};
@@ -478,7 +534,7 @@
     edit = {
       filename: j.Filename, status: j.Status, startAt: j.StartAt, endAt: j.EndAt,
       printSec: j.PrintSec, totalSec: j.TotalSec, weightG: j.WeightG,
-      lengthM: j.LengthM, slicer: j.Slicer, material: snapMaterial(j),
+      lengthM: j.LengthM, slicer: j.Slicer, material: code,
       tariff: pick('tariff', d.tariff), powerKW: pick('powerKW', d.powerKW),
       amortPerHour: pick('amortPerHour', d.amortPerHour),
       maintPerHour: pick('maintPerHour', d.maintPerHour),
@@ -520,7 +576,7 @@
         printSec: edit.printSec ?? 0, totalSec: edit.totalSec ?? 0,
         estimatedSec: 0, sizeBytes: 0,
         weightG: edit.weightG ?? 0, lengthM: edit.lengthM ?? 0,
-        slicer: edit.slicer, material: edit.material.trim(),
+        slicer: edit.slicer, material: edit.material.trim(), spoolId: editSpoolId,
         tariff: edit.tariff ?? 0, powerKW: edit.powerKW ?? 0,
         amortPerHour: edit.amortPerHour ?? 0, maintPerHour: edit.maintPerHour ?? 0,
         purgeWasteG: edit.purgeG ?? 0,
@@ -553,10 +609,20 @@
           {#each ['completed', 'cancelled', 'error'] as s}<option value={s}>{s}</option>{/each}
         </select>
       </label>
-      <label>{$t('calc.material')}
-        <select bind:value={edit.material}>
-          <option value="">—</option>
-          {#each materials.filter((m) => !m.archived || m.code === edit.material) as m}<option value={m.code}>{m.code}</option>{/each}
+      <label>{$t('calc.spool')}
+        <select value={editSpoolId} onchange={(e) => {
+          editSpoolId = Number(e.currentTarget.value);
+          const f = editSpoolId ? spoolFind(editSpoolId) : null;
+          if (f) edit.material = f.mat.code;
+        }}>
+          <option value={0}>—</option>
+          {#each materials.filter((m) => (m.spools ?? []).some((s) => !s.archived) || (m.spools ?? []).some((s) => s.id === editSpoolId)) as m}
+            <optgroup label={m.code}>
+              {#each (m.spools ?? []).filter((s) => !s.archived || s.id === editSpoolId) as s}
+                <option value={s.id}>{m.code}-{s.spoolNo || '?'} — {money(s.price, s.currency, $locale)}/кг</option>
+              {/each}
+            </optgroup>
+          {/each}
         </select>
       </label>
       <label>{$t('hist.slicer')}<input bind:value={edit.slicer} placeholder="OrcaSlicer" /></label>
@@ -670,6 +736,9 @@
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
   table { font-size: 13px; }
   td.file { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media print {
+    td.file { max-width: 200px; }
+  }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }
   .err { color: var(--err); }
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }

@@ -205,6 +205,45 @@ func (a *App) ApplyHistoryCSV() (sqlite.ImportReport, error) {
 	return rep, nil
 }
 
+// PreviewMaterialsCSV читает CSV справочника в dry-run (отдельный буфер).
+func (a *App) PreviewMaterialsCSV() (sqlite.ImportReport, error) {
+	var rep sqlite.ImportReport
+	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   "Импорт CSV материалов",
+		Filters: []runtime.FileFilter{{DisplayName: "CSV (*.csv)", Pattern: "*.csv"}},
+	})
+	if err != nil || path == "" {
+		return rep, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return rep, err
+	}
+	rep, err = a.db.ImportMaterials(bytes.NewReader(data), true)
+	if err != nil {
+		return rep, err
+	}
+	a.pendingMats = data
+	return rep, nil
+}
+
+// ApplyMaterialsCSV применяет запомненный PreviewMaterialsCSV импорт (manager+).
+func (a *App) ApplyMaterialsCSV() (sqlite.ImportReport, error) {
+	var rep sqlite.ImportReport
+	if err := a.need(models.RoleManager); err != nil {
+		return rep, err
+	}
+	if len(a.pendingMats) == 0 {
+		return rep, errNoPending()
+	}
+	rep, err := a.db.ImportMaterials(bytes.NewReader(a.pendingMats), false)
+	if err != nil {
+		return rep, err
+	}
+	a.pendingMats = nil
+	return rep, nil
+}
+
 func errNoPending() error {
 	return errPending
 }

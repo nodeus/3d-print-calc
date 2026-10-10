@@ -74,7 +74,8 @@ server/                     # Фаза 7: REST поверх core для Android/
 mobile/                     # задел: доки контракта API, кода пока нет
 tools/                      # ВСЕ вспомогательные скрипты — только здесь: seed, release, qrcode, dbcheck
 docs/                       # HELP (руководство), release, updating, api-contract, excel-reverse-engineering
-migrations/                 # SQL-миграции (только ADD COLUMN / CREATE, пронумерованные)
+migrations/                 # SQL-миграции (только ADD COLUMN / CREATE, пронумерованные;
+                          # исключение — 0014 DROP мёртвых колонок materials, согласован с заказчиком)
 utils/                      # upx.exe для релизов (в git НЕ идёт, локальный инструмент)
 ```
 
@@ -100,10 +101,21 @@ weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
 Нулевые `purge/maint/fail/VAT/round`, `copies<=1` — нейтральны (legacy-поведение).
 Деньги в `calc` — float основных единиц; хранение — `int64` минорных + `fx_rate`.
 Снапшот расчёта в `jobs.cost_snapshot` — **v2**: `{v, material, input:{tariff,powerKW,
-amortPerHour,opRate,prepH,postH}, cost, price, currency}` (v1 читается с фолбэком).
+amortPerHour,opRate,prepH,postH,...,spoolNo}, cost, price, currency}` (v1 читается с фолбэком).
+Импорт пишет `price` и `spoolNo` сразу; старые строки без них чинит разовый
+`BackfillImportSnapshots` при старте (только `edited=0`, ручные не трогает).
 Правка работы (`UpdateManual`) пересчитывает строго по полям формы правки
 (полный `input`: тарифы, ставки, наценки, НДС, копии...), цена материала — текущая
-(первая катушка). Перенос «В калькулятор»: физика (вес/время/материал) — всегда;
+(первая неархивная катушка по id — `materialPrice`, UI её метит «расчётная»).
+Номера катушек (`spool_no`, миграция `0013`): имя файла `..._КОД-N_...`
+→ материал КОД + катушка N (`ParseMaterialSpool`; точный код приоритетен).
+Импорт (CSV/Moonraker через `ImportRows`) линкует N-ю катушку и её цену;
+нет номера — стаб-катушка N с линком; база без совпадения — стаб базы.
+Калькулятор и правка выбирают катушку (`spoolId` + `input.spoolNo`
+в снапшоте); цена пересчёта — выбранной. История — колонка `spool`
+(`КОД-N` из снапшота).
+Катушки правятся только своим UI (Materials ▸); логика цены не менялась.
+Перенос «В калькулятор»: физика (вес/время/материал) — всегда;
 ставки — только из настоящих данных (`manual` или `edited=1`), чистый импорт
 пользовательские ставки не затирает. Форма калькулятора живёт в `calcForm`
 + `localStorage` (`calcform.v1`) — переживает вкладки и перезапуск.
@@ -129,9 +141,17 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 
 ### БД SQLite (WAL, один `app.db`)
 
-`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE,
-+bought_at, +archived — архивные скрыты из остатков и селекта калькулятора),
-spools(material_id, price, currency, bought_at, weight_left_g), printers(...,
+`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
++part_purchases(printer_id, bought_at, price, qty — сумма вычисляется),
+spools(material_id, price, currency, bought_at, weight_left_g, spool_no),
+materials.code правится с переписью снапшота (`json_replace`);
+дата закупа и архивность — только spools.bought_at/spools.archived
+(остатки, цена, селект); колонки materials.bought_at/materials.archived
+удалены миграцией `0014` (были мертвы с `0011`).
+Остаток катушки — вычисляемый (`SpoolUsedG`: партия минус Σ веса работ,
+атрибуция как в `SpoolStats`); хранимое `spools.weight_left_g` в показе
+не участвует (автосписания нет), printers(...,
+calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),
 orders(+number, +title), order_items, payments, fx_rates, settings`. Импорт идемпотентен

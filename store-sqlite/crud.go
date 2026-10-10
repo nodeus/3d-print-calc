@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -21,18 +22,49 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// Update правит материал (код неизменен — ключ и сидит в снапшотах).
+// Update правит материал. Код правится тоже: уникальность проверяется,
+// material в снапшотах работ переписывается (история сохраняет связь).
 func (r *materialsRepo) Update(m models.Material) error {
 	if m.ID == 0 {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: пустой id")
 	}
-	if _, err := r.db.Exec(`UPDATE materials SET type=?, vendor=?, color_hex=?,
-		density=?, diameter=?, default_spool_weight_g=?, note=?, bought_at=?, archived=? WHERE id=?`,
-		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.DefaultSpoolWeightG, m.Note,
-		m.BoughtAt, boolInt(m.Archived), m.ID); err != nil {
+	if m.Code == "" {
+		return fmt.Errorf("ERR_MATERIAL_CODE: пустой код")
+	}
+	var old string
+	if err := r.db.QueryRow(`SELECT code FROM materials WHERE id=?`, m.ID).Scan(&old); err != nil {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
 	}
-	return nil
+	tx, err := r.db.Begin()
+	if err != nil {
+		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+	}
+	defer tx.Rollback()
+	if m.Code != old {
+		var clash int64
+		if err := tx.QueryRow(`SELECT id FROM materials WHERE code=? AND id<>?`, m.Code, m.ID).Scan(&clash); err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+		}
+		if clash != 0 {
+			return fmt.Errorf("ERR_MATERIAL_CODE_USED: код %q занят", m.Code)
+		}
+		if _, err := tx.Exec(`UPDATE materials SET code=? WHERE id=?`, m.Code, m.ID); err != nil {
+			return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+		}
+		// Перепривязка истории: битые/пустые снапшоты пропускаются сами.
+		if _, err := tx.Exec(`UPDATE jobs SET cost_snapshot = json_replace(cost_snapshot,
+			'$.material', ?) WHERE json_extract(COALESCE(cost_snapshot, '{}'), '$.material') = ?`,
+			m.Code, old); err != nil {
+			return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+		}
+	}
+	if _, err := tx.Exec(`UPDATE materials SET type=?, vendor=?, color_hex=?,
+		density=?, diameter=?, default_spool_weight_g=?, note=? WHERE id=?`,
+		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.DefaultSpoolWeightG, m.Note,
+		m.ID); err != nil {
+		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
+	}
+	return tx.Commit()
 }
 
 // Delete удаляет материал. Пустые катушки (без привязанных работ) удаляются
@@ -72,6 +104,21 @@ func (r *materialsRepo) UpdateSpool(s models.Spool) error {
 		bought_at=?, weight_init_g=?, weight_left_g=?, archived=? WHERE id=?`,
 		s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.ID); err != nil {
 		return fmt.Errorf("ERR_SPOOL_SAVE: %w", err)
+	}
+	return nil
+}
+
+// DeleteSpool удаляет партию. Блок: есть работы, привязанные к катушке.
+func (r *materialsRepo) DeleteSpool(id int64) error {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE spool_id=?`, id).Scan(&n); err != nil {
+		return fmt.Errorf("ERR_SPOOL_DELETE: %w", err)
+	}
+	if n > 0 {
+		return fmt.Errorf("ERR_SPOOL_USED: %d работ ссылаются на катушку", n)
+	}
+	if _, err := r.db.Exec(`DELETE FROM spools WHERE id=?`, id); err != nil {
+		return fmt.Errorf("ERR_SPOOL_DELETE: %w", err)
 	}
 	return nil
 }
@@ -129,7 +176,7 @@ func (r *printersRepo) Update(p models.Printer) error {
 	return nil
 }
 
-// Delete удаляет принтер. Блок: есть работы на нём.
+// Delete удаляет принтер. Блок: есть работы или закупки на нём.
 func (r *printersRepo) Delete(id int64) error {
 	var n int
 	if err := r.db.QueryRow(`SELECT COUNT(*) FROM jobs WHERE printer_id=?`, id).Scan(&n); err != nil {
@@ -137,6 +184,12 @@ func (r *printersRepo) Delete(id int64) error {
 	}
 	if n > 0 {
 		return fmt.Errorf("ERR_PRINTER_USED: %d работ ссылаются на принтер", n)
+	}
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM part_purchases WHERE printer_id=?`, id).Scan(&n); err != nil {
+		return fmt.Errorf("ERR_PRINTER_DELETE: %w", err)
+	}
+	if n > 0 {
+		return fmt.Errorf("ERR_PRINTER_USED: %d закупок ссылаются на принтер", n)
 	}
 	if _, err := r.db.Exec(`DELETE FROM printers WHERE id=?`, id); err != nil {
 		return fmt.Errorf("ERR_PRINTER_DELETE: %w", err)
@@ -157,22 +210,31 @@ func snapshotCurrency(raw string) string {
 
 // UpdateManual правит работу истории (manual и import) и пересчитывает
 // себестоимость И цену строго по переданному расчётному контексту in.
-// Цена материала — текущая (первая катушка). Снапшот — v2, валюта — из
-// старого снапшота (RUB по умолчанию). Первая правка импортированной
-// фиксирует первозданное в orig_snapshot для отката (edited=1).
-func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcInput) error {
+// Цена материала — выбранной катушки (spoolID), иначе первая живого материала.
+// Линк spool_id обновляется, номер катушки пишется в снапшот (input.spoolNo).
+// Снапшот — v2, валюта — из старого снапшота (RUB по умолчанию).
+// Первая правка импортированной фиксирует первозданное в orig_snapshot
+// для отката (edited=1).
+func (r *jobsRepo) UpdateManual(j models.Job, material string, spoolID int64, in store.JobCalcInput) error {
 	if j.ID == 0 {
 		return fmt.Errorf("ERR_JOB_SAVE: пустой id")
 	}
 	var cur models.Job
 	var edited int
 	var orig string
+	var spoolNull sql.NullInt64
 	err := r.db.QueryRow(`SELECT filename, status, start_at, end_at, print_sec, total_sec,
-		estimated_sec, size_bytes, weight_g, length_m, slicer, cost_snapshot, origin, edited, orig_snapshot
-		FROM jobs WHERE id=?`, j.ID).Scan(
+		estimated_sec, size_bytes, weight_g, length_m, slicer, cost_snapshot, origin, edited, orig_snapshot,
+		spool_id FROM jobs WHERE id=?`, j.ID).Scan(
 		&cur.Filename, &cur.Status, &cur.StartAt, &cur.EndAt, &cur.PrintSec, &cur.TotalSec,
 		&cur.EstimatedSec, &cur.SizeBytes, &cur.WeightG, &cur.LengthM, &cur.Slicer,
-		&cur.CostSnapshot, &cur.Origin, &edited, &orig)
+		&cur.CostSnapshot, &cur.Origin, &edited, &orig, &spoolNull)
+	if err != nil {
+		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
+	}
+	if spoolNull.Valid {
+		cur.SpoolID = spoolNull.Int64
+	}
 	if err != nil {
 		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
 	}
@@ -194,7 +256,19 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcI
 		edited = 1
 	}
 	pricePerKg := 0.0
-	if material != "" {
+	spoolNo := 0
+	newSpoolID := cur.SpoolID
+	if spoolID > 0 {
+		var price int64
+		var mno int
+		if err := r.db.QueryRow(`SELECT price, COALESCE(spool_no, 0)
+			FROM spools WHERE id=?`, spoolID).Scan(&price, &mno); err == nil {
+			pricePerKg = float64(price) / 100
+			spoolNo = mno
+			newSpoolID = spoolID
+		}
+	}
+	if pricePerKg == 0 && material != "" {
 		if m, err := r.materialPrice(material); err == nil {
 			pricePerKg = m
 		}
@@ -223,6 +297,7 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcI
 		"marginDev": in.MarginDev, "fees": in.Fees,
 		"maintPerHour": in.MaintPerHour, "purgeWasteG": in.PurgeWasteG,
 		"copies": copies, "vatRate": in.VATRate, "roundStep": in.RoundStep,
+		"spoolNo": spoolNo,
 	}
 	currency := snapshotCurrency(cur.CostSnapshot)
 	snap, _ := json.Marshal(map[string]any{
@@ -231,10 +306,10 @@ func (r *jobsRepo) UpdateManual(j models.Job, material string, in store.JobCalcI
 	})
 	if _, err := r.db.Exec(`UPDATE jobs SET filename=?, status=?, start_at=?, end_at=?,
 		print_sec=?, total_sec=?, estimated_sec=?, size_bytes=?, weight_g=?, length_m=?,
-		slicer=?, cost_snapshot=?, edited=?, orig_snapshot=? WHERE id=?`,
+		slicer=?, spool_id=?, cost_snapshot=?, edited=?, orig_snapshot=? WHERE id=?`,
 		j.Filename, j.Status, j.StartAt, j.EndAt, j.PrintSec, j.TotalSec,
-		j.EstimatedSec, j.SizeBytes, j.WeightG, j.LengthM, j.Slicer, string(snap),
-		edited, orig, j.ID); err != nil {
+		j.EstimatedSec, j.SizeBytes, j.WeightG, j.LengthM, j.Slicer,
+		nullInt(newSpoolID), string(snap), edited, orig, j.ID); err != nil {
 		return fmt.Errorf("ERR_JOB_SAVE: %w", err)
 	}
 	return nil
@@ -281,12 +356,17 @@ func (r *jobsRepo) RevertJob(id int64) error {
 
 // materialPrice возвращает текущую цену кг (первая катушка) или 0.
 func (r *jobsRepo) materialPrice(code string) (float64, error) {
+	return materialPriceByCode(r.db, code)
+}
+
+// materialPriceByCode — то же для мест без jobsRepo (бэкфилл снапшотов).
+func materialPriceByCode(db *sql.DB, code string) (float64, error) {
 	var id int64
-	if err := r.db.QueryRow(`SELECT id FROM materials WHERE code=?`, code).Scan(&id); err != nil {
+	if err := db.QueryRow(`SELECT id FROM materials WHERE code=?`, code).Scan(&id); err != nil {
 		return 0, err
 	}
 	var price int64
-	if err := r.db.QueryRow(`SELECT price FROM spools WHERE material_id=? ORDER BY archived, id LIMIT 1`, id).Scan(&price); err != nil {
+	if err := db.QueryRow(`SELECT price FROM spools WHERE material_id=? ORDER BY archived, id LIMIT 1`, id).Scan(&price); err != nil {
 		return 0, err
 	}
 	return float64(price) / 100, nil

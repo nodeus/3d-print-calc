@@ -11,11 +11,12 @@ type Materials interface {
 	UpsertByCode(m models.Material) (int64, error)
 	GetByCode(code string) (models.Material, error)
 	List() ([]models.Material, error)
-	Update(m models.Material) error // всё кроме кода (код — ключ и сидит в снапшотах)
+	Update(m models.Material) error // всё по id, код — с переписью снапшотов работ
 	Delete(id int64) error          // блок, если есть катушки
 	AddSpool(s models.Spool) (int64, error)
 	ListSpools(materialID int64) ([]models.Spool, error)
 	UpdateSpool(s models.Spool) error                                     // цена/валюта/остаток партии
+	DeleteSpool(id int64) error                                           // блок, если есть привязанные работы
 	SetMaterialPrice(materialID, priceMinor int64, currency string) error // цена первой катушки (создаст при отсутствии)
 }
 
@@ -24,17 +25,25 @@ type Printers interface {
 	Save(p models.Printer) (int64, error)
 	List() ([]models.Printer, error)
 	Update(p models.Printer) error // все поля по id
-	Delete(id int64) error         // блок, если есть работы
+	Delete(id int64) error         // блок, если есть работы или закупки
 	SetMoonrakerURL(id int64, url string) error
+}
+
+// Parts — закупки запчастей и ТО по принтерам.
+type Parts interface {
+	Save(p models.PartPurchase) (int64, error) // insert (ID=0) или update
+	ListByPrinter(printerID int64) ([]models.PartPurchase, error)
+	ListAll() ([]models.PartPurchase, error) // для отчёта закупок
+	Delete(id int64) error
 }
 
 // Jobs — история печати. Импорт идемпотентен по filename+start_at.
 type Jobs interface {
 	Upsert(j models.Job) (int64, error)
 	List(limit int) ([]models.Job, error)
-	DeleteJob(id int64) error                                          // manual — удалить; edited import — откат; чистый import — блок
-	UpdateManual(j models.Job, material string, in JobCalcInput) error // правка + автопересчёт (manual и import)
-	RevertJob(id int64) error                                          // откат изменённой к импорту
+	DeleteJob(id int64) error                                                         // manual — удалить; edited import — откат; чистый import — блок
+	UpdateManual(j models.Job, material string, spoolID int64, in JobCalcInput) error // правка + автопересчёт (manual и import)
+	RevertJob(id int64) error                                                         // откат изменённой к импорту
 }
 
 // JobCalcInput — расчётный контекст правки работы.

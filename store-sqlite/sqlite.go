@@ -59,6 +59,9 @@ func (d *DB) Materials() store.Materials { return &materialsRepo{d.sql} }
 // Printers возвращает репозиторий принтеров.
 func (d *DB) Printers() store.Printers { return &printersRepo{d.sql} }
 
+// Parts возвращает репозиторий закупок запчастей и ТО.
+func (d *DB) Parts() store.Parts { return &partsRepo{d.sql} }
+
 // Jobs возвращает репозиторий истории печати.
 func (d *DB) Jobs() store.Jobs { return &jobsRepo{d.sql} }
 
@@ -166,22 +169,20 @@ func (r *materialsRepo) UpsertByCode(m models.Material) (int64, error) {
 // GetByCode возвращает материал по коду.
 func (r *materialsRepo) GetByCode(code string) (models.Material, error) {
 	var m models.Material
-	var archived int
 	err := r.db.QueryRow(`SELECT id, code, type, vendor, color_hex, density, diameter,
-		default_spool_weight_g, note, bought_at, archived FROM materials WHERE code=?`, code).
+		default_spool_weight_g, note FROM materials WHERE code=?`, code).
 		Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density, &m.Diameter,
-			&m.DefaultSpoolWeightG, &m.Note, &m.BoughtAt, &archived)
+			&m.DefaultSpoolWeightG, &m.Note)
 	if err != nil {
 		return m, fmt.Errorf("ERR_MATERIAL_GET: %w", err)
 	}
-	m.Archived = archived != 0
 	return m, nil
 }
 
 // List возвращает все материалы по коду.
 func (r *materialsRepo) List() ([]models.Material, error) {
 	rows, err := r.db.Query(`SELECT id, code, type, vendor, color_hex, density, diameter,
-		default_spool_weight_g, note, bought_at, archived FROM materials ORDER BY code`)
+		default_spool_weight_g, note FROM materials ORDER BY code`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_MATERIAL_LIST: %w", err)
 	}
@@ -189,22 +190,32 @@ func (r *materialsRepo) List() ([]models.Material, error) {
 	out := []models.Material{}
 	for rows.Next() {
 		var m models.Material
-		var archived int
 		if err := rows.Scan(&m.ID, &m.Code, &m.Type, &m.Vendor, &m.ColorHex, &m.Density,
-			&m.Diameter, &m.DefaultSpoolWeightG, &m.Note, &m.BoughtAt, &archived); err != nil {
+			&m.Diameter, &m.DefaultSpoolWeightG, &m.Note); err != nil {
 			return nil, fmt.Errorf("ERR_MATERIAL_LIST: %w", err)
 		}
-		m.Archived = archived != 0
 		out = append(out, m)
 	}
 	return out, rows.Err()
 }
 
 // AddSpool добавляет закупочную партию (катушку).
+// Пустой номер — следующий по порядку внутри материала (max+1).
 func (r *materialsRepo) AddSpool(s models.Spool) (int64, error) {
+	if s.SpoolNo <= 0 {
+		var max sql.NullInt64
+		if err := r.db.QueryRow(`SELECT MAX(spool_no) FROM spools WHERE material_id=?`,
+			s.MaterialID).Scan(&max); err != nil {
+			return 0, fmt.Errorf("ERR_SPOOL_ADD: %w", err)
+		}
+		s.SpoolNo = 1
+		if max.Valid {
+			s.SpoolNo = int(max.Int64) + 1
+		}
+	}
 	res, err := r.db.Exec(`INSERT INTO spools (material_id, price, currency, fx_rate, bought_at,
-		weight_init_g, weight_left_g, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.MaterialID, s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived)
+		weight_init_g, weight_left_g, archived, spool_no) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.MaterialID, s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.SpoolNo)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_SPOOL_ADD: %w", err)
 	}
@@ -215,7 +226,7 @@ func (r *materialsRepo) AddSpool(s models.Spool) (int64, error) {
 // ListSpools возвращает партии материала (неархивные первыми).
 func (r *materialsRepo) ListSpools(materialID int64) ([]models.Spool, error) {
 	rows, err := r.db.Query(`SELECT id, material_id, price, currency, fx_rate, bought_at,
-		weight_init_g, weight_left_g, archived FROM spools
+		weight_init_g, weight_left_g, archived, COALESCE(spool_no, 0) FROM spools
 		WHERE material_id=? ORDER BY archived, id`, materialID)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_SPOOL_LIST: %w", err)
@@ -226,7 +237,7 @@ func (r *materialsRepo) ListSpools(materialID int64) ([]models.Spool, error) {
 		var s models.Spool
 		var archived int
 		if err := rows.Scan(&s.ID, &s.MaterialID, &s.Price, &s.Currency, &s.FxRate,
-			&s.BoughtAt, &s.WeightInitG, &s.WeightLeftG, &archived); err != nil {
+			&s.BoughtAt, &s.WeightInitG, &s.WeightLeftG, &archived, &s.SpoolNo); err != nil {
 			return nil, fmt.Errorf("ERR_SPOOL_LIST: %w", err)
 		}
 		s.Archived = archived != 0

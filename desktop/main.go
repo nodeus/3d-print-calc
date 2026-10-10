@@ -35,6 +35,7 @@ type App struct {
 	currentUser      *models.User
 	pendingFile      []byte // файл после preview, до apply
 	pendingPath      string
+	pendingMats      []byte               // CSV материалов после preview, до apply
 	pendingMoonraker []importers.PrintJob // строки Moonraker после preview
 	pendingPrinterID int64
 	pendingNew       int
@@ -114,6 +115,9 @@ func openDB(path string) (*sqlite.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	// Разовый бэкфилл снапшотов импорта без price/spoolNo (импорт до fix).
+	// Best-effort: ошибка не роняет старт, при следующем запуске повторится.
+	_, _ = db.BackfillImportSnapshots()
 	if err := seed.EnsureAdmin(db); err != nil {
 		db.Close()
 		return nil, err

@@ -131,9 +131,40 @@ func remainHours(commissioned string, lifeYears int, hoursPerDay float64,
 	return 0
 }
 
+// SpoolUsedG — расход пластика по катушкам (id → граммы) для вычисляемого
+// остатка (init − used). Атрибуция та же, что в SpoolStats: работы с явным
+// spool_id идут на свою катушку, без линка — на первую неархивную того же
+// материала (код из снапшота). Ничего не перезаписывает.
+func (d *DB) SpoolUsedG() (map[int64]float64, error) {
+	rows, err := d.sql.Query(`SELECT s.id, COALESCE(SUM(j.weight_g), 0)
+		FROM spools s JOIN materials m ON m.id = s.material_id
+		LEFT JOIN jobs j ON j.spool_id = s.id OR (
+			j.spool_id IS NULL
+			AND json_extract(COALESCE(j.cost_snapshot, '{}'), '$.material') = m.code
+			AND s.id = (SELECT MIN(s2.id) FROM spools s2
+				WHERE s2.material_id = m.id AND COALESCE(s2.archived, 0) = 0)
+		)
+		GROUP BY s.id`)
+	if err != nil {
+		return nil, fmt.Errorf("ERR_REPORT: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]float64{}
+	for rows.Next() {
+		var id int64
+		var used float64
+		if err := rows.Scan(&id, &used); err != nil {
+			return nil, fmt.Errorf("ERR_REPORT: %w", err)
+		}
+		out[id] = used
+	}
+	return out, rows.Err()
+}
+
 // SpoolStat — остатки катушки: использование из истории, остаток вычисляемый.
 type SpoolStat struct {
 	Code     string  `json:"code"`
+	SpoolNo  int     `json:"spoolNo"`
 	ColorHex string  `json:"colorHex"`
 	Vendor   string  `json:"vendor"`
 	Jobs     int64   `json:"jobs"`
@@ -145,19 +176,21 @@ type SpoolStat struct {
 // SpoolStats — остатки по катушкам: used = Σ веса работ, left = init − used.
 // Ничего не перезаписывает (идемпотентно при реимпортах).
 // Работы с явным spool_id идут на свою катушку; работы без катушки —
-// на первую катушку того же материала (код из снапшота). Без кода — ничьи.
-// Катушки архивных материалов скрыты.
+// на первую неархивную катушку того же материала (код из снапшота).
+// Без кода — ничьи. Архивные катушки скрыты (архив — уровень катушки,
+// флаг материала игнорируется).
 func (d *DB) SpoolStats() ([]SpoolStat, error) {
-	rows, err := d.sql.Query(`SELECT m.code, m.color_hex, m.vendor, s.weight_init_g,
+	rows, err := d.sql.Query(`SELECT m.code, COALESCE(s.spool_no, 0), m.color_hex, m.vendor, s.weight_init_g,
 		COUNT(j.id), COALESCE(SUM(j.weight_g), 0)
 		FROM spools s JOIN materials m ON m.id = s.material_id
 		LEFT JOIN jobs j ON j.spool_id = s.id OR (
 			j.spool_id IS NULL
 			AND json_extract(COALESCE(j.cost_snapshot, '{}'), '$.material') = m.code
-			AND s.id = (SELECT MIN(s2.id) FROM spools s2 WHERE s2.material_id = m.id)
+			AND s.id = (SELECT MIN(s2.id) FROM spools s2
+				WHERE s2.material_id = m.id AND COALESCE(s2.archived, 0) = 0)
 		)
-		WHERE COALESCE(m.archived, 0) = 0
-		GROUP BY s.id ORDER BY m.code`)
+		WHERE COALESCE(s.archived, 0) = 0
+		GROUP BY s.id ORDER BY m.code, s.spool_no`)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_REPORT: %w", err)
 	}
@@ -165,7 +198,7 @@ func (d *DB) SpoolStats() ([]SpoolStat, error) {
 	out := []SpoolStat{}
 	for rows.Next() {
 		var s SpoolStat
-		if err := rows.Scan(&s.Code, &s.ColorHex, &s.Vendor, &s.InitG,
+		if err := rows.Scan(&s.Code, &s.SpoolNo, &s.ColorHex, &s.Vendor, &s.InitG,
 			&s.Jobs, &s.UsedG); err != nil {
 			return nil, fmt.Errorf("ERR_REPORT: %w", err)
 		}

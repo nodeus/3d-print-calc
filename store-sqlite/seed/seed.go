@@ -56,10 +56,11 @@ const (
 
 // Stats — итог сида.
 type Stats struct {
-	Materials int
-	Jobs      int
-	Linked    int
-	Stubs     int
+	Materials  int
+	Jobs       int
+	Linked     int
+	Stubs      int
+	SpoolStubs int // созданные пустые катушки с номерами из имён файлов
 }
 
 // DB — минимальный интерфейс БД, нужный сиду.
@@ -129,11 +130,13 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 	}
 	matIDs := make(map[string]models.Material, len(list))
 	spoolIDs := map[string]int64{}
+	spoolNoByCode := map[string]int{}
 	priceByCode := map[string]float64{}
 	for _, m := range list {
 		matIDs[m.Code] = m
 		if spools, err := mats.ListSpools(m.ID); err == nil && len(spools) > 0 {
 			spoolIDs[m.Code] = spools[0].ID
+			spoolNoByCode[m.Code] = spools[0].SpoolNo
 			priceByCode[m.Code] = float64(spools[0].Price) / 100
 		}
 	}
@@ -142,9 +145,20 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 	for i, r := range rows {
 		code := importers.ParseMaterial(r.Filename)
 		m, ok := matIDs[code]
+		spoolN := 0
+		if !ok {
+			// Точного кода нет в базе: работаем с базой + номером катушки
+			// (новая парадигма: PETG-NIT-BLACK-1 → PETG-NIT-BLACK + №1).
+			// Точный код в базе — приоритет (legacy без номеров).
+			if base, n := importers.ParseMaterialSpool(r.Filename); n > 0 {
+				code, spoolN = base, n
+				m, ok = matIDs[code]
+			}
+		}
 		if !ok && code != "" {
 			// Код из имени файла, которого нет в листе «Материалы»
 			// (более поздние закупки): стаб со стандартной плотностью.
+			// Стаб всегда по базе, без номера катушки.
 			if _, _, err := upsertMaterial(mats, code, 0, 1.27, ""); err != nil {
 				return st, err
 			}
@@ -155,9 +169,44 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 		}
 		pricePerKg, density := 0.0, 1.27
 		var spoolID int64
+		spoolNo := 0
 		if ok {
 			pricePerKg, density = priceByCode[code], m.Density
 			spoolID = spoolIDs[code]
+			spoolNo = spoolNoByCode[code]
+			// Номер катушки из имени файла: линкуем именно её.
+			// Нет такой — создаём пустой стаб (цена 0, дата пуста)
+			// и линкуем: номер из имени не теряется.
+			if spoolN > 0 {
+				spoolNo = spoolN
+				found := false
+				if spools, err := mats.ListSpools(m.ID); err == nil {
+					for _, s := range spools {
+						if s.SpoolNo == spoolN {
+							spoolID = s.ID
+							pricePerKg = float64(s.Price) / 100
+							found = true
+							break
+						}
+					}
+				}
+				if !found {
+					w := m.DefaultSpoolWeightG
+					if w <= 0 {
+						w = 1000
+					}
+					if sid, err := mats.AddSpool(models.Spool{
+						MaterialID: m.ID, SpoolNo: spoolN,
+						WeightInitG: w, WeightLeftG: w,
+					}); err != nil {
+						return st, err
+					} else {
+						spoolID = sid
+						pricePerKg = 0
+						st.SpoolStubs++
+					}
+				}
+			}
 			st.Linked++
 		}
 		weightG := calc.WeightFromLength(density, 1.75, r.FilamentUsed)
@@ -167,7 +216,7 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 			AmortPerHour: amortHour, OpRate: DefaultOpRate,
 		})
 		snap, _ := json.Marshal(map[string]any{
-			"v": 2, "material": code, "weight_g": weightG, "cost": res.Cost, "currency": "RUB",
+			"v": 2, "material": code, "weight_g": weightG, "cost": res.Cost, "price": res.PriceVAT, "currency": "RUB",
 			"input": map[string]any{
 				"tariff": DefaultTariff, "powerKW": DefaultPower,
 				"amortPerHour": amortHour, "opRate": DefaultOpRate,
@@ -175,7 +224,7 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 				"modelPrice": 0, "extraMat": 0, "failRate": 0,
 				"marginProfit": 0, "marginDev": 0, "fees": 0,
 				"maintPerHour": 0, "purgeWasteG": 0, "copies": 1,
-				"vatRate": 0, "roundStep": 0,
+				"vatRate": 0, "roundStep": 0, "spoolNo": spoolNo,
 			},
 		})
 		if _, err := jobs.Upsert(models.Job{

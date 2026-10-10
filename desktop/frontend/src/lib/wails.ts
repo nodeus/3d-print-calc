@@ -50,8 +50,6 @@ export interface MaterialDTO {
   vendor: string;
   colorHex: string;
   note: string;
-  boughtAt: string;
-  archived: boolean;
   density: number;
   diameter: number;
   defaultWeightG: number;
@@ -59,6 +57,9 @@ export interface MaterialDTO {
   currency: string;
   spoolId: number;
   spoolLeftG: number;
+  hasLiveSpool: boolean;
+  spoolCount: number;
+  spools: SpoolDTO[];
 }
 
 export interface Spool {
@@ -73,6 +74,19 @@ export interface Spool {
   Archived: boolean;
 }
 
+export interface SpoolDTO {
+  id: number;
+  materialId: number;
+  spoolNo: number;
+  price: number;
+  currency: string;
+  boughtAt: string;
+  weightInitG: number;
+  weightLeftG: number;
+  leftG?: number;
+  archived: boolean;
+}
+
 export interface Material {
   ID: number;
   Code: string;
@@ -83,8 +97,6 @@ export interface Material {
   Diameter: number;
   DefaultSpoolWeightG: number;
   Note: string;
-  BoughtAt: string;
-  Archived: boolean;
 }
 
 export interface Printer {
@@ -190,6 +202,7 @@ export interface JobEdit {
   lengthM: number;
   slicer: string;
   material: string;
+  spoolId: number;
   tariff: number;
   powerKW: number;
   amortPerHour: number;
@@ -223,6 +236,7 @@ export interface ImportReport {
   new: number;
   existing: number;
   stubs: number;
+  spoolStubs: number;
   dryRun: boolean;
   lifetimeTotal?: number;
 }
@@ -329,6 +343,7 @@ export interface Debt {
 
 export interface SpoolStat {
   code: string;
+  spoolNo: number;
   colorHex: string;
   vendor: string;
   jobs: number;
@@ -347,6 +362,29 @@ export interface PDFSection {
   Title: string;
   Headers: string[];
   Rows: string[][];
+}
+
+// Закупка запчастей/ТО (деньги — основные единицы, рубли).
+export interface PartDTO {
+  id: number;
+  printerId: number;
+  boughtAt: string;
+  name: string;
+  price: number;
+  qty: number;
+  total: number;
+  note: string;
+}
+
+// Закупка пластика (катушка) для отчёта закупок.
+export interface SpoolPurchase {
+  code: string;
+  vendor: string;
+  boughtAt: string;
+  price: number;
+  currency: string;
+  weightG: number;
+  archived: boolean;
 }
 
 // Секция пользовательских настроек из user_settings.json (см. desktop/uisettings.go).
@@ -391,6 +429,8 @@ declare global {
           ExportMaterialsCSV(): Promise<string>;
           PreviewHistoryCSV(): Promise<ImportReport>;
           ApplyHistoryCSV(): Promise<ImportReport>;
+          PreviewMaterialsCSV(): Promise<ImportReport>;
+          ApplyMaterialsCSV(): Promise<ImportReport>;
           Login(login: string, password: string): Promise<UserDTO>;
           Logout(): Promise<void>;
           CurrentUser(): Promise<UserDTO | null>;
@@ -422,6 +462,11 @@ declare global {
           PrinterLoad(): Promise<PrinterStat[]>;
           SpoolStats(): Promise<SpoolStat[]>;
           Debts(): Promise<Debt[]>;
+          SpoolPurchases(): Promise<SpoolPurchase[]>;
+          GetParts(printerId: number): Promise<PartDTO[]>;
+          ListAllParts(): Promise<PartDTO[]>;
+          SavePart(p: PartDTO): Promise<number>;
+          DeletePart(id: number): Promise<void>;
           SetMoonrakerURL(printerId: number, url: string): Promise<void>;
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
@@ -430,6 +475,9 @@ declare global {
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
+          GetSpools(materialId: number): Promise<SpoolDTO[]>;
+          AddSpool(s: SpoolDTO): Promise<number>;
+          DeleteSpool(id: number): Promise<void>;
           SetMaterialPrice(materialId: number, priceMinor: number, currency: string): Promise<void>;
           GetMaterialColorFavs(): Promise<string[]>;
           SetMaterialColorFavs(cols: string[]): Promise<void>;
@@ -482,6 +530,8 @@ export const wails = {
   exportMaterialsCSV: () => api().ExportMaterialsCSV(),
   previewHistoryCSV: () => api().PreviewHistoryCSV(),
   applyHistoryCSV: () => api().ApplyHistoryCSV(),
+  previewMaterialsCSV: () => api().PreviewMaterialsCSV(),
+  applyMaterialsCSV: () => api().ApplyMaterialsCSV(),
   login: (login: string, password: string) => api().Login(login, password),
   logout: () => api().Logout(),
   currentUser: () => api().CurrentUser(),
@@ -515,6 +565,7 @@ export const wails = {
   topMaterials: () => api().TopMaterials(),
   printerLoad: () => api().PrinterLoad(),
   spoolStats: () => api().SpoolStats(),
+  spoolPurchases: () => api().SpoolPurchases(),
   debts: () => api().Debts(),
   setMoonrakerURL: (printerId: number, url: string) => api().SetMoonrakerURL(printerId, url),
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
@@ -525,6 +576,9 @@ export const wails = {
   updateMaterial: (m: Material) => api().UpdateMaterial(m),
   deleteMaterial: (id: number) => api().DeleteMaterial(id),
   updateSpool: (s: Spool) => api().UpdateSpool(s),
+  getSpools: (materialId: number) => api().GetSpools(materialId),
+  addSpool: (s: SpoolDTO) => api().AddSpool(s),
+  deleteSpool: (id: number) => api().DeleteSpool(id),
   setMaterialPrice: (materialId: number, priceMinor: number, currency: string) =>
     api().SetMaterialPrice(materialId, priceMinor, currency),
   getMaterialColorFavs: () => api().GetMaterialColorFavs(),
@@ -532,6 +586,10 @@ export const wails = {
   addPrinter: (p: Printer) => api().AddPrinter(p),
   updatePrinter: (p: Printer) => api().UpdatePrinter(p),
   deletePrinter: (id: number) => api().DeletePrinter(id),
+  getParts: (printerId: number) => api().GetParts(printerId),
+  listAllParts: () => api().ListAllParts(),
+  savePart: (p: PartDTO) => api().SavePart(p),
+  deletePart: (id: number) => api().DeletePart(id),
   deleteCustomer: (id: number) => api().DeleteCustomer(id),
   deleteUser: (id: number) => api().DeleteUser(id),
   appVersion: () => api().AppVersion(),

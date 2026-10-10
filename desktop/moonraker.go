@@ -76,8 +76,8 @@ func (a *App) MoonrakerApply() (sqlite.ImportReport, error) {
 	if err != nil {
 		return rep, err
 	}
-	rep.Total, rep.New, rep.Existing, rep.Stubs =
-		len(a.pendingMoonraker), a.pendingNew, a.pendingExisting, st.Stubs
+	rep.Total, rep.New, rep.Existing, rep.Stubs, rep.SpoolStubs =
+		len(a.pendingMoonraker), a.pendingNew, a.pendingExisting, st.Stubs, st.SpoolStubs
 	a.pendingMoonraker = nil
 	return rep, nil
 }

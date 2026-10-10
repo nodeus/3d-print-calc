@@ -16,6 +16,8 @@ import (
 var (
 	materialRe = regexp.MustCompile(`_(P(?:ETG|LA)(?:[_-][A-Za-z0-9-]+)?)(_|-)`)
 	durationRe = regexp.MustCompile(`^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$`)
+	// Суффикс номера катушки: только цифры (BLACK-1 → 1; W4/G1 — не номер).
+	spoolSuffixRe = regexp.MustCompile(`-(\d+)$`)
 )
 
 // profileTokens — сегменты профилей слайсера, не являющиеся материалом.
@@ -100,6 +102,27 @@ func isMaterialSuffix(seg string) bool {
 		return false
 	}
 	return !profileTokens[strings.ToLower(seg)]
+}
+
+// ParseMaterialSpool извлекает код материала и номер катушки из имени файла:
+// "PETG-NIT-BLACK-1" → ("PETG-NIT-BLACK", 1). Без числового суффикса —
+// номер 0. Точное совпадение со справочником проверяет вызывающий код.
+func ParseMaterialSpool(filename string) (string, int) {
+	return SplitSpoolNo(ParseMaterial(filename))
+}
+
+// SplitSpoolNo отделяет номер катушки от кода: "PETG-NIT-BLACK-1" →
+// ("PETG-NIT-BLACK", 1). Без числового суффикса — (code, 0).
+func SplitSpoolNo(code string) (string, int) {
+	if code == "" {
+		return "", 0
+	}
+	if m := spoolSuffixRe.FindStringSubmatch(code); m != nil {
+		if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
+			return strings.TrimSuffix(code, m[0]), n
+		}
+	}
+	return code, 0
 }
 
 // ParseEstDuration извлекает оценку длительности из хвоста имени файла
