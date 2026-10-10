@@ -101,7 +101,9 @@ weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
 Нулевые `purge/maint/fail/VAT/round`, `copies<=1` — нейтральны (legacy-поведение).
 Деньги в `calc` — float основных единиц; хранение — `int64` минорных + `fx_rate`.
 Снапшот расчёта в `jobs.cost_snapshot` — **v2**: `{v, material, input:{tariff,powerKW,
-amortPerHour,opRate,prepH,postH}, cost, price, currency}` (v1 читается с фолбэком).
+amortPerHour,opRate,prepH,postH,...,spoolNo}, cost, price, currency}` (v1 читается с фолбэком).
+Импорт пишет `price` и `spoolNo` сразу; старые строки без них чинит разовый
+`BackfillImportSnapshots` при старте (только `edited=0`, ручные не трогает).
 Правка работы (`UpdateManual`) пересчитывает строго по полям формы правки
 (полный `input`: тарифы, ставки, наценки, НДС, копии...), цена материала — текущая
 (первая неархивная катушка по id — `materialPrice`, UI её метит «расчётная»).
