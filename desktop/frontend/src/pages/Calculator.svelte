@@ -55,8 +55,9 @@
   let result = $state<CalcResult | null>(null);
   let pricePerKg = $derived(materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
   let density = $derived(materials.find((m) => m.code === matCode)?.density ?? 1.27);
-  // Архивные материалы скрыты из селекта, но выбранный ранее (история/форма) виден.
-  let activeMaterials = $derived(materials.filter((m) => !m.archived || m.code === matCode));
+  // Архив — уровень катушки: виден материал с живыми катушками,
+  // без катушек вообще или уже выбранный.
+  let activeMaterials = $derived(materials.filter((m) => m.spoolCount === 0 || m.hasLiveSpool || m.code === matCode));
   let historyJobs: JobDTO[] = $state([]);
   let historyId = $state(0);
   let stubWarn = $state('');
@@ -511,7 +512,7 @@
     <div class="row">
       <label>{$t('calc.material')}
         <select bind:value={matCode} onchange={recalc}>
-          {#each activeMaterials as m}<option value={m.code}>{m.code}{m.archived ? ` (${$t('mat.archived')})` : ''} — {money(m.pricePerKg, m.currency, $locale)}/кг</option>{/each}
+          {#each activeMaterials as m}<option value={m.code}>{m.code} — {money(m.pricePerKg, m.currency, $locale)}/кг</option>{/each}
         </select>
       </label>
       <label>{$t('calc.printer')}

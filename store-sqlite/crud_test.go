@@ -234,7 +234,8 @@ func TestMaterialBoughtArchived(t *testing.T) {
 	if got.BoughtAt != "2026-10-01" || !got.Archived {
 		t.Fatalf("поля не сохранились: %+v", got)
 	}
-	// Катушка архивного материала скрыта из остатков.
+	// Катушка архивного материала видна: архив — уровень катушки,
+	// флаг материала остатки не фильтрует.
 	if _, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000}); err != nil {
 		t.Fatal(err)
 	}
@@ -242,10 +243,49 @@ func TestMaterialBoughtArchived(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SpoolStats: %v", err)
 	}
+	found := false
 	for _, s := range stats {
 		if s.Code == "PETG-A" {
-			t.Fatalf("архивный материал в остатках: %+v", s)
+			found = true
 		}
+	}
+	if !found {
+		t.Fatal("катушка неархивной партии пропала из остатков")
+	}
+}
+
+// TestSpoolArchivedHidden: архивная катушка скрыта из остатков,
+// работы без линка уходят на первую неархивную.
+func TestSpoolArchivedHidden(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, _ := mats.UpsertByCode(models.Material{Code: "PETG-H", Type: "PETG", Density: 1.27})
+	s1, _ := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	s2, _ := mats.AddSpool(models.Spool{MaterialID: mid, Price: 200000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000})
+	// Работа без линка + архив первой катушки.
+	if _, err := db.Jobs().Upsert(models.Job{Filename: "h.gcode", StartAt: "2026-01-01 10:00",
+		Origin: "import", WeightG: 100, CostSnapshot: `{"material":"PETG-H","cost":1}`}); err != nil {
+		t.Fatal(err)
+	}
+	spools, _ := mats.ListSpools(mid)
+	for _, s := range spools {
+		if s.ID == s1 {
+			s.Archived = true
+			if err := mats.UpdateSpool(s); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	_ = s2
+	stats, err := db.SpoolStats()
+	if err != nil {
+		t.Fatalf("SpoolStats: %v", err)
+	}
+	if len(stats) != 1 {
+		t.Fatalf("остатки: %+v", stats)
+	}
+	if stats[0].Jobs != 1 || stats[0].UsedG != 100 {
+		t.Fatalf("работа не переехала на вторую катушку: %+v", stats[0])
 	}
 }
 

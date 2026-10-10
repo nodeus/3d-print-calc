@@ -59,6 +59,8 @@ export interface MaterialDTO {
   currency: string;
   spoolId: number;
   spoolLeftG: number;
+  hasLiveSpool: boolean;
+  spoolCount: number;
 }
 
 export interface Spool {
