@@ -329,6 +329,7 @@
   "cust.paid": "Paid",
   "cust.debt": "Debt",
   "printer.add": "Add printer",
+  "printer.saved": "Printer saved",
   "printer.date": "Commissioned",
   "printer.life": "Lifespan, years",
   "printer.hpd": "Hours per day",

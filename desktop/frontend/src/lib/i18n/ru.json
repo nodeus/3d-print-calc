@@ -330,6 +330,7 @@
   "cust.paid": "Оплачено",
   "cust.debt": "Долг",
   "printer.add": "Добавить принтер",
+  "printer.saved": "Принтер сохранён",
   "printer.date": "Ввод в эксплуатацию",
   "printer.life": "СПИ, лет",
   "printer.hpd": "Часов в день",

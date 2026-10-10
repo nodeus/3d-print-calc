@@ -7,6 +7,7 @@
   import { num, hms, money } from '../lib/format';
   import { locale } from '../lib/i18n';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { prefillJob } from '../lib/prefill';
   import { goTab } from '../lib/nav';
   import { calcFormDefaults } from '../lib/calcform';
@@ -649,6 +650,7 @@
       });
       editId = 0;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
