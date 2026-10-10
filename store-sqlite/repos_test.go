@@ -451,3 +451,53 @@ func TestDeleteOrderItemCascadesPayments(t *testing.T) {
 		t.Fatalf("total = %d, хочу 0", got.TotalBase)
 	}
 }
+
+// TestPaymentEditDelete: правка суммы/примечания/привязки оплаты и удаление.
+// Гуарды: нулевая сумма, чужая позиция, несуществующая оплата.
+func TestPaymentEditDelete(t *testing.T) {
+	db := openTestDB(t)
+	repo := db.Orders()
+	cid, _ := db.Customers().Save(models.Customer{Name: "K"})
+	oid, _ := repo.Create(models.Order{CustomerID: cid, Currency: "RUB", CreatedAt: "2026-10-01"})
+	iid, _ := repo.AddItem(models.OrderItem{OrderID: oid, Title: "A", Qty: 1, Price: 50000})
+	pid, err := repo.AddPayment(models.Payment{OrderID: oid, Amount: 30000, PaidAt: "2026-10-02", Note: "аванс"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Правка: сумма, примечание, привязка к позиции.
+	if err := repo.UpdatePayment(models.Payment{ID: pid, OrderItem: iid, Amount: 35000, Note: "всё"}); err != nil {
+		t.Fatalf("UpdatePayment: %v", err)
+	}
+	got, err := repo.Payments(oid)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("payments: %+v %v", got, err)
+	}
+	if got[0].Amount != 35000 || got[0].Note != "всё" || got[0].OrderItem != iid || got[0].PaidAt != "2026-10-02" {
+		t.Fatalf("не сохранилось: %+v", got[0])
+	}
+	if p, _ := repo.PaidTotal(oid); p != 35000 {
+		t.Fatalf("paid = %d", p)
+	}
+	// Гуарды.
+	if err := repo.UpdatePayment(models.Payment{ID: pid, Amount: 0}); err == nil {
+		t.Fatal("нулевая сумма принята")
+	}
+	oid2, _ := repo.Create(models.Order{CustomerID: cid, Currency: "RUB", CreatedAt: "2026-10-03"})
+	iid2, _ := repo.AddItem(models.OrderItem{OrderID: oid2, Title: "B", Qty: 1, Price: 100})
+	if err := repo.UpdatePayment(models.Payment{ID: pid, OrderItem: iid2, Amount: 100}); err == nil {
+		t.Fatal("чужая позиция принята")
+	}
+	if err := repo.UpdatePayment(models.Payment{ID: 999999, Amount: 100}); err == nil {
+		t.Fatal("несуществующая правка принята")
+	}
+	// Удаление.
+	if err := repo.DeletePayment(pid); err != nil {
+		t.Fatalf("DeletePayment: %v", err)
+	}
+	if p, _ := repo.PaidTotal(oid); p != 0 {
+		t.Fatalf("оплата осталась: %d", p)
+	}
+	if err := repo.DeletePayment(pid); err != nil {
+		t.Fatalf("повторное удаление: %v", err)
+	}
+}
