@@ -9,6 +9,7 @@
   import { mySettings } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
   import { get } from 'svelte/store';
   import { user, canWrite } from '../lib/session';
 
@@ -128,7 +129,7 @@
   <thead><tr>
     {#each userOrd as k}
       <th style={thWidth('users', k)} data-col={k} class:dragsrc={dragKey === k}>
-        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, userOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }}>⋮⋮</span>{/if}
+        {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, userOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }} onkeydown={(e) => colKeyMove(e, userOrd, k, dropCols)}>⋮⋮</span>{/if}
         <button class="th" onclick={() => toggleSort(k)}>{$t(userLabel(k))}{arrow(k)}</button>
         <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'users', k)} ondblclick={() => resetColWidth('users', k)}></span>
       </th>

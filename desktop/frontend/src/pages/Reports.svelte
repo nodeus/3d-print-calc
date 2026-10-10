@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt, type SpoolStat, type PartDTO, type SpoolPurchase } from '../lib/wails';
+  import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt, type SpoolStat, type PartDTO, type SpoolPurchase, type FxRate } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
   import { gotoOrder } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
@@ -9,6 +9,7 @@
   import { mySettings } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
   import { get } from 'svelte/store';
   import { user, canWrite } from '../lib/session';
 
@@ -21,6 +22,21 @@
   let spoolBuys: SpoolPurchase[] = $state([]);
   let printerNames: Record<number, string> = $state({});
   let baseCur = $state('RUB');
+  // Свежие курсы для пересчёта закупок в базовую (валюта → единиц базовой за 1).
+  let fxRates: FxRate[] = $state([]);
+
+  function rateToBase(cur: string): number {
+    if (!cur || cur === baseCur) return 1;
+    let best = 0;
+    let day = '';
+    for (const r of fxRates) {
+      if (r.currency === cur && r.day >= day) {
+        day = r.day;
+        best = r.rate;
+      }
+    }
+    return best > 0 ? best : 1;
+  }
 
   function cmpVals(a: string | number, b: string | number, dir: 1 | -1): number {
     const cmp = typeof a === 'number' ? a - (b as number) : String(a).localeCompare(String(b));
@@ -133,6 +149,15 @@
   let revOrdersSum = $derived(revenueSorted.reduce((s, r) => s + r.orders, 0));
   let debtBalanceSum = $derived(debtsSorted.reduce((s, d) => s + d.balance, 0));
   let loadSorted = $derived([...load].sort((a, b) => cmpVals(loadVal(a), loadVal(b), loadSort.dir)));
+  let topJobsSum = $derived(topsSorted.reduce((s, m) => s + m.jobs, 0));
+  let topWeightSum = $derived(topsSorted.reduce((s, m) => s + m.weight, 0));
+  let loadJobsSum = $derived(loadSorted.reduce((s, p) => s + p.jobs, 0));
+  let loadTimeSum = $derived(loadSorted.reduce((s, p) => s + p.totalSec, 0));
+  let loadLengthSum = $derived(loadSorted.reduce((s, p) => s + p.lengthM, 0));
+  let loadWeightSum = $derived(loadSorted.reduce((s, p) => s + p.weightG, 0));
+  let spoolJobsSum = $derived(spoolsSorted.reduce((s, x) => s + x.jobs, 0));
+  let spoolUsedSum = $derived(spoolsSorted.reduce((s, x) => s + x.usedG, 0));
+  let spoolLeftSum = $derived(spoolsSorted.reduce((s, x) => s + x.leftG, 0));
 
   // Порядок колонок (drag за грип), тексты ячеек, PDF — в экранном порядке.
   const revKeys = ['month', 'total', 'orders'];
@@ -258,7 +283,7 @@
       r.total += sum;
     };
     for (const p of parts) add(p.boughtAt, Math.round(p.total * 100) / 100, 'parts');
-    for (const s of spoolBuys) add(s.boughtAt, Math.round(s.price * 100) / 100, 'plastic');
+    for (const s of spoolBuys) add(s.boughtAt, Math.round(s.price * rateToBase(s.currency) * 100) / 100, 'plastic');
     const rows = [...map.values()];
     rows.sort((a, b) => {
       if (a.period === '—') return 1;
@@ -364,6 +389,7 @@
       printerNames = {};
       for (const p of printers) printerNames[p.ID] = p.Name;
       baseCur = await wails.getBaseCurrency();
+      fxRates = (await wails.listFxRates()) ?? [];
     } catch (e) {
       console.error(e);
     }
@@ -418,7 +444,7 @@
       <thead><tr>
         {#each revOrd as k}
           <th class:n={repIsNum('repRevenue', k)} style={thWidth('repRevenue', k)} data-col={k} class:dragsrc={dragTable === 'repRevenue' && dragKey === k}>
-            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repRevenue', wrapRev, k, revOrd)}>⋮⋮</span>{/if}
+            {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repRevenue', wrapRev, k, revOrd)} onkeydown={(e) => colKeyMove(e, revOrd, k, (n) => dropCols('repRevenue', n))}>⋮⋮</span>{/if}
             <button class="th" onclick={() => tg(revSort, k)}>{$t(repLabel('repRevenue', k))}{ar(revSort, k)}</button>
             <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'repRevenue', k)} ondblclick={() => resetColWidth('repRevenue', k)}></span>
           </th>
@@ -440,7 +466,7 @@
       <thead><tr>
         {#each debtOrd as k}
           <th class:n={repIsNum('repDebts', k)} style={thWidth('repDebts', k)} data-col={k} class:dragsrc={dragTable === 'repDebts' && dragKey === k}>
-            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repDebts', wrapDebt, k, debtOrd)}>⋮⋮</span>{/if}
+            {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repDebts', wrapDebt, k, debtOrd)} onkeydown={(e) => colKeyMove(e, debtOrd, k, (n) => dropCols('repDebts', n))}>⋮⋮</span>{/if}
             <button class="th" onclick={() => tg(debtSort, k)}>{k === 'orderId' ? '#' : $t(repLabel('repDebts', k))}{ar(debtSort, k)}</button>
             <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'repDebts', k)} ondblclick={() => resetColWidth('repDebts', k)}></span>
           </th>
@@ -462,13 +488,16 @@
       <thead><tr>
         {#each topOrd as k}
           <th class:n={repIsNum('repTopmats', k)} style={thWidth('repTopmats', k)} data-col={k} class:dragsrc={dragTable === 'repTopmats' && dragKey === k}>
-            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repTopmats', wrapTop, k, topOrd)}>⋮⋮</span>{/if}
+            {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repTopmats', wrapTop, k, topOrd)} onkeydown={(e) => colKeyMove(e, topOrd, k, (n) => dropCols('repTopmats', n))}>⋮⋮</span>{/if}
             <button class="th" onclick={() => tg(topSort, k)}>{$t(repLabel('repTopmats', k))}{ar(topSort, k)}</button>
             <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'repTopmats', k)} ondblclick={() => resetColWidth('repTopmats', k)}></span>
           </th>
         {/each}
       </tr></thead>
       <tbody>{#each topsSorted as m}<tr>{#each topOrd as k}<td class:n={repIsNum('repTopmats', k)}>{topText(m, k)}</td>{/each}</tr>{/each}</tbody>
+      <tfoot><tr>
+        {#each topOrd as k}<td class:n={repIsNum('repTopmats', k)}><b>{k === 'code' ? $t('hist.total') : k === 'jobs' ? String(topJobsSum) : k === 'weight' ? num(topWeightSum) : ''}</b></td>{/each}
+      </tr></tfoot>
     </table>
     </div>
   </section>
@@ -481,13 +510,16 @@
       <thead><tr>
         {#each loadOrd as k}
           <th class:n={repIsNum('repLoad', k)} style={thWidth('repLoad', k)} data-col={k} class:dragsrc={dragTable === 'repLoad' && dragKey === k}>
-            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repLoad', wrapLoad, k, loadOrd)}>⋮⋮</span>{/if}
+            {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repLoad', wrapLoad, k, loadOrd)} onkeydown={(e) => colKeyMove(e, loadOrd, k, (n) => dropCols('repLoad', n))}>⋮⋮</span>{/if}
             <button class="th" onclick={() => tg(loadSort, k)}>{$t(repLabel('repLoad', k))}{ar(loadSort, k)}</button>
             <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'repLoad', k)} ondblclick={() => resetColWidth('repLoad', k)}></span>
           </th>
         {/each}
       </tr></thead>
       <tbody>{#each loadSorted as p}<tr>{#each loadOrd as k}<td class:n={repIsNum('repLoad', k)}>{loadText(p, k)}</td>{/each}</tr>{/each}</tbody>
+      <tfoot><tr>
+        {#each loadOrd as k}<td class:n={repIsNum('repLoad', k)}><b>{k === 'name' ? $t('hist.total') : k === 'jobs' ? String(loadJobsSum) : k === 'time' ? hms(loadTimeSum) : k === 'length' ? num(loadLengthSum) : k === 'weight' ? num(loadWeightSum) : ''}</b></td>{/each}
+      </tr></tfoot>
     </table>
     </div>
   </section>
@@ -500,7 +532,7 @@
       <thead><tr>
         {#each spoolOrd as k}
           <th class:n={repIsNum('repSpools', k)} style={thWidth('repSpools', k)} data-col={k} class:dragsrc={dragTable === 'repSpools' && dragKey === k}>
-            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repSpools', wrapSpool, k, spoolOrd)}>⋮⋮</span>{/if}
+            {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repSpools', wrapSpool, k, spoolOrd)} onkeydown={(e) => colKeyMove(e, spoolOrd, k, (n) => dropCols('repSpools', n))}>⋮⋮</span>{/if}
             {#if k === 'color'}
               <button class="th" onclick={() => spoolSortBy(k)}>{$t(repLabel('repSpools', k))}{spoolArrow(k)}</button>
             {:else}
@@ -511,6 +543,9 @@
         {/each}
       </tr></thead>
       <tbody>{#each spoolsSorted as s}<tr>{#each spoolOrd as k}{#if k === 'color'}<td><span class="sw" style="background:{s.colorHex || 'transparent'}" title={s.colorHex}></span></td>{:else}<td class:n={repIsNum('repSpools', k)}>{spoolText(s, k)}</td>{/if}{/each}</tr>{/each}</tbody>
+      <tfoot><tr>
+        {#each spoolOrd as k}<td class:n={repIsNum('repSpools', k)}><b>{k === 'code' ? $t('hist.total') : k === 'jobs' ? String(spoolJobsSum) : k === 'used' ? num(spoolUsedSum) : k === 'left' ? num(spoolLeftSum) : ''}</b></td>{/each}
+      </tr></tfoot>
     </table>
     </div>
   </section>
@@ -528,7 +563,7 @@
       <thead><tr>
         {#each purOrd as k}
           <th class:n={purNum(k)} style={thWidth('repPurchases', k)} data-col={k} class:dragsrc={dragTable === 'repPurchases' && dragKey === k}>
-            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repPurchases', wrapPur, k, purOrd)}>⋮⋮</span>{/if}
+            {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'repPurchases', wrapPur, k, purOrd)} onkeydown={(e) => colKeyMove(e, purOrd, k, (n) => dropCols('repPurchases', n))}>⋮⋮</span>{/if}
             <button class="th" onclick={() => purSortBy(k)}>{$t(purLabel(k))}{purArrow(k)}</button>
             <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'repPurchases', k)} ondblclick={() => resetColWidth('repPurchases', k)}></span>
           </th>

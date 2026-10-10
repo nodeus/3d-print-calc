@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { tick } from 'svelte';
   import { get } from 'svelte/store';
   import { wails, type JobDTO, type MaterialDTO, type SpoolDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
@@ -16,6 +17,7 @@
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
   import { splitHours, joinHours } from '../lib/hm';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
 
   let jobs: JobDTO[] = $state([]);
   let materials: MaterialDTO[] = $state([]);
@@ -388,30 +390,17 @@
     }
   }
 
-  let totals: Record<string, number> | null = $state(null);
-  let totalsN = $state(0);
-
-  function calcTotals() {
+  // Суммы по выборке — всегда актуальны (дешёвый проход, кнопки нет).
+  let totals: Record<string, number> = $derived.by(() => {
     const t: Record<string, number> = {};
     for (const k of summable) {
       let s = 0;
       for (const j of filtered) s += rawVal(j, k) || 0;
       t[k] = Math.round(s * 100) / 100;
     }
-    totals = t;
-    totalsN = filtered.length;
-  }
-
-  // Выборка изменилась — суммы прячем до повторного подсчёта.
-  // untrack обязателен: чтение totals подписало бы эффект на него же,
-  // и подсчёт тут же гасился бы (баг v1.2.1).
-  $effect(() => {
-    void filtered.length;
-    void columns.length;
-    untrack(() => {
-      totals = null;
-    });
+    return t;
   });
+  let totalsN = $derived(filtered.length);
 
   function footText(k: string): string {
     if (!totals) return '';
@@ -491,6 +480,22 @@
     try {
       await wails.deleteJob(j.ID);
       await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  // Одиночное удаление нетронутого импорта — тем же bulk-путём, что выборка.
+  async function removeOne(j: JobDTO) {
+    error = '';
+    bulkMsg = '';
+    if (!(await askConfirm(`${$t('hist.delete_one_q')} «${j.Filename}»?`))) return;
+    try {
+      const rep = await wails.deleteJobs([j.ID]);
+      await load();
+      const skipped = rep.skippedOrder ?? [];
+      bulkMsg = `${$t('hist.bulk_deleted')}: ${rep.deleted}` +
+        (skipped.length ? ` · ${$t('hist.bulk_skipped')}: ${skipped.join(', ')}` : '');
     } catch (e) {
       error = String(e);
     }
@@ -621,6 +626,30 @@
     editPrep = splitHours(pick('prepH', d.prepH ?? 0));
     editPost = splitHours(pick('postH', d.postH ?? 0));
     editModel = splitHours(pick('modelH', d.modelH ?? 0));
+    editOrig = snapshotEdit();
+    tick().then(() => {
+      (editCard?.querySelector('input, select, button') as HTMLElement | null)?.focus();
+    });
+  }
+
+  // Слепок формы для dirty-check отмены.
+  function snapshotEdit(): string {
+    return JSON.stringify({ edit, editSpoolId, editPrep, editPost, editModel });
+  }
+
+  let editCard: HTMLDivElement | null = $state(null);
+  let editOrig: string | null = $state(null);
+
+  async function cancelEdit() {
+    if (editOrig !== null && snapshotEdit() !== editOrig) {
+      if (!(await askConfirm($t('hist.discard_q')))) return;
+    }
+    const id = editId;
+    editId = 0;
+    editOrig = null;
+    requestAnimationFrame(() => {
+      (document.querySelector(`[data-edit-job="${id}"]`) as HTMLElement | null)?.focus();
+    });
   }
 
   // Время работ в правке — парами часы+минуты (в снапшот — десятичные часы).
@@ -673,7 +702,7 @@
   <p class="note">{$t('hist.empty')}</p>
 {/if}
 {#if editId}
-  <div class="card">
+  <div class="card" bind:this={editCard}>
     <h3>{$t('hist.edit_title')}</h3>
     <div class="row">
       <label>{$t('hist.filename')}<input bind:value={edit.filename} /></label>
@@ -739,7 +768,7 @@
     <p class="note">{$t('hist.edit_note')}</p>
     <div class="row">
       <button onclick={saveEdit}>{$t('common.save')}</button>
-      <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button>
+      <button onclick={cancelEdit}>{$t('common.cancel')}</button>
     </div>
   </div>
 {/if}
@@ -754,7 +783,6 @@
     {#each origins as o}<option value={o}>{originLabel(o)}</option>{/each}
   </select>
   <span class="count">{$t('hist.shown')}: {visible.length} / {filtered.length} / {jobs.length}</span>
-  <button onclick={calcTotals}>{$t('hist.sums_btn')}</button>
   <button onclick={openColumns}>{$t('hist.columns_btn')}: {columns.length}/{allColumns.length}</button>
   {#if canWrite($user)}
     <span class="count">{$t('hist.selected_n')}: {selected.length}</span>
@@ -763,9 +791,9 @@
   {/if}
   {#if bulkMsg}<span class="count">{bulkMsg}</span>{/if}
   <span class="pager">
-    <button disabled={page === 0} onclick={() => page--}>‹</button>
+    <button disabled={page === 0} onclick={() => page--} aria-label={$t('common.prev')}>‹</button>
     {page + 1} / {pages}
-    <button disabled={page >= pages - 1} onclick={() => page++}>›</button>
+    <button disabled={page >= pages - 1} onclick={() => page++} aria-label={$t('common.next')}>›</button>
   </span>
 </div>
 
@@ -776,7 +804,7 @@
     {#if canWrite($user)}<th class="no-print"><input type="checkbox" bind:this={headBox} checked={pageAll} onchange={togglePage} title={$t('hist.select_page')} /></th>{/if}
     {#each columns as c}
       <th class:n={isNum(c)} style={thWidth('history', c)} data-col={c} class:dragsrc={dragCol === c}>
-        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, c)}>⋮⋮</span>{/if}
+        {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, c)} onkeydown={(e) => colKeyMove(e, columns, c, persistColumns)}>⋮⋮</span>{/if}
         {#if sortable[c]}
           <button class="th" onclick={() => toggleSort(sortable[c])}>{colLabel(c)}{arrow(sortable[c])}</button>
         {:else}{colLabel(c)}{/if}
@@ -795,22 +823,22 @@
         <td class="no-print">
           <button onclick={() => toCalc(j)}>{$t('hist.to_calc')}</button>
           {#if canWrite($user)}
-            <button onclick={() => startEdit(j)} title={$t('hist.edit_title')} aria-label={$t('hist.edit_title')}>✎</button>
+            <button onclick={() => startEdit(j)} title={$t('hist.edit_title')} aria-label={$t('hist.edit_title')} data-edit-job={j.ID}>✎</button>
             {#if j.Origin === 'manual' || j.Edited}
               <button onclick={() => remove(j)} title={j.Origin === 'manual' ? $t('common.delete_q') : $t('common.revert_q')} aria-label={j.Origin === 'manual' ? $t('common.delete_q') : $t('common.revert_q')}>{j.Origin === 'manual' ? '✕' : '↩'}</button>
+            {:else}
+              <button onclick={() => removeOne(j)} title={$t('common.delete_q')} aria-label={$t('common.delete_q')}>✕</button>
             {/if}
           {/if}
         </td>
       </tr>
     {/each}
   </tbody>
-  {#if totals}
-    <tfoot><tr>
-      {#if canWrite($user)}<td class="no-print"></td>{/if}
-      {#each columns as c}<td class:n={isNum(c)}><b>{footText(c)}</b></td>{/each}
-      <td class="no-print"></td>
-    </tr></tfoot>
-  {/if}
+  <tfoot><tr>
+    {#if canWrite($user)}<td class="no-print"></td>{/if}
+    {#each columns as c}<td class:n={isNum(c)}><b>{footText(c)}</b></td>{/each}
+    <td class="no-print"></td>
+  </tr></tfoot>
 </table>
 </div>
 
