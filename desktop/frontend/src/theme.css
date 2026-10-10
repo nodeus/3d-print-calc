@@ -69,7 +69,7 @@ button:not(:disabled):active {
 }
 :focus-visible {
   outline: 1px solid var(--accent);
-  outline-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-color: color-mix(in srgb, var(--accent) 65%, var(--input-bg, #ffffff));
   outline-offset: 1px;
 }
 
