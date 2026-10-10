@@ -31,8 +31,8 @@
 <div class="login">
   <h2>{$t('auth.title')}</h2>
   <p class="note">{$t('auth.hint')}</p>
-  <label>{$t('auth.login')}<input bind:value={login} disabled={pending} /></label>
-  <label>{$t('auth.password')}<input type="password" bind:value={password} disabled={pending} onkeydown={(e) => e.key === 'Enter' && submit()} /></label>
+  <label>{$t('auth.login')}<input bind:value={login} disabled={pending} name="username" autocomplete="username" /></label>
+  <label>{$t('auth.password')}<input type="password" bind:value={password} disabled={pending} onkeydown={(e) => e.key === 'Enter' && submit()} name="password" autocomplete="current-password" /></label>
   <button onclick={submit} disabled={pending}>{pending ? '…' : $t('auth.enter')}</button>
   {#if error}<p class="err">{error}</p>{/if}
 </div>

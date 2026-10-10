@@ -13,6 +13,7 @@
   import { mySettings, saveMySettingsPatch } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
 
   let rows: OrderRow[] = $state([]);
   let sortKey = $state('created');
@@ -605,7 +606,7 @@
       <thead><tr>
         {#each listOrd as k}
           <th class:n={orderNum(k)} style={thWidth('orders', k)} data-col={k} class:dragsrc={dragTable === 'orders' && dragKey === k}>
-            {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'orders', wrapEl, k, listOrd)}>⋮⋮</span>{/if}
+            {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'orders', wrapEl, k, listOrd)} onkeydown={(e) => colKeyMove(e, listOrd, k, (n) => dropCols('orders', n))}>⋮⋮</span>{/if}
             <button class="th" onclick={() => toggleSort(k)}>{$t(orderLabel(k))}{arrow(k)}</button>
             <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orders', k)} ondblclick={() => resetColWidth('orders', k)}></span>
           </th>
@@ -624,9 +625,9 @@
     <div class="row no-print" style="margin-top:6px;align-items:center;">
       <span class="count">{$t('hist.shown')}: {paged.length} / {visibleRows.length} / {rows.length}</span>
       <span class="pager">
-        <button disabled={page === 0} onclick={() => page--}>‹</button>
+        <button disabled={page === 0} onclick={() => page--} aria-label={$t('common.prev')}>‹</button>
         {page + 1} / {pages}
-        <button disabled={page >= pages - 1} onclick={() => page++}>›</button>
+        <button disabled={page >= pages - 1} onclick={() => page++} aria-label={$t('common.next')}>›</button>
       </span>
     </div>
   </section>
@@ -667,7 +668,7 @@
         <thead><tr><th class="no-print" style="width:34px;">№</th>
           {#each itemOrd as k}
             <th class:n={itemNum(k)} style={thWidth('orderItems', k)} data-col={k} class:dragsrc={dragTable === 'orderItems' && dragKey === k}>
-              {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'orderItems', itemWrapEl, k, itemOrd)}>⋮⋮</span>{/if}
+              {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, 'orderItems', itemWrapEl, k, itemOrd)} onkeydown={(e) => colKeyMove(e, itemOrd, k, (n) => dropCols('orderItems', n))}>⋮⋮</span>{/if}
               <button class="th" onclick={() => toggleItemSort(k)}>{$t(itemLabel(k))}{itemArrow(k)}</button>
               <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'orderItems', k)} ondblclick={() => resetColWidth('orderItems', k)}></span>
             </th>

@@ -11,6 +11,7 @@
   import { mySettings } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
 
   let printers: PrinterDTO[] = $state([]);
   let error = $state('');
@@ -138,12 +139,13 @@
     }
   }
   let status: Record<number, string> = $state({});
-  let report: ImportReport | null = $state(null);
-  let applied: ImportReport | null = $state(null);
-  let importing = $state(false);
-  let progress = $state({ done: 0, total: 0 });
+  // Импорт Moonraker — состояние на принтер (карточки не затирают друг друга).
+  let report: Record<number, ImportReport | null> = $state({});
+  let applied: Record<number, ImportReport | null> = $state({});
+  let importing: Record<number, boolean> = $state({});
+  let progress: Record<number, { done: number; total: number }> = $state({});
   // Лимит последних работ Moonraker (null — пусто, т.е. вся история).
-  let moonLimit: number | null = $state(null);
+  let moonLimit: Record<number, number | null> = $state({});
 
   function blank(): PrinterForm {
     return {
@@ -152,6 +154,41 @@
       CalendarMode: 'calendar', AmortMethod: 'calendar', PowerKW: null,
       MaintPerHour: null, ResourceHours: null, MoonrakerURL: '',
     };
+  }
+
+  // Сортировка запчастей (общая на все карточки; ширин/drag у малой таблицы нет).
+  let partSortKey = $state('date');
+  let partSortDir: 1 | -1 = $state(-1);
+
+  function togglePartSort(key: string) {
+    if (partSortKey === key) partSortDir = partSortDir === 1 ? -1 : 1;
+    else { partSortKey = key; partSortDir = 1; }
+  }
+
+  function partArrow(key: string): string {
+    return partSortKey === key ? (partSortDir === 1 ? ' ▲' : ' ▼') : '';
+  }
+
+  function partVal(pt: PartDTO, key: string): string | number {
+    switch (key) {
+      case 'date': return pt.boughtAt || '';
+      case 'name': return (pt.name || '').toLowerCase();
+      case 'price': return pt.price;
+      case 'qty': return pt.qty;
+      case 'total': return pt.total;
+      case 'note': return (pt.note || '').toLowerCase();
+      default: return pt.boughtAt || '';
+    }
+  }
+
+  function sortedParts(pid: number): PartDTO[] {
+    const dir = partSortDir;
+    return [...(parts[pid] ?? [])].sort((a, b) => {
+      const va = partVal(a, partSortKey);
+      const vb = partVal(b, partSortKey);
+      const cmp = typeof va === 'number' ? va - (vb as number) : String(va).localeCompare(String(vb));
+      return cmp * dir;
+    });
   }
 
   async function load() {
@@ -243,28 +280,28 @@
 
   async function preview(p: PrinterDTO) {
     error = '';
-    applied = null;
+    applied[p.ID] = null;
     try {
-      report = await wails.moonrakerPreview(p.ID, moonLimit ?? 0);
+      report[p.ID] = await wails.moonrakerPreview(p.ID, moonLimit[p.ID] ?? 0);
     } catch (e) {
       error = String(e);
     }
   }
 
-  async function apply() {
+  async function apply(p: PrinterDTO) {
     error = '';
-    importing = true;
-    progress = { done: 0, total: 0 };
+    importing[p.ID] = true;
+    progress[p.ID] = { done: 0, total: 0 };
     wails.onImportProgress((done, total) => {
-      progress = { done, total };
+      progress[p.ID] = { done, total };
     });
     try {
-      applied = await wails.moonrakerApply();
-      report = null;
+      applied[p.ID] = await wails.moonrakerApply();
+      report[p.ID] = null;
     } catch (e) {
       error = String(e);
     } finally {
-      importing = false;
+      importing[p.ID] = false;
       wails.offImportProgress();
     }
   }
@@ -332,7 +369,7 @@
   <thead><tr>
     {#each printerOrd as k}
       <th class:n={printerNum(k)} style={thWidth('printers', k)} data-col={k} class:dragsrc={dragKey === k}>
-        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => startColDrag(e, wrapEl, k, printerOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols)}>⋮⋮</span>{/if}
+        {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => startColDrag(e, wrapEl, k, printerOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols)} onkeydown={(e) => colKeyMove(e, printerOrd, k, dropCols)}>⋮⋮</span>{/if}
         <button class="th" onclick={() => toggleSort(k)}>{$t(printerLabel(k))}{arrow(k)}</button>
         <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'printers', k)} ondblclick={() => resetColWidth('printers', k)}></span>
       </th>
@@ -360,15 +397,19 @@
         <button onclick={() => saveURL(p)}>{$t('common.save')}</button>
         <button onclick={() => ping(p)}>{$t('moon.check')}</button>
         <button onclick={() => preview(p)}>{$t('moon.import')}</button>
-        <input type="number" min="1" step="1" bind:value={moonLimit} placeholder={$t('moon.limit')} title={$t('moon.limit')} style={`width:${$t('moon.limit').length + 5}ch`} />
+        <input type="number" min="1" step="1" bind:value={moonLimit[p.ID]} placeholder={$t('moon.limit')} title={$t('moon.limit')} style={`width:${$t('moon.limit').length + 5}ch`} />
       </div>
     {/if}
     {#if status[p.ID]}<p class="ok">Moonraker {status[p.ID]}</p>{/if}
+    {#if report[p.ID]}<p>{$t('set.csv_preview')}: total {report[p.ID]!.total}{#if report[p.ID]!.lifetimeTotal} / {$t('moon.lifetime_total')}: {report[p.ID]!.lifetimeTotal}{/if}, new {report[p.ID]!.new}, existing {report[p.ID]!.existing}</p>{/if}
+    {#if report[p.ID]?.dryRun && canWrite($user)}<button class="warn no-print" onclick={() => apply(p)} disabled={importing[p.ID]}>{$t('set.csv_apply')}</button>{/if}
+    {#if importing[p.ID] && progress[p.ID]}<progress value={progress[p.ID].done} max={progress[p.ID].total || 1}></progress> {progress[p.ID].done}/{progress[p.ID].total}{/if}
+    {#if applied[p.ID]}<p class="ok">{$t('set.csv_done')}: +{applied[p.ID]!.new} (stubs {applied[p.ID]!.stubs}, {$t('set.csv_spool_stubs')} {applied[p.ID]!.spoolStubs ?? 0})</p>{/if}
     <h4>{$t('part.title')}</h4>
     <table>
-      <thead><tr><th>{$t('part.date')}</th><th>{$t('part.name')}</th><th class="n">{$t('part.price')}</th><th class="n">{$t('part.qty')}</th><th class="n">{$t('part.total')}</th><th>{$t('part.note')}</th><th class="no-print"></th></tr></thead>
+      <thead><tr><th><button class="th" onclick={() => togglePartSort('date')}>{$t('part.date')}{partArrow('date')}</button></th><th><button class="th" onclick={() => togglePartSort('name')}>{$t('part.name')}{partArrow('name')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('price')}>{$t('part.price')}{partArrow('price')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('qty')}>{$t('part.qty')}{partArrow('qty')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('total')}>{$t('part.total')}{partArrow('total')}</button></th><th><button class="th" onclick={() => togglePartSort('note')}>{$t('part.note')}{partArrow('note')}</button></th><th class="no-print"></th></tr></thead>
       <tbody>
-        {#each parts[p.ID] ?? [] as pt}
+        {#each sortedParts(p.ID) as pt}
           {#if partEdit && partEdit.id === pt.id}
             <tr>
               <td><input type="date" bind:value={partEdit.boughtAt} /></td>
@@ -404,10 +445,6 @@
     {/if}
   </div>
 {/each}
-{#if report}<p>{$t('set.csv_preview')}: total {report.total}{#if report.lifetimeTotal} / {$t('moon.lifetime_total')}: {report.lifetimeTotal}{/if}, new {report.new}, existing {report.existing}</p>{/if}
-{#if report?.dryRun && canWrite($user)}<button class="warn no-print" onclick={apply} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
-{#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
-  {#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs}, {$t('set.csv_spool_stubs')} {applied.spoolStubs ?? 0})</p>{/if}
 
 <style>
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }

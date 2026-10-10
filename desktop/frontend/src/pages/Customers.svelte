@@ -12,6 +12,7 @@
   import { mySettings } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
 
   let list: Customer[] = $state([]);
   let rows: OrderRow[] = $state([]);
@@ -185,7 +186,7 @@
   <thead><tr>
     {#each custOrd as k}
       <th class:n={custNum(k)} style={thWidth('customers', k)} data-col={k} class:dragsrc={dragKey === k}>
-        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, custOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }}>⋮⋮</span>{/if}
+        {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, custOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }} onkeydown={(e) => colKeyMove(e, custOrd, k, dropCols)}>⋮⋮</span>{/if}
         <button class="th" onclick={() => toggleSort(k)}>{$t(custLabel(k))}{arrow(k)}</button>
         <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'customers', k)} ondblclick={() => resetColWidth('customers', k)}></span>
       </th>
