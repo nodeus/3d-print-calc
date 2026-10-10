@@ -25,12 +25,29 @@
   let tabError = $state('');
 
   onMount(async () => {
+    window.addEventListener('resize', saveWinSize);
     await initLocale();
     await loadTheme();
     await refreshUser();
     // Сессия могла сохраниться: подтянуть настройки пользователя поверх глобальных.
     if (get(user)) await applyMySettings();
   });
+  onDestroy(() => window.removeEventListener('resize', saveWinSize));
+
+  // Живое сохранение размера окна (дебаунс): переживает даже убитый
+  // рантайм на выходе. Наружные единицы WindowGetSize = единицы SetSize.
+  let winTimer: number | undefined = $state(undefined);
+  function saveWinSize() {
+    window.clearTimeout(winTimer);
+    winTimer = window.setTimeout(async () => {
+      try {
+        const s = await window.runtime.WindowGetSize();
+        if (s && s.w > 0 && s.h > 0) await wails.saveWindowSize(s.w, s.h);
+      } catch {
+        /* рантайм недоступен (браузер) — молча */
+      }
+    }, 500);
+  }
 
   const unsubGoTab = goTab.subscribe((v) => {
     if (v) {

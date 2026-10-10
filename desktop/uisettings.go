@@ -158,3 +158,16 @@ func (a *App) saveWindowSettings(w WindowSettings) error {
 	f.Window = w
 	return a.saveSettingsFile(f)
 }
+
+// SaveWindowSize живьём пишет размер окна (зовёт фронт на resize).
+// Без гейта ролей: окно общее. Позицию не трогает, неположительные игнорит.
+func (a *App) SaveWindowSize(w, h int) error {
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	uiSettingsMu.Lock()
+	defer uiSettingsMu.Unlock()
+	f := a.loadSettingsFile()
+	f.Window.W, f.Window.H = w, h
+	return a.saveSettingsFile(f)
+}
