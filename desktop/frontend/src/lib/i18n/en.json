@@ -132,6 +132,7 @@
   "set.csv_apply": "Apply import",
   "set.csv_preview": "Preview",
   "set.csv_done": "Imported",
+  "set.csv_spool_stubs": "spools",
   "set.ordnum": "Order numbers",
   "set.ordnum_tpl": "Template",
   "set.ordnum_seq": "Next counter",

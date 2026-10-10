@@ -600,7 +600,7 @@
   </div>
   {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
   {#if csvReport}<p>{$t('set.csv_preview')}: total {csvReport.total}, new {csvReport.new}, existing {csvReport.existing}</p>{/if}
-  {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs})</p>{/if}
+  {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs}, {$t('set.csv_spool_stubs')} {csvApplied.spoolStubs ?? 0})</p>{/if}
   <div class="row">
     <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
     {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}

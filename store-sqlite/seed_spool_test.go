@@ -65,10 +65,23 @@ func TestImportSpoolNumber(t *testing.T) {
 	if snap.Material != "PETG-NIT-BLACK" {
 		t.Fatalf("материал снапшота: %q", snap.Material)
 	}
-	// Третья катушка отсутствует: первая + её цена.
+	// Неизвестный номер на существующем материале: стаб катушки + линк.
 	j9 := byFile["part_PETG-NIT-BLACK-9_2h0m.gcode"]
-	if j9.SpoolID != spools[0].ID {
-		t.Fatalf("фолбэк: %+v", j9)
+	spoolsAfter, _ := db.Materials().ListSpools(mid)
+	var s9 *models.Spool
+	for i, s := range spoolsAfter {
+		if s.SpoolNo == 9 {
+			s9 = &spoolsAfter[i]
+		}
+	}
+	if s9 == nil {
+		t.Fatal("стаб катушки №9 не создан")
+	}
+	if s9.Price != 0 || s9.BoughtAt != "" {
+		t.Fatalf("стаб не пустой: %+v", s9)
+	}
+	if j9.SpoolID != s9.ID {
+		t.Fatalf("линк на стаб: %+v", j9)
 	}
 	// Неизвестная база: стаб по базе, без номера катушки.
 	if _, err := db.Materials().GetByCode("PETG-UNKNOWN"); err != nil {
@@ -76,5 +89,62 @@ func TestImportSpoolNumber(t *testing.T) {
 	}
 	if _, err := db.Materials().GetByCode("PETG-UNKNOWN-3"); err == nil {
 		t.Fatal("стаб с номером катушки в коде запрещён")
+	}
+}
+
+// TestImportSpoolStubs: свежая база — стаб материала + стаб катушки с номером,
+// работа слинкована; повтор идемпотентен.
+func TestImportSpoolStubs(t *testing.T) {
+	db := openTestDB(t)
+	pid, err := db.Printers().Save(models.Printer{Name: "K1C", HoursPerDay: 8, LifeYears: 3,
+		CalendarMode: "calendar", AmortMethod: "calendar"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(fn string, start time.Time) importers.PrintJob {
+		return importers.PrintJob{Filename: fn, Status: "completed",
+			StartTime: start, EndTime: start.Add(2 * time.Hour),
+			TotalDuration: 7200, FilamentUsed: 10000}
+	}
+	t0 := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	rows := []importers.PrintJob{
+		mk("a_PETG-NIT-BLACK-2_2h0m.gcode", t0),
+		mk("b_PETG-NIT-BLACK-2_3h0m.gcode", t0.Add(time.Hour)),
+	}
+	st, err := seed.ImportRows(db, pid, rows, "import", nil)
+	if err != nil {
+		t.Fatalf("ImportRows: %v", err)
+	}
+	if st.Stubs != 1 || st.SpoolStubs != 1 {
+		t.Fatalf("статистика: %+v", st)
+	}
+	m, err := db.Materials().GetByCode("PETG-NIT-BLACK")
+	if err != nil {
+		t.Fatalf("материал: %v", err)
+	}
+	spools, _ := db.Materials().ListSpools(m.ID)
+	if len(spools) != 1 || spools[0].SpoolNo != 2 {
+		t.Fatalf("катушки: %+v", spools)
+	}
+	jobs, _ := db.Jobs().List(0)
+	if len(jobs) != 2 {
+		t.Fatalf("работы: %d", len(jobs))
+	}
+	for _, j := range jobs {
+		if j.SpoolID != spools[0].ID {
+			t.Fatalf("линк: %+v", j)
+		}
+	}
+	// Повтор: новых нет, стабы не дублируются.
+	st2, err := seed.ImportRows(db, pid, rows, "import", nil)
+	if err != nil {
+		t.Fatalf("re-import: %v", err)
+	}
+	if st2.Jobs != 2 || st2.SpoolStubs != 0 {
+		t.Fatalf("идемпотентность: %+v", st2)
+	}
+	spools2, _ := db.Materials().ListSpools(m.ID)
+	if len(spools2) != 1 {
+		t.Fatalf("дубль катушки: %+v", spools2)
 	}
 }
