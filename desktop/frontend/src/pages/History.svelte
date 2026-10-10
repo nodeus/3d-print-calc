@@ -21,6 +21,7 @@
   let error = $state('');
   let query = $state('');
   let statusFilter = $state('');
+  let originFilter = $state('');
   let sortKey: string = $state('start');
   let sortDir: 1 | -1 = $state(-1);
   let page = $state(0);
@@ -263,7 +264,8 @@
     let rows = jobs.filter(
       (j) =>
         (!q || j.Filename.toLowerCase().includes(q)) &&
-        (!statusFilter || j.Status === statusFilter),
+        (!statusFilter || j.Status === statusFilter) &&
+        (!originFilter || (j.Origin || 'import') === originFilter),
     );
     const dir = sortDir;
     const val = (j: JobDTO): string | number => {
@@ -343,6 +345,14 @@
     });
   });
   let statuses = $derived([...new Set(jobs.map((j) => j.Status))].sort());
+  let origins = $derived([...new Set(jobs.map((j) => j.Origin || 'import'))].sort());
+
+  // Подпись источника для фильтра (как originBadge, без пометки «изменена»).
+  function originLabel(origin: string): string {
+    if (origin === 'manual') return $t('hist.manual');
+    if (origin === 'moonraker') return 'Moonraker';
+    return 'CSV';
+  }
 
   // Все колонки в фиксированном порядке бэкенда (настройка — в Настройках).
   const allColumns = Object.keys(sortable);
@@ -675,6 +685,10 @@
   <select bind:value={statusFilter} onchange={() => (page = 0)}>
     <option value="">— {$t('hist.status')} —</option>
     {#each statuses as s}<option value={s}>{s}</option>{/each}
+  </select>
+  <select bind:value={originFilter} onchange={() => (page = 0)}>
+    <option value="">— {$t('hist.origin')} —</option>
+    {#each origins as o}<option value={o}>{originLabel(o)}</option>{/each}
   </select>
   <span class="count">{$t('hist.shown')}: {visible.length} / {filtered.length} / {jobs.length}</span>
   <button onclick={calcTotals}>{$t('hist.sums_btn')}</button>
