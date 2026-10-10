@@ -75,6 +75,36 @@ func (d *DB) rateToBase(tx *sql.Tx, currency, base string) (float64, error) {
 	return rate, nil
 }
 
+// ConvertInspect — превью конвертации: сколько строк перепишет ConvertCurrency.
+// Только чтение (снапшоты истории не трогаются ни там, ни тут).
+type ConvertInspect struct {
+	Spools   int64 `json:"spools"`
+	Printers int64 `json:"printers"`
+	Orders   int64 `json:"orders"`
+	Items    int64 `json:"items"`
+	Payments int64 `json:"payments"`
+}
+
+// InspectConvert считает строки для превью в confirm перед необратимой конвертацией.
+func (d *DB) InspectConvert() (ConvertInspect, error) {
+	var out ConvertInspect
+	for _, q := range []struct {
+		query string
+		dst   *int64
+	}{
+		{`SELECT COUNT(*) FROM spools`, &out.Spools},
+		{`SELECT COUNT(*) FROM printers`, &out.Printers},
+		{`SELECT COUNT(*) FROM orders`, &out.Orders},
+		{`SELECT COUNT(*) FROM order_items`, &out.Items},
+		{`SELECT COUNT(*) FROM payments`, &out.Payments},
+	} {
+		if err := d.sql.QueryRow(q.query).Scan(q.dst); err != nil {
+			return out, fmt.Errorf("ERR_FX: %w", err)
+		}
+	}
+	return out, nil
+}
+
 // ConvertCurrency пересчитывает ВСЕ денежные суммы в target по курсу:
 // amount_target = round(amount_src × rate_src / rate_target), где курсы —
 // единиц текущей базы за единицу валюты. Затем base_currency=target.

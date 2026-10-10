@@ -209,14 +209,14 @@ func TestImportMaterials(t *testing.T) {
 		"PETG-OLD;PETG;NIT;900;RUB;1,27;1,75\n" +
 		"PETG-NEW;PETG;;0;RUB;1,27;1,75\n" +
 		"PETG-PRICE;PETG;V;1000;RUB;1,27;1,75\n"
-	rep, err := db.ImportMaterials(strings.NewReader(raw), true)
+	rep, err := db.ImportMaterials(strings.NewReader(raw), true, nil)
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}
 	if rep.Total != 3 || rep.New != 2 || rep.Existing != 1 {
 		t.Fatalf("dry-run: %+v", rep)
 	}
-	rep, err = db.ImportMaterials(strings.NewReader(raw), false)
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false, nil)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestImportMaterials(t *testing.T) {
 		t.Fatalf("лишние катушки: %+v", nsp2)
 	}
 	// Повтор: всё существующее.
-	rep, err = db.ImportMaterials(strings.NewReader(raw), false)
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false, nil)
 	if err != nil {
 		t.Fatalf("re-apply: %v", err)
 	}
@@ -265,12 +265,16 @@ func TestImportMaterialsSpools(t *testing.T) {
 		"PETG-NIT-BLACK-1;PETG;;0;RUB;1,27;1,75\n" +
 		"PETG-NIT-BLACK-4;PETG;НИТ;900;RUB;1,27;1,75\n" +
 		"PETG-NIT-BLACK-5;PETG;;1200;RUB;1,27;1,75\n"
-	rep, err := db.ImportMaterials(strings.NewReader(raw), false)
+	prog, calls := progressCounter(t, 1)
+	rep, err := db.ImportMaterials(strings.NewReader(raw), false, prog)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if rep.Total != 3 || rep.New != 3 || rep.Existing != 0 {
 		t.Fatalf("report: %+v", rep)
+	}
+	if *calls == 0 {
+		t.Fatal("progress ни разу не вызван")
 	}
 	m, err := db.Materials().GetByCode("PETG-NIT-BLACK")
 	if err != nil {
@@ -298,11 +302,11 @@ func TestImportMaterialsSpools(t *testing.T) {
 	dup := "code;type;vendor;price_per_kg;currency;density;diameter\n" +
 		"PETG-X-1;PETG;;0;RUB;1,27;1,75\n" +
 		"PETG-X-1;PETG;;0;RUB;1,27;1,75\n"
-	if _, err := db.ImportMaterials(strings.NewReader(dup), true); err == nil {
+	if _, err := db.ImportMaterials(strings.NewReader(dup), true, nil); err == nil {
 		t.Fatal("дубль номера принят")
 	}
 	// Повтор: всё существующее (и номера заняты).
-	rep, err = db.ImportMaterials(strings.NewReader(raw), false)
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false, nil)
 	if err != nil {
 		t.Fatalf("re-apply: %v", err)
 	}
