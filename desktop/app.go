@@ -104,8 +104,9 @@ func (a *App) UpdateMaterial(m models.Material) error {
 	return a.db.Materials().Update(m)
 }
 
-// AddMaterial создаёт материал с катушкой (manager+). Цена ₽/кг.
-func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG float64) (int64, error) {
+// AddMaterial создаёт материал без катушек (manager+). Цена живёт
+// только на катушках: после создания добавьте закупку кнопкой катушек.
+func (a *App) AddMaterial(code, matType string, density, weightG float64, vendor, colorHex, note string) (int64, error) {
 	if err := a.need(models.RoleManager); err != nil {
 		return 0, err
 	}
@@ -123,7 +124,7 @@ func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG flo
 	}
 	id, err := a.db.Materials().UpsertByCode(models.Material{
 		Code: code, Type: matType, Density: density, Diameter: 1.75,
-		DefaultSpoolWeightG: weightG,
+		DefaultSpoolWeightG: weightG, Vendor: vendor, ColorHex: colorHex, Note: note,
 	})
 	if err != nil {
 		return 0, err
@@ -136,15 +137,6 @@ func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG flo
 	m.DefaultSpoolWeightG = weightG
 	if err := a.db.Materials().Update(m); err != nil {
 		return 0, err
-	}
-	if pricePerKg > 0 {
-		if _, err := a.db.Materials().AddSpool(models.Spool{
-			MaterialID: id, Price: int64(pricePerKg*100 + 0.5),
-			Currency: "RUB", FxRate: 1, BoughtAt: time.Now().Format("2006-01-02"),
-			WeightInitG: weightG, WeightLeftG: weightG,
-		}); err != nil {
-			return 0, err
-		}
 	}
 	return id, nil
 }

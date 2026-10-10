@@ -269,6 +269,7 @@
   "common.no": "Cancel",
   "common.delete_q": "Delete",
   "mat.vendor": "Vendor",
+  "mat.note": "Note",
   "mat.color": "Color",
   "mat.weight": "Weight, g",
   "mat.price_spool_note": "First spool price — edit in spools below",

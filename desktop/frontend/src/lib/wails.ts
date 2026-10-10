@@ -478,7 +478,7 @@ declare global {
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
           MoonrakerApply(): Promise<ImportReport>;
-          AddMaterial(code: string, matType: string, density: number, pricePerKg: number, weightG: number): Promise<number>;
+          AddMaterial(code: string, matType: string, density: number, weightG: number, vendor: string, colorHex: string, note: string): Promise<number>;
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
           UpdateSpool(s: Spool): Promise<void>;
@@ -580,8 +580,8 @@ export const wails = {
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
   moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
   moonrakerApply: () => api().MoonrakerApply(),
-  addMaterial: (code: string, matType: string, density: number, pricePerKg: number, weightG: number) =>
-    api().AddMaterial(code, matType, density, pricePerKg, weightG),
+  addMaterial: (code: string, matType: string, density: number, weightG: number, vendor: string, colorHex: string, note: string) =>
+    api().AddMaterial(code, matType, density, weightG, vendor, colorHex, note),
   updateMaterial: (m: Material) => api().UpdateMaterial(m),
   deleteMaterial: (id: number) => api().DeleteMaterial(id),
   updateSpool: (s: Spool) => api().UpdateSpool(s),

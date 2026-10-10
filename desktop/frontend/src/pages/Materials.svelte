@@ -13,12 +13,15 @@
 
   let materials: MaterialDTO[] = $state([]);
   let error = $state('');
-  // Форма добавления: null — пусто, виден плейсхолдер/title.
+  // Форма добавления: null — пусто, виден плейсхолдер/title. Цены здесь нет —
+  // она живёт только на катушках (добавляются отдельно после создания).
   let newCode = $state('');
   let newType = $state('PETG');
   let newDensity: number | null = $state(null);
-  let newPrice: number | null = $state(null);
   let newWeight: number | null = $state(null);
+  let newVendor = $state('');
+  let newColor = $state('#808080');
+  let newNote = $state('');
   // Редактирование материала (цены здесь нет — она живёт на катушках).
   let editId = $state(0);
   let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '' });
@@ -130,6 +133,7 @@
       case 'density': return m.density;
       case 'weight': return m.defaultWeightG || 1000;
       case 'vendor': return (m.vendor || '').toLowerCase();
+      case 'note': return (m.note || '').toLowerCase();
       default: return m.code.toLowerCase();
     }
   }
@@ -145,7 +149,7 @@
     { key: 'code', label: 'mat.code' }, { key: 'color', label: 'mat.color' },
     { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.price', num: true },
     { key: 'density', label: 'mat.density', num: true }, { key: 'weight', label: 'mat.weight', num: true },
-    { key: 'vendor', label: 'mat.vendor' },
+    { key: 'vendor', label: 'mat.vendor' }, { key: 'note', label: 'mat.note' },
   ];
   const matKeys = matCols.map((c) => c.key);
   const matNum = (k: string) => matCols.some((c) => c.key === k && c.num);
@@ -193,6 +197,7 @@
       case 'density': return String(m.density);
       case 'weight': return String(m.defaultWeightG || 1000);
       case 'vendor': return m.vendor;
+      case 'note': return m.note;
       default: return '';
     }
   }
@@ -262,9 +267,20 @@
   async function add() {
     error = '';
     try {
-      await wails.addMaterial(newCode.trim(), newType.trim() || 'PETG', newDensity ?? 1.27, newPrice ?? 0, newWeight ?? 1000);
+      if (newColor && !validHex(newColor)) {
+        error = $t('mat.bad_color');
+        return;
+      }
+      await wails.addMaterial(
+        newCode.trim(), newType.trim() || 'PETG', newDensity ?? 1.27, newWeight ?? 1000,
+        newVendor.trim(), (newColor || '').toLowerCase(), newNote.trim(),
+      );
       newCode = '';
-      newPrice = null;
+      newDensity = null;
+      newWeight = null;
+      newVendor = '';
+      newColor = '#808080';
+      newNote = '';
       await load();
     } catch (e) {
       error = String(e);
@@ -329,14 +345,17 @@
 
 {#if canWrite($user)}
   <div class="row no-print">
-    <input placeholder="PETG-NIT-W4" bind:value={newCode} />
+    <input placeholder="PETG-NIT-W4" title={$t('mat.code')} bind:value={newCode} />
+    <input type="color" value={validHex(newColor) ? newColor : '#808080'} oninput={(e) => (newColor = e.currentTarget.value)} title={$t('mat.color')} />
+    <input class="hex" bind:value={newColor} placeholder="#rrggbb" title={$t('mat.color')} />
     <input list="mat-types" bind:value={newType} placeholder={$t('mat.type')} />
     <datalist id="mat-types">
       {#each knownTypes as tp}<option value={tp}></option>{/each}
     </datalist>
     <input type="number" step="0.01" bind:value={newDensity} title={$t('mat.density')} placeholder="1.27" />
-    <input type="number" min="0" bind:value={newPrice} title={$t('mat.price')} placeholder="869" />
     <input type="number" min="0" bind:value={newWeight} title={$t('mat.weight')} placeholder="1000" />
+    <input bind:value={newVendor} placeholder={$t('mat.vendor')} />
+    <input bind:value={newNote} placeholder={$t('mat.note')} />
     <button onclick={add}>{$t('common.save')}</button>
   </div>
 {/if}
@@ -391,7 +410,9 @@
             {:else if k === 'weight'}
               <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
             {:else if k === 'vendor'}
-              <td><input bind:value={edit.Vendor} /></td>
+              <td><input bind:value={edit.Vendor} placeholder={$t('mat.vendor')} /></td>
+            {:else if k === 'note'}
+              <td><input bind:value={edit.Note} placeholder={$t('mat.note')} /></td>
             {/if}
           {/each}
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
