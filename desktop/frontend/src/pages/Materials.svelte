@@ -21,7 +21,7 @@
   let newWeight: number | null = $state(null);
   // Редактирование материала (цены здесь нет — она живёт на катушках).
   let editId = $state(0);
-  let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '', BoughtAt: '', Archived: false });
+  let edit: Material = $state({ ID: 0, Code: '', Type: 'PETG', Vendor: '', ColorHex: '', Density: 1.27, Diameter: 1.75, DefaultSpoolWeightG: 1000, Note: '' });
 
   // Катушки материала: список, раскрытие, правка.
   // Цена для расчётов — первая неархивная (порядок ListSpools); бейдж «расчётная».
@@ -129,7 +129,6 @@
       case 'price': return m.pricePerKg;
       case 'density': return m.density;
       case 'weight': return m.defaultWeightG || 1000;
-      case 'bought': return m.boughtAt || '';
       case 'vendor': return (m.vendor || '').toLowerCase();
       default: return m.code.toLowerCase();
     }
@@ -146,7 +145,6 @@
     { key: 'code', label: 'mat.code' }, { key: 'color', label: 'mat.color' },
     { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.price', num: true },
     { key: 'density', label: 'mat.density', num: true }, { key: 'weight', label: 'mat.weight', num: true },
-    { key: 'bought', label: 'mat.bought' },
     { key: 'vendor', label: 'mat.vendor' },
   ];
   const matKeys = matCols.map((c) => c.key);
@@ -193,7 +191,6 @@
       case 'price': return money(m.pricePerKg, m.currency, 'ru');
       case 'density': return String(m.density);
       case 'weight': return String(m.defaultWeightG || 1000);
-      case 'bought': return m.boughtAt || '—';
       case 'vendor': return m.vendor;
       default: return '';
     }
@@ -275,7 +272,7 @@
 
   function startEdit(m: MaterialDTO) {
     editId = m.id;
-    edit = { ID: m.id, Code: m.code, Type: m.type, Vendor: m.vendor, ColorHex: m.colorHex, Density: m.density, Diameter: m.diameter, DefaultSpoolWeightG: m.defaultWeightG || 1000, Note: m.note, BoughtAt: m.boughtAt || '', Archived: m.archived };
+    edit = { ID: m.id, Code: m.code, Type: m.type, Vendor: m.vendor, ColorHex: m.colorHex, Density: m.density, Diameter: m.diameter, DefaultSpoolWeightG: m.defaultWeightG || 1000, Note: m.note };
   }
 
   function swatch(hex: string): string {
@@ -392,8 +389,6 @@
               <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
             {:else if k === 'weight'}
               <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
-            {:else if k === 'bought'}
-              <td><input type="date" bind:value={edit.BoughtAt} title={$t('mat.bought')} /></td>
             {:else if k === 'vendor'}
               <td><input bind:value={edit.Vendor} /></td>
             {/if}

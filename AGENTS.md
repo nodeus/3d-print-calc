@@ -74,7 +74,8 @@ server/                     # Фаза 7: REST поверх core для Android/
 mobile/                     # задел: доки контракта API, кода пока нет
 tools/                      # ВСЕ вспомогательные скрипты — только здесь: seed, release, qrcode, dbcheck
 docs/                       # HELP (руководство), release, updating, api-contract, excel-reverse-engineering
-migrations/                 # SQL-миграции (только ADD COLUMN / CREATE, пронумерованные)
+migrations/                 # SQL-миграции (только ADD COLUMN / CREATE, пронумерованные;
+                          # исключение — 0014 DROP мёртвых колонок materials, согласован с заказчиком)
 utils/                      # upx.exe для релизов (в git НЕ идёт, локальный инструмент)
 ```
 
@@ -138,13 +139,13 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 
 ### БД SQLite (WAL, один `app.db`)
 
-`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE,
-+bought_at, +archived — архивные скрыты из остатков и селекта калькулятора),
+`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
 +part_purchases(printer_id, bought_at, price, qty — сумма вычисляется),
 spools(material_id, price, currency, bought_at, weight_left_g, spool_no),
 materials.code правится с переписью снапшота (`json_replace`);
-materials.archived мертва (архив — только spools.archived: остатки, цена,
-селект), printers(...,
+дата закупа и архивность — только spools.bought_at/spools.archived
+(остатки, цена, селект); колонки materials.bought_at/materials.archived
+удалены миграцией `0014` (были мертвы с `0011`), printers(...,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),

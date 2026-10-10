@@ -59,9 +59,9 @@ func (r *materialsRepo) Update(m models.Material) error {
 		}
 	}
 	if _, err := tx.Exec(`UPDATE materials SET type=?, vendor=?, color_hex=?,
-		density=?, diameter=?, default_spool_weight_g=?, note=?, bought_at=?, archived=? WHERE id=?`,
+		density=?, diameter=?, default_spool_weight_g=?, note=? WHERE id=?`,
 		m.Type, m.Vendor, m.ColorHex, m.Density, m.Diameter, m.DefaultSpoolWeightG, m.Note,
-		m.BoughtAt, boolInt(m.Archived), m.ID); err != nil {
+		m.ID); err != nil {
 		return fmt.Errorf("ERR_MATERIAL_SAVE: %w", err)
 	}
 	return tx.Commit()

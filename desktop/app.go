@@ -26,8 +26,6 @@ type MaterialDTO struct {
 	Vendor         string     `json:"vendor"`
 	ColorHex       string     `json:"colorHex"`
 	Note           string     `json:"note"`
-	BoughtAt       string     `json:"boughtAt"`
-	Archived       bool       `json:"archived"`
 	Density        float64    `json:"density"`
 	Diameter       float64    `json:"diameter"`
 	DefaultWeightG float64    `json:"defaultWeightG"`
@@ -52,7 +50,7 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 			ID: m.ID, Code: m.Code, Type: m.Type, Vendor: m.Vendor,
 			ColorHex: m.ColorHex, Note: m.Note, DefaultWeightG: m.DefaultSpoolWeightG,
 			Density: m.Density, Diameter: m.Diameter, Currency: "RUB",
-			BoughtAt: m.BoughtAt, Archived: m.Archived, Spools: []SpoolDTO{},
+			Spools: []SpoolDTO{},
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
 			dto.PricePerKg = float64(spools[0].Price) / 100
@@ -120,7 +118,6 @@ func (a *App) AddMaterial(code, matType string, density, pricePerKg, weightG flo
 	id, err := a.db.Materials().UpsertByCode(models.Material{
 		Code: code, Type: matType, Density: density, Diameter: 1.75,
 		DefaultSpoolWeightG: weightG,
-		BoughtAt:            time.Now().Format("2006-01-02"),
 	})
 	if err != nil {
 		return 0, err
