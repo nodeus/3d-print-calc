@@ -56,10 +56,11 @@ const (
 
 // Stats — итог сида.
 type Stats struct {
-	Materials int
-	Jobs      int
-	Linked    int
-	Stubs     int
+	Materials  int
+	Jobs       int
+	Linked     int
+	Stubs      int
+	SpoolStubs int // созданные пустые катушки с номерами из имён файлов
 }
 
 // DB — минимальный интерфейс БД, нужный сиду.
@@ -169,15 +170,35 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 		if ok {
 			pricePerKg, density = priceByCode[code], m.Density
 			spoolID = spoolIDs[code]
-			// Номер катушки из имени файла: её цена точнее первой.
+			// Номер катушки из имени файла: линкуем именно её.
+			// Нет такой — создаём пустой стаб (цена 0, дата пуста)
+			// и линкуем: номер из имени не теряется.
 			if spoolN > 0 {
+				found := false
 				if spools, err := mats.ListSpools(m.ID); err == nil {
 					for _, s := range spools {
 						if s.SpoolNo == spoolN {
 							spoolID = s.ID
 							pricePerKg = float64(s.Price) / 100
+							found = true
 							break
 						}
+					}
+				}
+				if !found {
+					w := m.DefaultSpoolWeightG
+					if w <= 0 {
+						w = 1000
+					}
+					if sid, err := mats.AddSpool(models.Spool{
+						MaterialID: m.ID, SpoolNo: spoolN,
+						WeightInitG: w, WeightLeftG: w,
+					}); err != nil {
+						return st, err
+					} else {
+						spoolID = sid
+						pricePerKg = 0
+						st.SpoolStubs++
 					}
 				}
 			}

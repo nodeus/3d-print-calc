@@ -237,6 +237,7 @@ export interface ImportReport {
   new: number;
   existing: number;
   stubs: number;
+  spoolStubs: number;
   dryRun: boolean;
   lifetimeTotal?: number;
 }

@@ -132,6 +132,7 @@
   "set.csv_apply": "Применить импорт",
   "set.csv_preview": "Предпросмотр",
   "set.csv_done": "Импортировано",
+  "set.csv_spool_stubs": "катушек",
   "set.ordnum": "Номера заказов",
   "set.ordnum_tpl": "Шаблон",
   "set.ordnum_seq": "Следующий счётчик",

@@ -400,7 +400,7 @@
 {#if report}<p>{$t('set.csv_preview')}: total {report.total}{#if report.lifetimeTotal} / {$t('moon.lifetime_total')}: {report.lifetimeTotal}{/if}, new {report.new}, existing {report.existing}</p>{/if}
 {#if report?.dryRun && canWrite($user)}<button class="warn no-print" onclick={apply} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
 {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
-{#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs})</p>{/if}
+  {#if applied}<p class="ok">{$t('set.csv_done')}: +{applied.new} (stubs {applied.stubs}, {$t('set.csv_spool_stubs')} {applied.spoolStubs ?? 0})</p>{/if}
 
 <style>
   .card { border: 1px solid var(--card-border); border-radius: 8px; padding: 10px; margin-bottom: 8px; max-width: 720px; }

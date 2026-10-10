@@ -418,6 +418,7 @@ type ImportReport struct {
 	New           int  `json:"new"`
 	Existing      int  `json:"existing"`
 	Stubs         int  `json:"stubs"`
+	SpoolStubs    int  `json:"spoolStubs"`
 	DryRun        bool `json:"dryRun"`
 	LifetimeTotal int  `json:"lifetimeTotal,omitempty"` // всего за всё время (Moonraker totals)
 }
@@ -452,6 +453,7 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool, onProgress seed.ProgressFun
 		return rep, err
 	}
 	rep.Stubs = st.Stubs
+	rep.SpoolStubs = st.SpoolStubs
 	return rep, nil
 }
 
