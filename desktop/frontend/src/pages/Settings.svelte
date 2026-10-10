@@ -401,7 +401,18 @@
     error = '';
     const target = convCur.trim().toUpperCase();
     if (!target || !((convRate ?? 0) > 0)) return;
-    if (!(await askConfirm(`${$t('fx.convert_q')} ${target} @ ${convRate ?? 0}? (${$t('fx.backup_warn')})`))) return;
+    let insp;
+    try {
+      insp = await wails.inspectConvert();
+    } catch (e) {
+      error = String(e);
+      return;
+    }
+    const scope = `${$t('fx.convert_scope')}: ${$t('spool.title')} — ${insp.spools}, ` +
+      `${$t('nav.printers')} — ${insp.printers}, ${$t('nav.orders')} — ${insp.orders} ` +
+      `(${$t('fx.convert_items')} — ${insp.items}, ${$t('fx.convert_payments')} — ${insp.payments}). ` +
+      `${$t('fx.convert_nosnap')}`;
+    if (!(await askConfirm(`${$t('fx.convert_q')} ${target} @ ${convRate ?? 0}? ${scope} (${$t('fx.backup_warn')})`))) return;
     try {
       await wails.convertCurrency(target, convRate ?? 0);
       currency = target;
@@ -425,6 +436,16 @@
     }
   }
 
+  // Восстановление заменяет текущую БД — только с подтверждением по counts превью.
+  async function applyBackup() {
+    error = '';
+    const m = backupManifest;
+    if (!m) return;
+    const scope = `jobs: ${m.counts?.jobs ?? '?'}, materials: ${m.counts?.materials ?? '?'}`;
+    if (!(await askConfirm(`${$t('set.backup_apply_q')} (${scope})?`))) return;
+    run(wails.applyBackup, (r) => (backupManifest = r));
+  }
+
   async function applyCSV() {
     error = '';
     importing = true;
@@ -444,10 +465,19 @@
 
   async function applyMatsCSV() {
     error = '';
+    importing = true;
+    progress = { done: 0, total: 0 };
+    wails.onImportProgress((done, total) => {
+      progress = { done, total };
+    });
     try {
       matsApplied = await wails.applyMaterialsCSV();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
+    } finally {
+      importing = false;
+      wails.offImportProgress();
     }
   }
 </script>
@@ -455,7 +485,7 @@
 {#if error}<p class="err">{error}</p>{/if}
 
 <div class="tabs no-print">
-  {#each [{ id: 'main', label: 'set.tab_main' }, { id: 'data', label: 'set.tab_data' }, { id: 'look', label: 'set.tab_look' }] as tb}
+  {#each [{ id: 'main', label: 'set.tab_main' }, { id: 'data', label: 'set.tab_data' }, { id: 'access', label: 'set.tab_access' }, { id: 'look', label: 'set.tab_look' }] as tb}
     <button class:on={setTab === tb.id} onclick={() => (setTab = tb.id)}>{$t(tb.label)}</button>
   {/each}
 </div>
@@ -580,7 +610,7 @@
   <div class="row">
     <button onclick={() => run(wails.exportBackup, (p) => (backupPath = p))}>{$t('set.backup_save')}</button>
     <button onclick={() => run(wails.previewBackup, (m) => (backupManifest = m))}>{$t('set.backup_open')}</button>
-    {#if backupManifest}<button class="warn" onclick={() => run(wails.applyBackup, (m) => (backupManifest = m))}>{$t('set.backup_apply')}</button>{/if}
+    {#if backupManifest}<button class="warn" onclick={applyBackup}>{$t('set.backup_apply')}</button>{/if}
   </div>
   {#if backupPath}<p class="ok">{backupPath}</p>{/if}
   {#if backupManifest}
@@ -606,6 +636,7 @@
   {#if matsApplied}<p class="ok">{$t('set.csv_done')}: +{matsApplied.new}</p>{/if}
 </div>
 
+{:else if setTab === 'access'}
 <div class="card">
   <h3>{$t('set.pw')}</h3>
   <label>{$t('auth.password')} ({$t('set.pw_old')})<input type="password" bind:value={oldPw} /></label>

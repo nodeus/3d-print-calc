@@ -251,7 +251,7 @@ func (d *DB) ExportMaterialsCSV(w io.Writer) error {
 }
 
 // ImportMaterials импортирует справочник материалов. dryRun=true —
-// только отчёт без записи.
+// только отчёт без записи. onProgress — прогресс применения (nil — молча).
 //
 // Новая парадигма «материал + катушки»: строка с кодом вида КОД-N —
 // это N-я катушка базового материала (создаётся материал при отсутствии
@@ -261,7 +261,7 @@ func (d *DB) ExportMaterialsCSV(w io.Writer) error {
 // Существующее не трогается вообще (ни поля, ни цены, ни катушки);
 // дубль номера внутри файла — ошибка со строкой. bought_at пусто
 // (дата неизвестна). Повтор идемпотентен.
-func (d *DB) ImportMaterials(r io.Reader, dryRun bool) (ImportReport, error) {
+func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressFunc) (ImportReport, error) {
 	var rep ImportReport
 	rep.DryRun = dryRun
 	rows, err := importers.ParseMaterials(r)
@@ -351,7 +351,7 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool) (ImportReport, error) {
 	if dryRun {
 		return rep, nil
 	}
-	for _, base := range order {
+	for i, base := range order {
 		p := plans[base]
 		var mid int64
 		if p.isNew {
@@ -398,6 +398,9 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool) (ImportReport, error) {
 			if err := mkSpool(s.n, s.price, s.currency); err != nil {
 				return rep, fmt.Errorf("ERR_IMPORT: строка %d: %w", s.row, err)
 			}
+		}
+		if onProgress != nil {
+			onProgress(i+1, len(order))
 		}
 	}
 	return rep, nil

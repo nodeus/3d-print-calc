@@ -607,6 +607,15 @@ func (a *App) ConvertCurrency(target string, rate float64) error {
 	return a.db.ConvertCurrency(target, rate)
 }
 
+// InspectConvert — превью конвертации для confirm (manager+): сколько строк перепишется.
+func (a *App) InspectConvert() (sqlite.ConvertInspect, error) {
+	var out sqlite.ConvertInspect
+	if err := a.need(models.RoleManager); err != nil {
+		return out, err
+	}
+	return a.db.InspectConvert()
+}
+
 // HistoryColumns — все колонки истории печати (порядок фиксирован).
 // Вторая группа — расчётные поля из снапшота (все редактируемые в правке).
 var HistoryColumns = []string{

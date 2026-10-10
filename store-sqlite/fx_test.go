@@ -56,6 +56,32 @@ func TestConvertCurrency(t *testing.T) {
 	}
 }
 
+// TestInspectConvert: превью считает строки для конвертации, ничего не пишет.
+func TestInspectConvert(t *testing.T) {
+	db := openTestDB(t)
+	mid, _ := db.Materials().UpsertByCode(models.Material{Code: "PETG-I", Density: 1.27})
+	db.Materials().AddSpool(models.Spool{MaterialID: mid, Price: 100, Currency: "RUB"})
+	db.Printers().Save(models.Printer{Name: "P", LifeYears: 3, HoursPerDay: 8,
+		CalendarMode: "calendar", AmortMethod: "calendar"})
+	cid, _ := db.Customers().Save(models.Customer{Name: "C"})
+	oid, _ := db.Orders().Create(models.Order{CustomerID: cid, CreatedAt: "2026-01-01"})
+	db.Orders().AddItem(models.OrderItem{OrderID: oid, Title: "a", Qty: 1, Price: 100})
+	db.Orders().AddItem(models.OrderItem{OrderID: oid, Title: "b", Qty: 1, Price: 200})
+	db.Orders().AddPayment(models.Payment{OrderID: oid, Amount: 50, PaidAt: "2026-01-02"})
+	insp, err := db.InspectConvert()
+	if err != nil {
+		t.Fatalf("InspectConvert: %v", err)
+	}
+	if insp.Spools != 1 || insp.Printers != 1 || insp.Orders != 1 || insp.Items != 2 || insp.Payments != 1 {
+		t.Fatalf("превью: %+v", insp)
+	}
+	// Ничего не переписано.
+	spools, _ := db.Materials().ListSpools(mid)
+	if spools[0].Currency != "RUB" {
+		t.Fatalf("превью пишет! %+v", spools[0])
+	}
+}
+
 func TestFxRatesCRUD(t *testing.T) {
 	db := openTestDB(t)
 	if err := db.SetFxRate("USD", 100); err != nil {
