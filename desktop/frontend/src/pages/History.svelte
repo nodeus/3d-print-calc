@@ -223,6 +223,8 @@
   async function load() {
     try {
       jobs = (await wails.jobs(0)) ?? []; // всё: раньше лимит 200 обрезал историю
+      // Чистим сквозную выборку от исчезнувших строк.
+      selected = selected.filter((id) => jobs.some((j) => j.ID === id));
       // Колонки: секция пользователя из файла, фолбэк — legacy-БД.
       columns = await myHistoryColumns(columns);
       materials = (await wails.materials()) ?? [];
@@ -476,6 +478,46 @@
     }
   }
 
+  // Массовое удаление чекбоксами: выбор сквозной (страницы/фильтр/сортировка).
+  let selected: number[] = $state([]);
+  let bulkMsg = $state('');
+  let headBox: HTMLInputElement | null = $state(null);
+
+  let pageAll = $derived(visible.length > 0 && visible.every((j) => selected.includes(j.ID)));
+  $effect(() => {
+    if (headBox) headBox.indeterminate = !pageAll && visible.some((j) => selected.includes(j.ID));
+  });
+
+  function toggleSel(id: number) {
+    selected = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+    bulkMsg = '';
+  }
+
+  function togglePage() {
+    const ids = visible.map((j) => j.ID);
+    const all = ids.length > 0 && ids.every((id) => selected.includes(id));
+    selected = all ? selected.filter((id) => !ids.includes(id)) : [...new Set([...selected, ...ids])];
+    bulkMsg = '';
+  }
+
+  async function removeSelected() {
+    error = '';
+    bulkMsg = '';
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!(await askConfirm(`${$t('hist.delete_selected_q')} (${ids.length})?`))) return;
+    try {
+      const rep = await wails.deleteJobs(ids);
+      await load();
+      selected = [];
+      const skipped = rep.skippedOrder ?? [];
+      bulkMsg = `${$t('hist.bulk_deleted')}: ${rep.deleted}` +
+        (skipped.length ? ` · ${$t('hist.bulk_skipped')}: ${skipped.join(', ')}` : '');
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   // Правка работы истории (manual и import) с автопересчётом на бэкенде.
   // Расчётные поля — как в Калькуляторе (проценты — %, в snapshot уйдут долями).
   // Катушка — отдельным селектом (editSpoolId), материал выводится из неё.
@@ -693,6 +735,12 @@
   <span class="count">{$t('hist.shown')}: {visible.length} / {filtered.length} / {jobs.length}</span>
   <button onclick={calcTotals}>{$t('hist.sums_btn')}</button>
   <button onclick={openColumns}>{$t('hist.columns_btn')}: {columns.length}/{allColumns.length}</button>
+  {#if canWrite($user)}
+    <span class="count">{$t('hist.selected_n')}: {selected.length}</span>
+    <button onclick={removeSelected} disabled={!selected.length}>{$t('hist.delete_selected')}</button>
+    {#if selected.length}<button onclick={() => { selected = []; bulkMsg = ''; }}>{$t('hist.clear_sel')}</button>{/if}
+  {/if}
+  {#if bulkMsg}<span class="count">{bulkMsg}</span>{/if}
   <span class="pager">
     <button disabled={page === 0} onclick={() => page--}>‹</button>
     {page + 1} / {pages}
@@ -704,6 +752,7 @@
 {#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
 <table class="tw" class:dragging={dragCol != null}>
   <thead><tr>
+    {#if canWrite($user)}<th class="no-print"><input type="checkbox" bind:this={headBox} checked={pageAll} onchange={togglePage} title={$t('hist.select_page')} /></th>{/if}
     {#each columns as c}
       <th class:n={isNum(c)} style={thWidth('history', c)} data-col={c} class:dragsrc={dragCol === c}>
         {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, c)}>⋮⋮</span>{/if}
@@ -718,6 +767,7 @@
   <tbody>
     {#each visible as j}
       <tr>
+        {#if canWrite($user)}<td class="no-print"><input type="checkbox" checked={selected.includes(j.ID)} onchange={() => toggleSel(j.ID)} /></td>{/if}
         {#each columns as c}
           <td class:file={c === 'filename'} class:n={isNum(c)} title={c === 'filename' ? j.Filename : undefined}>{cell(j, c)}</td>
         {/each}
@@ -735,6 +785,7 @@
   </tbody>
   {#if totals}
     <tfoot><tr>
+      {#if canWrite($user)}<td class="no-print"></td>{/if}
       {#each columns as c}<td class:n={isNum(c)}><b>{footText(c)}</b></td>{/each}
       <td class="no-print"></td>
     </tr></tfoot>

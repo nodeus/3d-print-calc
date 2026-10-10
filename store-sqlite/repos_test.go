@@ -245,6 +245,67 @@ func TestDeleteJobOriginGuard(t *testing.T) {
 	}
 }
 
+// TestDeleteJobsBulk: массовое удаление сносит всё выбранное физически
+// (ручные, правленые и нетронутые импорты); связанные с позициями заказов
+// пропускаются с именами в отчёте; пустой список и дубли — no-op.
+func TestDeleteJobsBulk(t *testing.T) {
+	db := openTestDB(t)
+	mk := func(fn, origin string) int64 {
+		id, err := db.Jobs().Upsert(models.Job{Filename: fn, StartAt: "2026-01-01 10:00", Origin: origin})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	manual := mk("m.gcode", "manual")
+	pristine := mk("p.gcode", "import")
+	edited := mk("e.gcode", "import")
+	if err := db.Jobs().UpdateManual(models.Job{ID: edited, Filename: "e.gcode",
+		StartAt: "2026-01-01 10:00"}, "", 0, store.JobCalcInput{Copies: 1}); err != nil {
+		t.Fatal(err)
+	}
+	linked := mk("l.gcode", "manual")
+	cid, _ := db.Customers().Save(models.Customer{Name: "К"})
+	oid, _ := db.Orders().Create(models.Order{CustomerID: cid, CreatedAt: "2026-01-01"})
+	if _, err := db.Orders().AddItem(models.OrderItem{OrderID: oid, JobID: linked, Title: "поз", Qty: 1, Price: 100}); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := db.Jobs().DeleteJobs(nil)
+	if err != nil || rep.Deleted != 0 {
+		t.Fatalf("пустой список: %+v %v", rep, err)
+	}
+	rep, err = db.Jobs().DeleteJobs([]int64{manual, pristine, edited, linked, linked, 999999})
+	if err != nil {
+		t.Fatalf("DeleteJobs: %v", err)
+	}
+	if rep.Deleted != 3 {
+		t.Fatalf("удалено %d, хочу 3 (дубль и missing — молча)", rep.Deleted)
+	}
+	if len(rep.SkippedOrder) != 1 || rep.SkippedOrder[0] != "l.gcode" {
+		t.Fatalf("пропуски: %+v", rep.SkippedOrder)
+	}
+	list, _ := db.Jobs().List(0)
+	ids := map[int64]bool{}
+	for _, j := range list {
+		ids[j.ID] = true
+	}
+	if ids[manual] || ids[pristine] || ids[edited] {
+		t.Fatalf("не всё снесено: %+v", ids)
+	}
+	if !ids[linked] {
+		t.Fatal("связанная с заказом удалена")
+	}
+	// Повтор идемпотентен.
+	rep, err = db.Jobs().DeleteJobs([]int64{manual, pristine, edited, linked})
+	if err != nil {
+		t.Fatalf("повтор: %v", err)
+	}
+	if rep.Deleted != 0 || len(rep.SkippedOrder) != 1 {
+		t.Fatalf("повтор: %+v", rep)
+	}
+}
+
 func TestReports(t *testing.T) {
 	db := openTestDB(t)
 	repo := db.Orders()
