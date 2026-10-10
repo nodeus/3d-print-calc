@@ -138,7 +138,10 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 `users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE,
 +bought_at, +archived — архивные скрыты из остатков и селекта калькулятора),
 +part_purchases(printer_id, bought_at, price, qty — сумма вычисляется),
-spools(material_id, price, currency, bought_at, weight_left_g), printers(...,
+spools(material_id, price, currency, bought_at, weight_left_g, spool_no),
+materials.code правится с переписью снапшота (`json_replace`);
+materials.archived мертва (архив — только spools.archived: остатки, цена,
+селект), printers(...,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),

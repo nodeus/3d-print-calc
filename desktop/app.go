@@ -35,6 +35,8 @@ type MaterialDTO struct {
 	Currency       string  `json:"currency"`
 	SpoolID        int64   `json:"spoolId"`
 	SpoolLeftG     float64 `json:"spoolLeftG"`
+	HasLiveSpool   bool    `json:"hasLiveSpool"` // есть неархивные катушки
+	SpoolCount     int     `json:"spoolCount"`   // всего катушек
 }
 
 // GetMaterials возвращает справочник с ценами.
@@ -56,6 +58,13 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 			dto.Currency = spools[0].Currency
 			dto.SpoolID = spools[0].ID
 			dto.SpoolLeftG = spools[0].WeightLeftG
+			dto.SpoolCount = len(spools)
+			for _, s := range spools {
+				if !s.Archived {
+					dto.HasLiveSpool = true
+					break
+				}
+			}
 		}
 		out = append(out, dto)
 	}

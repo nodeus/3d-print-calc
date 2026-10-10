@@ -108,7 +108,15 @@ func isMaterialSuffix(seg string) bool {
 // "PETG-NIT-BLACK-1" → ("PETG-NIT-BLACK", 1). Без числового суффикса —
 // номер 0. Точное совпадение со справочником проверяет вызывающий код.
 func ParseMaterialSpool(filename string) (string, int) {
-	code := ParseMaterial(filename)
+	return SplitSpoolNo(ParseMaterial(filename))
+}
+
+// SplitSpoolNo отделяет номер катушки от кода: "PETG-NIT-BLACK-1" →
+// ("PETG-NIT-BLACK", 1). Без числового суффикса — (code, 0).
+func SplitSpoolNo(code string) (string, int) {
+	if code == "" {
+		return "", 0
+	}
 	if m := spoolSuffixRe.FindStringSubmatch(code); m != nil {
 		if n, err := strconv.Atoi(m[1]); err == nil && n > 0 {
 			return strings.TrimSuffix(code, m[0]), n

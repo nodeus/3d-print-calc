@@ -556,7 +556,7 @@
       <label>{$t('calc.material')}
         <select bind:value={edit.material}>
           <option value="">—</option>
-          {#each materials.filter((m) => !m.archived || m.code === edit.material) as m}<option value={m.code}>{m.code}</option>{/each}
+          {#each materials.filter((m) => m.spoolCount === 0 || m.hasLiveSpool || m.code === edit.material) as m}<option value={m.code}>{m.code}</option>{/each}
         </select>
       </label>
       <label>{$t('hist.slicer')}<input bind:value={edit.slicer} placeholder="OrcaSlicer" /></label>

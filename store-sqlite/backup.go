@@ -250,9 +250,16 @@ func (d *DB) ExportMaterialsCSV(w io.Writer) error {
 }
 
 // ImportMaterials импортирует справочник материалов. dryRun=true —
-// только отчёт без записи. Существующие коды не трогаются вообще
-// (ни поля, ни цены); новые создаются с первой катушкой по цене файла
-// (bought_at пусто — дата неизвестна).
+// только отчёт без записи.
+//
+// Новая парадигма «материал + катушки»: строка с кодом вида КОД-N —
+// это N-я катушка базового материала (создаётся материал при отсутствии
+// и катушка с этим номером и ценой строки, хоть нулевой). Строка без
+// номера — материал (+ первая катушка при цене > 0, legacy).
+// Точный код из базы — приоритет (legacy без номеров).
+// Существующее не трогается вообще (ни поля, ни цены, ни катушки);
+// дубль номера внутри файла — ошибка со строкой. bought_at пусто
+// (дата неизвестна). Повтор идемпотентен.
 func (d *DB) ImportMaterials(r io.Reader, dryRun bool) (ImportReport, error) {
 	var rep ImportReport
 	rep.DryRun = dryRun
@@ -266,46 +273,143 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool) (ImportReport, error) {
 	if err != nil {
 		return rep, fmt.Errorf("ERR_IMPORT: %w", err)
 	}
-	known := map[string]bool{}
-	for _, m := range list {
-		known[m.Code] = true
+	type spoolPlan struct {
+		n        int
+		price    float64
+		currency string
+		row      int
 	}
-	for _, row := range rows {
-		if known[row.Code] {
+	type matPlan struct {
+		isNew  bool // базы не было в БД — создаём (существующие не трогаем)
+		fields importers.MaterialRow
+		spools []spoolPlan
+		bare   bool // строка без номера (legacy: первая катушка при цене)
+	}
+	knownMats := map[string]bool{}
+	existingNos := map[string]map[int]bool{}
+	for _, m := range list {
+		knownMats[m.Code] = true
+	}
+	plans := map[string]*matPlan{}
+	order := []string{}
+	for i, row := range rows {
+		rowNo := i + 2
+		if knownMats[row.Code] {
 			rep.Existing++
 			continue
 		}
+		base, n := importers.SplitSpoolNo(row.Code)
+		if n == 0 {
+			base = row.Code
+		} else if knownMats[base] {
+			// База есть: проверяем номер среди её катушек.
+			if existingNos[base] == nil {
+				existingNos[base] = map[int]bool{}
+				if mid, err := matIDByCode(list, base); err == nil {
+					if spools, err := mats.ListSpools(mid); err == nil {
+						for _, s := range spools {
+							existingNos[base][s.SpoolNo] = true
+						}
+					}
+				}
+			}
+			if existingNos[base][n] {
+				rep.Existing++
+				continue
+			}
+		}
+		p, ok := plans[base]
+		if !ok {
+			p = &matPlan{isNew: !knownMats[base], fields: row}
+			plans[base] = p
+			order = append(order, base)
+		}
+		if n == 0 {
+			if p.bare {
+				return rep, fmt.Errorf("ERR_IMPORT: строка %d: дубль материала %q", rowNo, base)
+			}
+			p.bare = true
+			// Поля материала — из первой строки базы.
+			if len(p.spools) == 0 {
+				p.fields = row
+			}
+		} else {
+			for _, s := range p.spools {
+				if s.n == n {
+					return rep, fmt.Errorf("ERR_IMPORT: строка %d: дубль катушки %q №%d", rowNo, base, n)
+				}
+			}
+			if existingNos[base] == nil {
+				existingNos[base] = map[int]bool{}
+			}
+			existingNos[base][n] = true
+			p.spools = append(p.spools, spoolPlan{n: n, price: row.PricePerKg, currency: row.Currency, row: rowNo})
+		}
 		rep.New++
-		known[row.Code] = true
-		if dryRun {
-			continue
-		}
-		density := row.Density
-		if density <= 0 {
-			density = 1.27
-		}
-		matType := row.Type
-		if matType == "" {
-			matType = "PETG"
-		}
-		mid, err := mats.UpsertByCode(models.Material{
-			Code: row.Code, Type: matType, Vendor: row.Vendor,
-			Density: density, Diameter: row.Diameter,
-		})
-		if err != nil {
-			return rep, fmt.Errorf("ERR_IMPORT: %w", err)
-		}
-		if row.PricePerKg > 0 {
-			if _, err := mats.AddSpool(models.Spool{
-				MaterialID: mid, Price: int64(row.PricePerKg*100 + 0.5),
-				Currency: row.Currency, FxRate: 1,
-				WeightInitG: 1000, WeightLeftG: 1000,
-			}); err != nil {
+	}
+	if dryRun {
+		return rep, nil
+	}
+	for _, base := range order {
+		p := plans[base]
+		var mid int64
+		if p.isNew {
+			density := p.fields.Density
+			if density <= 0 {
+				density = 1.27
+			}
+			matType := p.fields.Type
+			if matType == "" {
+				matType = "PETG"
+			}
+			var err error
+			mid, err = mats.UpsertByCode(models.Material{
+				Code: base, Type: matType, Vendor: p.fields.Vendor,
+				Density: density, Diameter: p.fields.Diameter,
+			})
+			if err != nil {
 				return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+			}
+		} else {
+			var err error
+			mid, err = matIDByCode(list, base)
+			if err != nil {
+				return rep, err
+			}
+		}
+		mkSpool := func(n int, price float64, currency string) error {
+			if currency == "" {
+				currency = "RUB"
+			}
+			_, err := mats.AddSpool(models.Spool{
+				MaterialID: mid, SpoolNo: n, Price: int64(price*100 + 0.5),
+				Currency: currency, FxRate: 1,
+				WeightInitG: 1000, WeightLeftG: 1000,
+			})
+			return err
+		}
+		if p.bare && p.fields.PricePerKg > 0 {
+			if err := mkSpool(0, p.fields.PricePerKg, p.fields.Currency); err != nil {
+				return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+			}
+		}
+		for _, s := range p.spools {
+			if err := mkSpool(s.n, s.price, s.currency); err != nil {
+				return rep, fmt.Errorf("ERR_IMPORT: строка %d: %w", s.row, err)
 			}
 		}
 	}
 	return rep, nil
+}
+
+// matIDByCode ищет id материала по коду в готовом списке.
+func matIDByCode(list []models.Material, code string) (int64, error) {
+	for _, m := range list {
+		if m.Code == code {
+			return m.ID, nil
+		}
+	}
+	return 0, fmt.Errorf("ERR_IMPORT: нет материала %q", code)
 }
 
 // ImportReport — итог импорта истории.
