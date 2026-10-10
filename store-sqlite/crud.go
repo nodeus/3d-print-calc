@@ -356,12 +356,17 @@ func (r *jobsRepo) RevertJob(id int64) error {
 
 // materialPrice возвращает текущую цену кг (первая катушка) или 0.
 func (r *jobsRepo) materialPrice(code string) (float64, error) {
+	return materialPriceByCode(r.db, code)
+}
+
+// materialPriceByCode — то же для мест без jobsRepo (бэкфилл снапшотов).
+func materialPriceByCode(db *sql.DB, code string) (float64, error) {
 	var id int64
-	if err := r.db.QueryRow(`SELECT id FROM materials WHERE code=?`, code).Scan(&id); err != nil {
+	if err := db.QueryRow(`SELECT id FROM materials WHERE code=?`, code).Scan(&id); err != nil {
 		return 0, err
 	}
 	var price int64
-	if err := r.db.QueryRow(`SELECT price FROM spools WHERE material_id=? ORDER BY archived, id LIMIT 1`, id).Scan(&price); err != nil {
+	if err := db.QueryRow(`SELECT price FROM spools WHERE material_id=? ORDER BY archived, id LIMIT 1`, id).Scan(&price); err != nil {
 		return 0, err
 	}
 	return float64(price) / 100, nil

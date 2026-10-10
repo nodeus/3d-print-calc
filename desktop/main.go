@@ -115,6 +115,9 @@ func openDB(path string) (*sqlite.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	// Разовый бэкфилл снапшотов импорта без price/spoolNo (импорт до fix).
+	// Best-effort: ошибка не роняет старт, при следующем запуске повторится.
+	_, _ = db.BackfillImportSnapshots()
 	if err := seed.EnsureAdmin(db); err != nil {
 		db.Close()
 		return nil, err
