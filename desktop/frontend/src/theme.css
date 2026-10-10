@@ -64,6 +64,12 @@ button {
   color: var(--btn-fg);
   border: 1px solid var(--btn-border);
 }
+/* Зазор подписи над полем: рамка фокуса не должна налезать на текст.
+   Действует только на flex/grid-контейнеры; label.check не задет
+   (у него свой gap с большей специфичностью). */
+label {
+  gap: 3px;
+}
 
 @media print {
   :root {
