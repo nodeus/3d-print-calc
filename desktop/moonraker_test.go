@@ -155,7 +155,7 @@ func TestMoonrakerPreviewAllPages(t *testing.T) {
 	if err := app.SetMoonrakerURL(pid, srv.URL); err != nil {
 		t.Fatal(err)
 	}
-	rep, err := app.MoonrakerPreview(pid, 100)
+	rep, err := app.MoonrakerPreview(pid, 0)
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
@@ -175,5 +175,86 @@ func TestMoonrakerPreviewAllPages(t *testing.T) {
 	}
 	if len(jobs) != totalJobs {
 		t.Fatalf("jobs = %d, хочу %d", len(jobs), totalJobs)
+	}
+}
+
+// TestMoonrakerPreviewLimit: лимит берёт N последних (новые первыми),
+// остальное сервер не отдаёт в выборку.
+func TestMoonrakerPreviewLimit(t *testing.T) {
+	const totalJobs = 260
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/server/info" {
+			w.Write([]byte(`{"result": {"moonraker_version": "v0.9.3"}}`))
+			return
+		}
+		if r.URL.Path == "/server/history/totals" {
+			w.Write([]byte(`{"result": {"job_totals": {"total_jobs": 260}}}`))
+			return
+		}
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		start, _ := strconv.Atoi(q.Get("start"))
+		if limit <= 0 {
+			limit = 100
+		}
+		var sb strings.Builder
+		fmt.Fprintf(&sb, `{"result": {"count": %d, "jobs": [`, totalJobs)
+		n := 0
+		for i := start; i < start+limit && i < totalJobs; i++ {
+			if n > 0 {
+				sb.WriteString(",")
+			}
+			fmt.Fprintf(&sb, `{"filename": "bulk_%03d.gcode", "status": "completed",
+				"start_time": %d, "end_time": %d,
+				"print_duration": 100, "total_duration": 120, "filament_used": 1000,
+				"metadata": {}}`, i, 1759495020+i*100, 1759495120+i*100)
+			n++
+		}
+		sb.WriteString(`]}}`)
+		w.Write([]byte(sb.String()))
+	}))
+	defer srv.Close()
+
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{ctx: context.Background(), db: db, dbPath: path}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatal(err)
+	}
+	pid, err := app.AddPrinter(models.Printer{
+		Name: "K1C-lim", LifeYears: 3, HoursPerDay: 8,
+		CalendarMode: "calendar", AmortMethod: "calendar", PowerKW: 0.35,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.SetMoonrakerURL(pid, srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := app.MoonrakerPreview(pid, 100)
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	if rep.Total != 100 || rep.New != 100 {
+		t.Fatalf("preview = %+v, хочу 100 первых", rep)
+	}
+	if _, err := app.MoonrakerApply(); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	jobs, err := app.GetJobs(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 100 {
+		t.Fatalf("jobs = %d, хочу 100", len(jobs))
+	}
+	for _, j := range jobs {
+		if j.Filename < "bulk_000.gcode" || j.Filename > "bulk_099.gcode" {
+			t.Fatalf("лишняя работа: %q", j.Filename)
+		}
 	}
 }

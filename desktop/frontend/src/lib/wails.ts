@@ -241,6 +241,11 @@ export interface ImportReport {
   lifetimeTotal?: number;
 }
 
+export interface BulkDeleteReport {
+  deleted: number;
+  skippedOrder: string[];
+}
+
 export interface UserDTO {
   id: number;
   login: string;
@@ -427,7 +432,7 @@ declare global {
           ApplyBackup(): Promise<BackupManifest>;
           ExportJobsCSV(): Promise<string>;
           ExportMaterialsCSV(): Promise<string>;
-          PreviewHistoryCSV(): Promise<ImportReport>;
+          PreviewHistoryCSV(limitRows: number): Promise<ImportReport>;
           ApplyHistoryCSV(): Promise<ImportReport>;
           PreviewMaterialsCSV(): Promise<ImportReport>;
           ApplyMaterialsCSV(): Promise<ImportReport>;
@@ -448,6 +453,7 @@ declare global {
           UpdateOrder(o: Order): Promise<void>;
           DeleteOrder(id: number): Promise<void>;
           DeleteJob(id: number): Promise<void>;
+          DeleteJobs(ids: number[]): Promise<BulkDeleteReport>;
           UpdateManualJob(job: JobEdit): Promise<void>;
           OrderNumberSettings(): Promise<Record<string, string>>;
           SetOrderNumberSettings(template: string, seq: string): Promise<void>;
@@ -528,7 +534,7 @@ export const wails = {
   applyBackup: () => api().ApplyBackup(),
   exportJobsCSV: () => api().ExportJobsCSV(),
   exportMaterialsCSV: () => api().ExportMaterialsCSV(),
-  previewHistoryCSV: () => api().PreviewHistoryCSV(),
+  previewHistoryCSV: (limitRows: number) => api().PreviewHistoryCSV(limitRows),
   applyHistoryCSV: () => api().ApplyHistoryCSV(),
   previewMaterialsCSV: () => api().PreviewMaterialsCSV(),
   applyMaterialsCSV: () => api().ApplyMaterialsCSV(),
@@ -550,6 +556,7 @@ export const wails = {
   updateOrder: (o: Order) => api().UpdateOrder(o),
   deleteOrder: (id: number) => api().DeleteOrder(id),
   deleteJob: (id: number) => api().DeleteJob(id),
+  deleteJobs: (ids: number[]) => api().DeleteJobs(ids),
   updateManualJob: (job: JobEdit) => api().UpdateManualJob(job),
   orderNumberSettings: () => api().OrderNumberSettings(),
   setOrderNumberSettings: (template: string, seq: string) => api().SetOrderNumberSettings(template, seq),

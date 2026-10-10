@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -424,14 +425,16 @@ type ImportReport struct {
 }
 
 // ImportHistory импортирует CSV принтера. dryRun=true — только отчёт без записи.
+// limitRows — максимум последних работ по времени старта (<=0 — все).
 // onProgress — прогресс применения (nil — молча).
-func (d *DB) ImportHistory(r io.Reader, dryRun bool, onProgress seed.ProgressFunc) (ImportReport, error) {
+func (d *DB) ImportHistory(r io.Reader, dryRun bool, limitRows int, onProgress seed.ProgressFunc) (ImportReport, error) {
 	var rep ImportReport
 	rep.DryRun = dryRun
 	rows, err := importers.ParseHistory(r)
 	if err != nil {
 		return rep, err
 	}
+	rows = takeLastJobs(rows, limitRows)
 	rep.Total = len(rows)
 	fresh, exist, err := d.ClassifyJobs(rows)
 	if err != nil {
@@ -455,6 +458,21 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool, onProgress seed.ProgressFun
 	rep.Stubs = st.Stubs
 	rep.SpoolStubs = st.SpoolStubs
 	return rep, nil
+}
+
+// takeLastJobs оставляет N последних работ по времени старта (новые первыми).
+// N <= 0 или больше длины — без изменений (тот же слайс). Сортировка
+// стабильная: файлы в любом порядке дают одинаковую выборку.
+func takeLastJobs(rows []importers.PrintJob, n int) []importers.PrintJob {
+	if n <= 0 || n >= len(rows) {
+		return rows
+	}
+	sorted := make([]importers.PrintJob, len(rows))
+	copy(sorted, rows)
+	sort.SliceStable(sorted, func(a, b int) bool {
+		return sorted[a].StartTime.After(sorted[b].StartTime)
+	})
+	return sorted[:n]
 }
 
 // ClassifyJobs делит строки на новые/существующие (по filename+start_at).

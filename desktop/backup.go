@@ -127,7 +127,8 @@ func (a *App) saveCSV(defaultName, title string) (string, error) {
 }
 
 // PreviewHistoryCSV открывает CSV принтера и считает dry-run отчёт.
-func (a *App) PreviewHistoryCSV() (sqlite.ImportReport, error) {
+// limitRows — максимум последних работ (<=0 — все), запоминается для Apply.
+func (a *App) PreviewHistoryCSV(limitRows int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title:   "Выбрать CSV истории",
@@ -140,12 +141,13 @@ func (a *App) PreviewHistoryCSV() (sqlite.ImportReport, error) {
 	if err != nil {
 		return rep, err
 	}
-	rep, err = a.db.ImportHistory(bytes.NewReader(data), true, nil)
+	rep, err = a.db.ImportHistory(bytes.NewReader(data), true, limitRows, nil)
 	if err != nil {
 		return rep, err
 	}
 	a.pendingFile = data
 	a.pendingPath = path
+	a.pendingCSVLimit = limitRows
 	return rep, nil
 }
 
@@ -196,12 +198,13 @@ func (a *App) ApplyHistoryCSV() (sqlite.ImportReport, error) {
 	if len(a.pendingFile) == 0 {
 		return rep, errNoPending()
 	}
-	rep, err := a.db.ImportHistory(bytes.NewReader(a.pendingFile), false, a.emitProgress)
+	rep, err := a.db.ImportHistory(bytes.NewReader(a.pendingFile), false, a.pendingCSVLimit, a.emitProgress)
 	if err != nil {
 		return rep, err
 	}
 	a.pendingFile = nil
 	a.pendingPath = ""
+	a.pendingCSVLimit = 0
 	return rep, nil
 }
 

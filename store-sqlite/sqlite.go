@@ -348,6 +348,53 @@ func (r *jobsRepo) DeleteJob(id int64) error {
 	return nil
 }
 
+// DeleteJobs массово удаляет работы истории (чекбоксы): ручные, правленые
+// и нетронутые импорты — физически; связанные с позициями заказов
+// пропускаются (FK) с именами в отчёте. Одна транзакция, пустой список — no-op.
+func (r *jobsRepo) DeleteJobs(ids []int64) (store.BulkDeleteReport, error) {
+	var rep store.BulkDeleteReport
+	uniq := make([]int64, 0, len(ids))
+	seen := map[int64]bool{}
+	for _, id := range ids {
+		if id != 0 && !seen[id] {
+			seen[id] = true
+			uniq = append(uniq, id)
+		}
+	}
+	if len(uniq) == 0 {
+		return rep, nil
+	}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return rep, fmt.Errorf("ERR_JOB_DELETE: %w", err)
+	}
+	defer tx.Rollback()
+	for _, id := range uniq {
+		var fn string
+		if err := tx.QueryRow(`SELECT filename FROM jobs WHERE id=?`, id).Scan(&fn); err == sql.ErrNoRows {
+			continue // уже нет — молча пропускаем
+		} else if err != nil {
+			return rep, fmt.Errorf("ERR_JOB_DELETE: %w", err)
+		}
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM order_items WHERE job_id=?`, id).Scan(&n); err != nil {
+			return rep, fmt.Errorf("ERR_JOB_DELETE: %w", err)
+		}
+		if n > 0 {
+			rep.SkippedOrder = append(rep.SkippedOrder, fn)
+			continue
+		}
+		if _, err := tx.Exec(`DELETE FROM jobs WHERE id=?`, id); err != nil {
+			return rep, fmt.Errorf("ERR_JOB_DELETE: %w", err)
+		}
+		rep.Deleted++
+	}
+	if rep.SkippedOrder == nil {
+		rep.SkippedOrder = []string{}
+	}
+	return rep, tx.Commit()
+}
+
 // List возвращает последние печати (limit <= 0 — все).
 func (r *jobsRepo) List(limit int) ([]models.Job, error) {
 	q := `SELECT id, filename, start_at, end_at, printer_id, spool_id, status, origin,
