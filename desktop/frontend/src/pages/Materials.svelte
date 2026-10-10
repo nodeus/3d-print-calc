@@ -11,6 +11,7 @@
   import { mySettings } from '../lib/usersettings';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
 
   let materials: MaterialDTO[] = $state([]);
   let error = $state('');
@@ -386,7 +387,7 @@
   <thead><tr>
     {#each matOrd as k}
       <th class:n={matNum(k)} style={thWidth('materials', k)} data-col={k} class:dragsrc={dragKey === k}>
-        {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, matOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }}>⋮⋮</span>{/if}
+        {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, matOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }} onkeydown={(e) => colKeyMove(e, matOrd, k, dropCols)}>⋮⋮</span>{/if}
         {#if k === 'color'}
           {$t(matLabel(k))}
         {:else}
@@ -460,7 +461,7 @@
             <thead><tr>
               {#each spoolOrd as k}
                 <th class:n={spoolNum(k)} style={thWidth('spools', k)} data-col={k} class:dragsrc={spoolDragKey === k}>
-                  {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, spoolWrapEl, k, spoolOrd, (dk, x) => { spoolDragKey = dk; spoolDropX = x; }, dropSpoolCols); }}>⋮⋮</span>{/if}
+                  {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, spoolWrapEl, k, spoolOrd, (dk, x) => { spoolDragKey = dk; spoolDropX = x; }, dropSpoolCols); }} onkeydown={(e) => colKeyMove(e, spoolOrd, k, dropSpoolCols)}>⋮⋮</span>{/if}
                   {#if spoolLabel(k)}<span>{$t(spoolLabel(k))}</span>{/if}
                   <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'spools', k)} ondblclick={() => resetColWidth('spools', k)}></span>
                 </th>

@@ -12,6 +12,7 @@
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
+  import { colKeyMove } from '../lib/colkeyboard';
   import { calcFormDefaults, applyCalcDefaults, type CalcForm } from '../lib/calcform';
   import Users from './Users.svelte';
 
@@ -514,7 +515,7 @@
     <thead><tr>
       {#each fxOrd as k}
         <th class:n={fxNum(k)} style={thWidth('fx', k)} data-col={k} class:dragsrc={fxDragKey === k}>
-          {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, fxWrapEl, k, fxOrd, (dk, x) => { fxDragKey = dk; fxDropX = x; }, dropFxCols); }}>⋮⋮</span>{/if}
+          {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, fxWrapEl, k, fxOrd, (dk, x) => { fxDragKey = dk; fxDropX = x; }, dropFxCols); }} onkeydown={(e) => colKeyMove(e, fxOrd, k, dropFxCols)}>⋮⋮</span>{/if}
           <button class="th" onclick={() => toggleFxSort(k)}>{$t(fxLabel(k))}{fxArrow(k)}</button>
           <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'fx', k)} ondblclick={() => resetColWidth('fx', k)}></span>
         </th>
@@ -528,15 +529,15 @@
   </div>
   {#if canWrite($user)}
     <div class="row">
-      <input placeholder="USD" bind:value={rateCur} />
-      <input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={rateVal} />
+      <label>{$t('fx.rate_cur')}<input placeholder="USD" bind:value={rateCur} /></label>
+      <label>{$t('fx.rate_ph')}<input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={rateVal} /></label>
       <button onclick={saveRate}>{$t('common.save')}</button>
     </div>
     <h3>{$t('fx.convert')}</h3>
     <p class="note">{$t('fx.convert_note')}</p>
     <div class="row">
-      <input placeholder="USD" bind:value={convCur} />
-      <input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={convRate} />
+      <label>{$t('fx.rate_cur')}<input placeholder="USD" bind:value={convCur} /></label>
+      <label>{$t('fx.rate_ph')}<input type="number" min="0" step="any" placeholder={$t('fx.rate_ph')} bind:value={convRate} /></label>
       <button class="warn" onclick={convertAll}>{$t('fx.convert_go')}</button>
     </div>
   {/if}
