@@ -18,6 +18,7 @@
   import { goTab } from './lib/nav';
   import { exportCurrentTab, hasPdfExporter } from './lib/pdf';
   import { wails } from './lib/wails';
+  import { noticeMsg } from './lib/notice';
   import { onMount, onDestroy } from 'svelte';
 
   type Tab = 'calc' | 'history' | 'materials' | 'printers' | 'orders' | 'customers' | 'reports' | 'info' | 'settings';
@@ -93,6 +94,7 @@
 {:else}
   <header class="no-print">
     <h1>{$t('app.title')}</h1>
+    {#if $noticeMsg}<span class="notice">{$noticeMsg}</span>{/if}
     <div class="lang">
       <span>{$user.login} ({$user.role})</span>
       <button onclick={printPage}>{$t('common.print')}</button>
@@ -133,6 +135,7 @@
   nav button, .lang button { padding: 6px 12px; border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-fg); cursor: pointer; border-radius: 4px; }
   button.active { background: var(--header-bg); color: var(--header-fg); border-color: var(--header-bg); }
   .lang { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .notice { border: 1px solid var(--accent); border-radius: 4px; padding: 4px 10px; font-size: 13px; color: var(--accent); white-space: nowrap; }
   main { padding: 12px 16px; }
   .err { color: var(--err); }
   .print-only { display: none; }

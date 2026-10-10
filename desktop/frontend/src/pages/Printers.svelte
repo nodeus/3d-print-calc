@@ -339,7 +339,7 @@
     {#each shown as p}
       <tr>
         {#each printerOrd as k}<td class:n={printerNum(k)}>{printerText(p, k)}</td>{/each}
-        <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(p)}>✎</button> <button onclick={() => remove(p)}>✕</button>{/if}</td>
+        <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(p)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => remove(p)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
       </tr>
     {/each}
   </tbody>
@@ -377,7 +377,7 @@
             </tr>
           {:else}
             <tr><td>{pt.boughtAt || '—'}</td><td>{pt.name}</td><td class="n">{money(pt.price, 'RUB', 'ru')}</td><td class="n">{pt.qty}</td><td class="n">{money(pt.total, 'RUB', 'ru')}</td><td>{pt.note}</td>
-              <td class="no-print">{#if canWrite($user)}<button onclick={() => editPart(pt)}>✎</button> <button onclick={() => removePart(pt)}>✕</button>{/if}</td>
+              <td class="no-print">{#if canWrite($user)}<button onclick={() => editPart(pt)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => removePart(pt)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
             </tr>
           {/if}
         {/each}

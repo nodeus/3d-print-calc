@@ -213,7 +213,7 @@
               <td class:n={custNum(k)}>{custText(c, k)}</td>
             {/if}
           {/each}
-          <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(c)}>✎</button> <button onclick={() => remove(c)}>✕</button>{/if}</td>
+          <td class="no-print">{#if canWrite($user)}<button onclick={() => startEdit(c)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => remove(c)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
         </tr>
       {/if}
     {/each}

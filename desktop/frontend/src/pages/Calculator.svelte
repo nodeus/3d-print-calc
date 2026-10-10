@@ -7,6 +7,8 @@
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { calcForm, factoryValues, resetCalcForm, applyCalcDefaults } from '../lib/calcform';
   import { saveMySettingsPatch } from '../lib/usersettings';
+  import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { splitHours, joinHours, normHM } from '../lib/hm';
   import { get } from 'svelte/store';
 
@@ -42,14 +44,13 @@
   let maintPerHour: number | null = $state(0);
   let purgeG: number | null = $state(0);
   let filename = $state('');
-  let savedMsg = $state(false);
+  let error = $state('');
   let orders: Order[] = $state([]);
   let customers: Customer[] = $state([]);
   let customerId = $state(0);
   let orderId = $state(0);
   let orderTitle = $state('');
   let orderQty = $state(1);
-  let orderMsg = $state(false);
   let addedInfo = $state('');
 
   let result = $state<CalcResult | null>(null);
@@ -306,21 +307,19 @@
     };
   }
 
-  let defMsg = $state(false);
-
   async function saveAsDefaults() {
     const d = currentDefaults();
     try {
       await saveMySettingsPatch({ calcDefaults: d });
       applyCalcDefaults(d);
-      defMsg = true;
-      setTimeout(() => (defMsg = false), 2500);
+      notify($t('common.saved'));
     } catch (e) {
       console.error(e);
     }
   }
 
   async function resetToDefaults() {
+    if (!(await askConfirm($t('calc.resetdef_q')))) return;
     resetCalcForm();
     pullForm();
     await recalc();
@@ -492,15 +491,19 @@
         roundStep: roundStep ?? 0,
       });
       persist();
-      savedMsg = true;
-      setTimeout(() => (savedMsg = false), 2500);
+      notify($t('calc.saved'));
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 
   async function addToOrder() {
-    if (!result || !orderId || !orderTitle.trim()) return;
+    if (!result) return;
+    error = '';
+    if (!orderId || !orderTitle.trim()) {
+      error = $t('calc.need_order_title');
+      return;
+    }
     try {
       // Цена/себестоимость — за копию: итог заказа считает price×qty.
       // (Раньше уходила цена за весь стол — при qty>1 итог кратно завышался.)
@@ -510,11 +513,10 @@
         cost: Math.round(result.CostPerCopy * 100), price: Math.round(result.PricePerCopy * 100),
       });
       addedInfo = `${orderTitle.trim()} — ${q} × ${money(result.PricePerCopy, currency, $locale)} = ${money(result.PricePerCopy * q, currency, $locale)}`;
-      orderMsg = true;
-      setTimeout(() => (orderMsg = false), 2500);
+      notify(`${$t('ord.added')}: ${addedInfo}`);
       persist();
     } catch (e) {
-      console.error(e);
+      error = String(e);
     }
   }
 
@@ -576,6 +578,7 @@
 
 <div class="grid">
   <section class="card">
+    {#if error}<p class="err">{error}</p>{/if}
     {#if !materials.length}<p class="warn">{$t('calc.no_materials')}</p>{/if}
     {#if materials.length && !spoolOptions.length}<p class="warn">{$t('calc.no_spools')}</p>{/if}
     {#if !printers.length}<p class="warn">{$t('calc.no_printers')}</p>{/if}
@@ -672,12 +675,10 @@
         <label>{$t('calc.filename')}<input placeholder="part_PETG-NIT-W4_2h1m.gcode" bind:value={filename} /></label>
         <button onclick={save}>{$t('calc.save_calc')}</button>
       </div>
-      {#if savedMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
       <div class="row no-print">
         <button onclick={saveAsDefaults}>{$t('calc.setdefault')}</button>
         <button onclick={resetToDefaults}>{$t('calc.resetdef')}</button>
       </div>
-      {#if defMsg}<p class="ok">{$t('calc.saved')}</p>{/if}
       {#if orders.length}
         <div class="row">
           <label>{$t('cust.name')}
@@ -695,7 +696,7 @@
           <label>{$t('ord.qty')}<input placeholder="1" type="number" min="0.5" step="0.5" bind:value={orderQty} /></label>
           <button onclick={addToOrder}>{$t('ord.add')}</button>
         </div>
-        {#if orderMsg}<p class="ok">{$t('ord.added')}: {addedInfo}</p>{/if}
+        {#if addedInfo}<p class="ok">{$t('ord.added')}: {addedInfo}</p>{/if}
       {/if}
     {:else}<p>…</p>{/if}
   </section>
@@ -711,6 +712,7 @@
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
   .final { font-size: 18px; border-top: 2px solid var(--final-border); margin-top: 4px; padding-top: 8px; }
   .ok { color: green; }
+  .err { color: var(--err); }
   .warn { color: var(--warn); }
   button { padding: 8px 14px; align-self: end; }
 </style>
