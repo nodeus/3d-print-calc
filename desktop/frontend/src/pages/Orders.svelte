@@ -5,6 +5,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { openOrderId, customerFilter } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
@@ -369,6 +370,7 @@
       newTitle = '';
       await load();
       detail = await wails.orderDetail(id);
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -396,6 +398,7 @@
       });
       editOpen = false;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -426,6 +429,7 @@
       itemCost = null;
       itemPrice = null;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -439,6 +443,7 @@
       payNote = '';
       payItemId = 0;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -474,6 +479,7 @@
     try {
       await wails.setOrderStatus(detail.order.ID, s);
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }

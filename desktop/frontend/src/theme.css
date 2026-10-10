@@ -64,6 +64,9 @@ button {
   color: var(--btn-fg);
   border: 1px solid var(--btn-border);
 }
+button:not(:disabled):active {
+  filter: brightness(0.9);
+}
 
 @media print {
   :root {

@@ -6,6 +6,7 @@
   import { setBaseSym } from '../lib/currency';
   import { user, isAdmin, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { THEME_PRESET_DARK, THEME_PRESET_LIGHT, applyTheme, persistTheme } from '../lib/theme';
   import { saveMySettingsPatch, mySettings } from '../lib/usersettings';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
@@ -62,6 +63,7 @@
     try {
       await wails.setOrderNumberSettings(numTemplate, numSeq);
       await loadNumbers();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -384,6 +386,7 @@
       await wails.setFxRate(rateCur.trim().toUpperCase(), rateVal ?? 0);
       rateVal = null;
       await loadRates();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -411,6 +414,7 @@
       convCur = '';
       convRate = null;
       await loadRates();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -597,17 +601,15 @@
   <div class="row">
     <button onclick={() => run(wails.exportJobsCSV, (p) => (backupPath = p))}>{$t('set.csv_jobs_out')}</button>
     <button onclick={() => run(wails.exportMaterialsCSV, (p) => (backupPath = p))}>{$t('set.csv_mats_out')}</button>
-    <button onclick={() => run(() => wails.previewHistoryCSV(csvLimit ?? 0), (r) => (csvReport = r))}>{$t('set.csv_in')}</button>
     <input type="number" min="1" step="1" bind:value={csvLimit} placeholder={$t('set.csv_limit')} title={$t('set.csv_limit')} style={`width:${$t('set.csv_limit').length + 5}ch`} />
+    <button onclick={() => run(() => wails.previewHistoryCSV(csvLimit ?? 0), (r) => (csvReport = r))}>{$t('set.csv_in')}</button>
     {#if csvReport?.dryRun}<button class="warn" onclick={applyCSV} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
+    <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
+    {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
   </div>
   {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
   {#if csvReport}<p>{$t('set.csv_preview')}: total {csvReport.total}, new {csvReport.new}, existing {csvReport.existing}</p>{/if}
   {#if csvApplied}<p class="ok">{$t('set.csv_done')}: +{csvApplied.new} (stubs {csvApplied.stubs}, {$t('set.csv_spool_stubs')} {csvApplied.spoolStubs ?? 0})</p>{/if}
-  <div class="row">
-    <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
-    {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
-  </div>
   {#if matsReport}<p>{$t('set.csv_preview')}: total {matsReport.total}, new {matsReport.new}, existing {matsReport.existing}</p>{/if}
   {#if matsApplied}<p class="ok">{$t('set.csv_done')}: +{matsApplied.new}</p>{/if}
 </div>

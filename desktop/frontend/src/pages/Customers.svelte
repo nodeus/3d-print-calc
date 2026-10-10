@@ -4,6 +4,7 @@
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { gotoCustomerOrders } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money } from '../lib/format';
@@ -123,6 +124,7 @@
       contact = '';
       note = '';
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -139,6 +141,7 @@
       await wails.saveCustomer(edit);
       editId = 0;
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }

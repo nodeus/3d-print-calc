@@ -3,6 +3,7 @@
   import { wails, type UserDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { askConfirm } from '../lib/confirm';
+  import { notify } from '../lib/notice';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
   import { mySettings } from '../lib/usersettings';
@@ -72,6 +73,7 @@
       login = '';
       password = '';
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
@@ -81,6 +83,7 @@
     try {
       await wails.setUserRole(id, r);
       await load();
+      notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     }
