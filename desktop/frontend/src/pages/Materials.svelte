@@ -155,6 +155,36 @@
 
   let matOrd = $derived(orderFor($mySettings.colOrder, 'materials', matKeys));
 
+  const spoolCols = [
+    { key: 'num', label: 'spool.num' }, { key: 'date', label: 'spool.date' },
+    { key: 'price', label: 'spool.price', num: true },
+    { key: 'weight', label: 'spool.weight', num: true },
+    { key: 'left', label: 'spool.left', num: true },
+    { key: 'flag', label: '' },
+  ];
+  const spoolKeys = spoolCols.map((c) => c.key);
+  const spoolNum = (k: string) => spoolCols.some((c) => c.key === k && c.num);
+  const spoolLabel = (k: string) => spoolCols.find((c) => c.key === k)?.label ?? k;
+
+  let spoolOrd = $derived(orderFor($mySettings.colOrder, 'spools', spoolKeys));
+
+  // Текст ячейки катушки (flag — маркеры ★/архив, шапка пустая).
+  function spoolText(s: SpoolDTO, list: SpoolDTO[], k: string): string {
+    switch (k) {
+      case 'num': return String(s.spoolNo || '—');
+      case 'date': return s.boughtAt || '—';
+      case 'price': return money(s.price, s.currency, 'ru');
+      case 'weight': return String(s.weightInitG);
+      case 'left': return String(s.weightLeftG);
+      case 'flag': {
+        const star = calcSpool(list)?.id === s.id ? `★ ${$t('spool.calc')}` : '';
+        const arch = s.archived ? ` · ${$t('spool.archived')}` : '';
+        return star + arch;
+      }
+      default: return '';
+    }
+  }
+
   // Текстовое значение ячейки (цвет — отдельно квадратиком).
   function matText(m: MaterialDTO, k: string): string {
     switch (k) {
@@ -178,6 +208,21 @@
     error = '';
     try {
       await saveTableOrder('materials', next);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  // Катушки: свой wrap/drag (ключ таблицы 'spools'). Отдельный от материалов,
+  // т.к. coldrag ищет th[data-col] внутри wrap — общий wrap смешал бы списки.
+  let spoolDragKey: string | null = $state(null);
+  let spoolDropX: number | null = $state(null);
+  let spoolWrapEl: HTMLDivElement | null = $state(null);
+
+  async function dropSpoolCols(next: string[]) {
+    error = '';
+    try {
+      await saveTableOrder('spools', next);
     } catch (e) {
       error = String(e);
     }
@@ -276,12 +321,8 @@
       if (expanded !== m.id || !list || !list.length) continue;
       sections.push({
         Title: `${m.code} — ${$t('spool.title')}`,
-        Headers: [$t('spool.num'), $t('spool.date'), $t('spool.price'), $t('spool.weight'), $t('spool.left'), ''],
-        Rows: list.map((s) => [
-          String(s.spoolNo || '—'), s.boughtAt || '—', money(s.price, s.currency, 'ru'),
-          String(s.weightInitG), String(s.weightLeftG),
-          calcSpool(list)?.id === s.id ? '★' : '',
-        ]),
+        Headers: spoolOrd.map((k) => (spoolLabel(k) ? $t(spoolLabel(k)) : '')),
+        Rows: list.map((s) => spoolOrd.map((k) => spoolText(s, list, k))),
       });
     }
     await downloadPDF($t('nav.materials'), sections);
@@ -377,34 +418,52 @@
       {#if expanded === m.id}
         <tr><td colspan={matOrd.length + 1}>
           <b>{$t('spool.title')} — {m.code}</b>
-          <table>
-            <thead><tr><th>{$t('spool.num')}</th><th>{$t('spool.date')}</th><th class="n">{$t('spool.price')}</th><th class="n">{$t('spool.weight')}</th><th class="n">{$t('spool.left')}</th><th></th><th class="no-print"></th></tr></thead>
+          <div class="twrap" bind:this={spoolWrapEl}>
+          {#if spoolDropX != null}<div class="drop-line no-print" style="left:{spoolDropX}px;"></div>{/if}
+          <table class="tw">
+            <thead><tr>
+              {#each spoolOrd as k}
+                <th class:n={spoolNum(k)} style={thWidth('spools', k)} data-col={k} class:dragsrc={spoolDragKey === k}>
+                  {#if canWrite($user)}<span class="grip no-print" role="separator" title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, spoolWrapEl, k, spoolOrd, (dk, x) => { spoolDragKey = dk; spoolDropX = x; }, dropSpoolCols); }}>⋮⋮</span>{/if}
+                  {#if spoolLabel(k)}<span>{$t(spoolLabel(k))}</span>{/if}
+                  <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'spools', k)} ondblclick={() => resetColWidth('spools', k)}></span>
+                </th>
+              {/each}
+              <th class="no-print"></th>
+            </tr></thead>
             <tbody>
               {#each spools[m.id] ?? [] as s}
                 {#if spoolEdit && spoolEdit.id === s.id}
                   <tr>
-                    <td>{s.spoolNo || '—'}</td>
-                    <td><input type="date" bind:value={spoolEdit.boughtAt} /></td>
-                    <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" /></td>
-                    <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
-                    <td class="n">{s.weightLeftG}</td>
-                    <td><input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} />{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
+                    {#each spoolOrd as k}
+                      {#if k === 'num'}
+                        <td>{s.spoolNo || '—'}</td>
+                      {:else if k === 'date'}
+                        <td><input type="date" bind:value={spoolEdit.boughtAt} /></td>
+                      {:else if k === 'price'}
+                        <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" /></td>
+                      {:else if k === 'weight'}
+                        <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
+                      {:else if k === 'left'}
+                        <td class="n">{s.weightLeftG}</td>
+                      {:else if k === 'flag'}
+                        <td><input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} />{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
+                      {/if}
+                    {/each}
                     <td class="no-print"><button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button> <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button></td>
                   </tr>
                 {:else}
                   <tr>
-                    <td>{s.spoolNo || '—'}</td>
-                    <td>{s.boughtAt || '—'}</td>
-                    <td class="n">{money(s.price, s.currency, 'ru')}</td>
-                    <td class="n">{s.weightInitG}</td>
-                    <td class="n">{s.weightLeftG}</td>
-                    <td>{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}{#if s.archived} · {$t('spool.archived')}{/if}</td>
+                    {#each spoolOrd as k}
+                      <td class:n={spoolNum(k)}>{spoolText(s, spools[m.id] ?? [], k)}</td>
+                    {/each}
                     <td class="no-print">{#if canWrite($user)}<button onclick={() => editSpool(s)}>✎</button> <button onclick={() => removeSpool(s)}>✕</button>{/if}</td>
                   </tr>
                 {/if}
               {/each}
             </tbody>
           </table>
+          </div>
           {#if canWrite($user)}
             {#if spoolEdit && spoolEdit.id === 0 && spoolEdit.materialId === m.id}
               <div class="row">
