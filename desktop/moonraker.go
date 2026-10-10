@@ -36,7 +36,8 @@ func (a *App) MoonrakerStatus(printerID int64) (string, error) {
 	return moonraker.New(p.MoonrakerURL).Ping(ctx)
 }
 
-// MoonrakerPreview забирает ВСЮ историю и считает dry-run отчёт.
+// MoonrakerPreview забирает историю и считает dry-run отчёт.
+// limit — максимум последних работ (новые первыми), <=0 — вся история.
 func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
 	rep.DryRun = true
@@ -103,16 +104,20 @@ func (a *App) fetchMoonraker(printerID int64, limit int) ([]importers.PrintJob, 
 	if p.MoonrakerURL == "" {
 		return nil, errMoonrakerUnset
 	}
-	page := int64(limit)
-	if page <= 0 || page > 500 {
-		page = 250
-	}
 	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Minute)
 	defer cancel()
-	jobs, err := moonraker.New(p.MoonrakerURL).HistoryAll(ctx, page,
-		func(fetched, _ int) {
-			a.emitProgress(fetched, 0)
-		})
+	var jobs []moonraker.Job
+	if limit > 0 {
+		jobs, err = moonraker.New(p.MoonrakerURL).HistoryRecent(ctx, int64(limit),
+			func(fetched, _ int) {
+				a.emitProgress(fetched, 0)
+			})
+	} else {
+		jobs, err = moonraker.New(p.MoonrakerURL).HistoryAll(ctx, 250,
+			func(fetched, _ int) {
+				a.emitProgress(fetched, 0)
+			})
+	}
 	if err != nil {
 		return nil, err
 	}

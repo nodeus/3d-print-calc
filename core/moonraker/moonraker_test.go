@@ -284,3 +284,37 @@ func TestNormalizeBase(t *testing.T) {
 		}
 	}
 }
+
+// TestHistoryRecent: первые N новых работ с сервера с кэпом страницы
+// (режут ниже запрошенного limit); n=0 — вся история; n больше базы — всё.
+func TestHistoryRecent(t *testing.T) {
+	srv := realServer(t, 10, 3)
+	defer srv.Close()
+	jobs, err := New(srv.URL).HistoryRecent(context.Background(), 4, nil)
+	if err != nil {
+		t.Fatalf("HistoryRecent: %v", err)
+	}
+	if len(jobs) != 4 {
+		t.Fatalf("jobs = %d, хочу 4", len(jobs))
+	}
+	for i, j := range jobs {
+		want := fmt.Sprintf("job_%03d.gcode", i)
+		if j.Filename != want {
+			t.Fatalf("jobs[%d] = %q, хочу %q", i, j.Filename, want)
+		}
+	}
+	all, err := New(srv.URL).HistoryRecent(context.Background(), 0, nil)
+	if err != nil {
+		t.Fatalf("HistoryRecent(0): %v", err)
+	}
+	if len(all) != 10 {
+		t.Fatalf("all = %d, хочу 10", len(all))
+	}
+	over, err := New(srv.URL).HistoryRecent(context.Background(), 100, nil)
+	if err != nil {
+		t.Fatalf("HistoryRecent(100): %v", err)
+	}
+	if len(over) != 10 {
+		t.Fatalf("over = %d, хочу 10", len(over))
+	}
+}
