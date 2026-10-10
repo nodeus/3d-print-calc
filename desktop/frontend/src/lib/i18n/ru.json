@@ -269,6 +269,7 @@
   "common.no": "Отмена",
   "common.delete_q": "Удалить",
   "mat.vendor": "Производитель",
+  "mat.note": "Заметка",
   "mat.color": "Цвет",
   "mat.weight": "Вес, г",
   "mat.price_spool_note": "Цена первой катушки — правится в катушках ниже",

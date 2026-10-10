@@ -349,3 +349,52 @@ func TestSpoolLeftComputed(t *testing.T) {
 		}
 	}
 }
+
+// TestAddMaterialFullFields: создание со всеми полями, без цены и катушек.
+// Цена живёт только на катушках: материал создаётся пустым.
+func TestAddMaterialFullFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{db: db, dbPath: path}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatal(err)
+	}
+	id, err := app.AddMaterial("PETG-NEW", "PETG", 1.27, 1000, "NIT", "#ff0000", "тестовая заметка")
+	if err != nil || id == 0 {
+		t.Fatalf("AddMaterial: %v %d", id, err)
+	}
+	m, err := db.Materials().GetByCode("PETG-NEW")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Vendor != "NIT" || m.ColorHex != "#ff0000" || m.Note != "тестовая заметка" {
+		t.Fatalf("поля: %+v", m)
+	}
+	if m.Density != 1.27 || m.DefaultSpoolWeightG != 1000 || m.Type != "PETG" {
+		t.Fatalf("физика: %+v", m)
+	}
+	spools, err := db.Materials().ListSpools(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spools) != 0 {
+		t.Fatalf("катушки созданы без цены: %+v", spools)
+	}
+	mats, err := app.GetMaterials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dto MaterialDTO
+	for _, x := range mats {
+		if x.Code == "PETG-NEW" {
+			dto = x
+		}
+	}
+	if dto.ID == 0 || dto.Note != "тестовая заметка" || dto.PricePerKg != 0 || dto.HasLiveSpool {
+		t.Fatalf("DTO: %+v", dto)
+	}
+}
