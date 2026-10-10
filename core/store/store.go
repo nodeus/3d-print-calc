@@ -42,8 +42,15 @@ type Jobs interface {
 	Upsert(j models.Job) (int64, error)
 	List(limit int) ([]models.Job, error)
 	DeleteJob(id int64) error                                                         // manual — удалить; edited import — откат; чистый import — блок
+	DeleteJobs(ids []int64) (BulkDeleteReport, error)                                 // bulk чекбоксами: всё выбранное физически, кроме связанных с заказами
 	UpdateManual(j models.Job, material string, spoolID int64, in JobCalcInput) error // правка + автопересчёт (manual и import)
 	RevertJob(id int64) error                                                         // откат изменённой к импорту
+}
+
+// BulkDeleteReport — итог массового удаления работ истории.
+type BulkDeleteReport struct {
+	Deleted      int      `json:"deleted"`      // физически удалено строк
+	SkippedOrder []string `json:"skippedOrder"` // имена файлов, пропущенных (есть позиции заказов)
 }
 
 // JobCalcInput — расчётный контекст правки работы.

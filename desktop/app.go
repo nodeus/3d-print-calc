@@ -470,6 +470,17 @@ func (a *App) DeleteJob(id int64) error {
 	return a.db.Jobs().DeleteJob(id)
 }
 
+// DeleteJobs массово удаляет выбранные работы истории (manager+, чекбоксы).
+// Всё выбранное — физически (включая нетронутые импорты, файлы добираются
+// реимпортом); связанные с позициями заказов пропускаются с именами в отчёте.
+func (a *App) DeleteJobs(ids []int64) (store.BulkDeleteReport, error) {
+	var rep store.BulkDeleteReport
+	if err := a.need(models.RoleManager); err != nil {
+		return rep, err
+	}
+	return a.db.Jobs().DeleteJobs(ids)
+}
+
 // JobEdit — поля правки работы истории (материал отдельно: не колонка jobs).
 // Расчётные поля (тарифы, ставки, наценки...) фронт шлёт полным набором:
 // бэкенд пересчитывает снапшот строго по ним, старый контекст не используется.
