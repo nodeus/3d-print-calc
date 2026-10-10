@@ -139,6 +139,8 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 `widths[table][col]` в секции пользователя. Сортировка `button.th` — во всех таблицах.
 Настройки интерфейса — `user_settings.json` рядом с `app.db`
 (`desktop/uisettings.go`): окно общее, остальное по логинам; нет файла — дефолты.
+Размер окна задаётся в options до `wails.Run` (SetSize после старта ненадёжен),
+позиция — в `startup`; размер живьём пишет фронт на resize (`SaveWindowSize`).
 
 Настройки амортизации/мощности/ТО — **на принтер**.
 

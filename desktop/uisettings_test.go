@@ -69,4 +69,19 @@ func TestUserSettingsFile(t *testing.T) {
 	if err != nil || w.W != 1300 || w.H != 900 || w.X != 10 || w.Y != 20 {
 		t.Fatalf("окно: %+v %v", w, err)
 	}
+	// Живое сохранение размера: меняет только W/H, позицию хранит, нули игнорит.
+	if err := app.SaveWindowSize(1400, 950); err != nil {
+		t.Fatalf("SaveWindowSize: %v", err)
+	}
+	w, _ = app.GetWindowSettings()
+	if w.W != 1400 || w.H != 950 || w.X != 10 || w.Y != 20 {
+		t.Fatalf("размер: %+v", w)
+	}
+	if err := app.SaveWindowSize(0, -5); err != nil {
+		t.Fatalf("SaveWindowSize(0,-5): %v", err)
+	}
+	w, _ = app.GetWindowSettings()
+	if w.W != 1400 || w.H != 950 {
+		t.Fatalf("нули затёрли размер: %+v", w)
+	}
 }

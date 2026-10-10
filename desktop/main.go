@@ -50,10 +50,17 @@ func main() {
 	}
 	defer app.db.Close()
 
+	// Размер окна — из файла настроек (до создания окна: SetSize после
+	// старта Wails может игнорировать). Нет/битый — дефолт 1180×800.
+	width, height := 1180, 800
+	if w, err := app.GetWindowSettings(); err == nil && w.W > 0 && w.H > 0 {
+		width, height = w.W, w.H
+	}
+
 	err := wails.Run(&options.App{
 		Title:  "3D Print Cost Calculator",
-		Width:  1180,
-		Height: 800,
+		Width:  width,
+		Height: height,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -70,9 +77,8 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.eventsOn = true
 	runtime.WindowSetTitle(ctx, fmt.Sprintf("3D Print Cost Calculator v%s (%s)", Version, BuildDate))
-	// Восстановить размер/позицию окна из файла настроек.
+	// Размер уже задан в options до Run; здесь только позиция из настроек.
 	if w, err := a.GetWindowSettings(); err == nil && w.W > 0 && w.H > 0 {
-		runtime.WindowSetSize(ctx, w.W, w.H)
 		runtime.WindowSetPosition(ctx, w.X, w.Y)
 	}
 }
