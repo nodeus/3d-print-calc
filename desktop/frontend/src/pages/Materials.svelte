@@ -59,6 +59,16 @@
     spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB', archived: false };
   }
 
+  // Подсветка изменённой строки (вспышка гаснет сама через 650мс).
+  // Ключи: 'm:<id>' — материал, 's:<id>' — катушка.
+  let flashKey: string | null = $state(null);
+  let flashTimer: number | undefined;
+  function flash(key: string) {
+    window.clearTimeout(flashTimer);
+    flashKey = key;
+    flashTimer = window.setTimeout(() => { flashKey = null; }, 650);
+  }
+
   function editSpool(s: SpoolDTO) {
     spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency, archived: s.archived };
   }
@@ -70,11 +80,12 @@
     try {
       if (se.id === 0) {
         const w = se.weight ?? defWeight;
-        await wails.addSpool({
+        const sid = await wails.addSpool({
           id: 0, materialId: se.materialId, spoolNo: 0, price: se.price ?? 0,
           currency: se.currency || 'RUB', boughtAt: se.boughtAt,
           weightInitG: w, weightLeftG: w, archived: false,
         });
+        flash('s:' + sid);
       } else {
         const cur = (spools[se.materialId] ?? []).find((s) => s.id === se.id);
         if (!cur) return;
@@ -84,6 +95,7 @@
           WeightInitG: se.weight ?? cur.weightInitG, WeightLeftG: cur.weightLeftG,
           Archived: se.archived,
         });
+        flash('s:' + se.id);
       }
       const mid = se.materialId;
       spoolEdit = null;
@@ -273,7 +285,7 @@
         error = $t('mat.bad_color');
         return;
       }
-      await wails.addMaterial(
+      const newId = await wails.addMaterial(
         newCode.trim(), newType.trim() || 'PETG', newDensity ?? 1.27, newWeight ?? 1000,
         newVendor.trim(), (newColor || '').toLowerCase(), newNote.trim(),
       );
@@ -285,6 +297,7 @@
       newNote = '';
       await load();
       notify($t('common.saved'));
+      if (newId) flash('m:' + newId);
     } catch (e) {
       error = String(e);
     }
@@ -307,9 +320,11 @@
         return;
       }
       await wails.updateMaterial(edit);
+      const savedId = editId;
       editId = 0;
       await load();
       notify($t('common.saved'));
+      if (savedId) flash('m:' + savedId);
     } catch (e) {
       error = String(e);
     }
@@ -422,7 +437,7 @@
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr>
+        <tr class:row-flash={flashKey === 'm:' + m.id}>
           {#each matOrd as k}
             {#if k === 'color'}
               <td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td>
@@ -474,7 +489,7 @@
                     <td class="no-print"><button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button> <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button></td>
                   </tr>
                 {:else}
-                  <tr>
+                  <tr class:row-flash={flashKey === 's:' + s.id}>
                     {#each spoolOrd as k}
                       <td class:n={spoolNum(k)}>{spoolText(s, spools[m.id] ?? [], k)}</td>
                     {/each}

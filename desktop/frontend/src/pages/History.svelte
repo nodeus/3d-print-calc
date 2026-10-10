@@ -471,6 +471,15 @@
     return s;
   }
 
+  // Подсветка изменённой строки (вспышка гаснет сама через 650мс).
+  let flashKey: string | null = $state(null);
+  let flashTimer: number | undefined;
+  function flash(key: string) {
+    window.clearTimeout(flashTimer);
+    flashKey = key;
+    flashTimer = window.setTimeout(() => { flashKey = null; }, 650);
+  }
+
   async function remove(j: JobDTO) {
     error = '';
     // Изменённая импортированная: удаление = откат к импорту (строка остаётся).
@@ -648,9 +657,11 @@
         fees: edit.fees ?? 0, copies: Math.max(1, Math.round(edit.copies ?? 1)),
         vatRate: (edit.vatPct ?? 0) / 100, roundStep: edit.roundStep ?? 0,
       });
+      const savedId = editId;
       editId = 0;
       await load();
       notify($t('common.saved'));
+      if (savedId) flash('j:' + savedId);
     } catch (e) {
       error = String(e);
     }
@@ -776,7 +787,7 @@
   </tr></thead>
   <tbody>
     {#each visible as j}
-      <tr>
+      <tr class:row-flash={flashKey === 'j:' + j.ID}>
         {#if canWrite($user)}<td class="no-print"><input type="checkbox" checked={selected.includes(j.ID)} onchange={() => toggleSel(j.ID)} /></td>{/if}
         {#each columns as c}
           <td class:file={c === 'filename'} class:n={isNum(c)} title={c === 'filename' ? j.Filename : undefined}>{cell(j, c)}</td>

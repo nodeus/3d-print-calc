@@ -19,6 +19,8 @@
   import { exportCurrentTab, hasPdfExporter } from './lib/pdf';
   import { wails } from './lib/wails';
   import { noticeMsg } from './lib/notice';
+  import { motionOK } from './lib/motion';
+  import { fade } from 'svelte/transition';
   import { onMount, onDestroy } from 'svelte';
 
   type Tab = 'calc' | 'history' | 'materials' | 'printers' | 'orders' | 'customers' | 'reports' | 'info' | 'settings';
@@ -94,7 +96,7 @@
 {:else}
   <header class="no-print">
     <h1>{$t('app.title')}</h1>
-    {#if $noticeMsg}<span class="notice">{$noticeMsg}</span>{/if}
+    {#if $noticeMsg}<span class="notice" transition:fade={{ duration: motionOK() ? 150 : 0 }}>{$noticeMsg}</span>{/if}
     <div class="lang">
       <span>{$user.login} ({$user.role})</span>
       <button onclick={printPage}>{$t('common.print')}</button>
@@ -108,6 +110,7 @@
   </nav>
   <main>
     {#key tab}
+      <div class="tab-fade">
       <svelte:boundary>        {#if tab === 'calc'}<Calculator />
         {:else if tab === 'history'}<History />
         {:else if tab === 'materials'}<Materials />
@@ -122,6 +125,7 @@
           <button onclick={reset}>{$t('common.retry')}</button>
         {/snippet}
       </svelte:boundary>
+      </div>
     {/key}
   </main>
   <Confirm />

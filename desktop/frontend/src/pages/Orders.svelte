@@ -418,6 +418,15 @@
     }
   }
 
+  // Подсветка изменённой строки позиции (вспышка гаснет сама через 650мс).
+  let flashKey: string | null = $state(null);
+  let flashTimer: number | undefined;
+  function flash(key: string) {
+    window.clearTimeout(flashTimer);
+    flashKey = key;
+    flashTimer = window.setTimeout(() => { flashKey = null; }, 650);
+  }
+
   async function addItem() {
     if (!detail) return;
     error = '';
@@ -426,7 +435,7 @@
       return;
     }
     try {
-      await wails.addOrderItem({
+      const iid = await wails.addOrderItem({
         orderId: detail.order.ID, jobId: 0, title: itemTitle.trim(),
         qty: itemQty ?? 1, cost: Math.round((itemCost ?? 0) * 100), price: Math.round((itemPrice ?? 0) * 100),
       });
@@ -436,6 +445,7 @@
       itemPrice = null;
       await load();
       notify($t('common.saved'));
+      if (iid) flash('i:' + iid);
     } catch (e) {
       error = String(e);
     }
@@ -449,6 +459,7 @@
       return;
     }
     try {
+      const targetItem = payItemId;
       if (editPayId) {
         await wails.updatePayment(editPayId, payItemId, Math.round((payAmount ?? 0) * 100), payNote);
         editPayId = 0;
@@ -460,6 +471,7 @@
       payItemId = 0;
       await load();
       notify($t('common.saved'));
+      if (targetItem) flash('i:' + targetItem);
     } catch (e) {
       error = String(e);
     }
@@ -663,7 +675,7 @@
           <th class="no-print"></th>
         </tr></thead>
         <tbody>
-          {#each shownItems(detail.items) as it, i}<tr>
+          {#each shownItems(detail.items) as it, i}<tr class:row-flash={flashKey === 'i:' + it.ID}>
             <td>{i + 1}</td>
             {#each itemOrd as k}<td class:n={itemNum(k)} title={itemBreakdown(it, k)}>{itemText(it, k)}</td>{/each}
             <td class="no-print">{#if canWrite($user)}<button onclick={() => fillItemPay(it)} title={$t('ord.pay_item')} aria-label={$t('ord.pay_item')}>₽</button> <button onclick={() => togglePaid(it)} title={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')} aria-label={$t(it.PaidManual ? 'ord.unmark_paid' : 'ord.mark_paid')}>{it.PaidManual ? '✔' : '○'}</button> <button onclick={() => removeItem(it.ID, it.Title)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>

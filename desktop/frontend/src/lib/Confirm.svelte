@@ -11,7 +11,7 @@
 
 {#if $confirmState}
   <div class="overlay no-print" role="dialog" aria-modal="true">
-    <div class="card">
+    <div class="card pop">
       <p>{$confirmState.title}</p>
       <div class="row">
         <button class="warn" onclick={() => answer(true)}>{$t('common.yes')}</button>
@@ -30,6 +30,7 @@
     align-items: center;
     justify-content: center;
     z-index: 100;
+    animation: ui-fade-in 120ms ease-out;
   }
   .card {
     background: white;
@@ -37,6 +38,9 @@
     padding: 20px 24px;
     max-width: 420px;
     font-size: 15px;
+  }
+  .card.pop {
+    animation: ui-pop 150ms ease-out;
   }
   .row {
     display: flex;
