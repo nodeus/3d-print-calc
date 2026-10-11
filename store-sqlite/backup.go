@@ -333,6 +333,9 @@ type spoolPlan struct {
 	price    float64
 	currency string
 	row      int
+	vendor   string
+	density  float64
+	diameter float64
 }
 
 type matPlan struct {
@@ -407,7 +410,8 @@ func (d *DB) planMaterials(list []models.Material, rows []importers.MaterialRow)
 				existingNos[base] = map[int]bool{}
 			}
 			existingNos[base][n] = true
-			p.spools = append(p.spools, spoolPlan{n: n, price: row.PricePerKg, currency: row.Currency, row: rowNo})
+			p.spools = append(p.spools, spoolPlan{n: n, price: row.PricePerKg, currency: row.Currency, row: rowNo,
+				vendor: row.Vendor, density: row.Density, diameter: row.Diameter})
 		}
 		matRows = append(matRows, ImportMatRow{MaterialRow: row, SpoolNo: n, Exists: false})
 		fresh++
@@ -445,7 +449,7 @@ func (d *DB) applyMatsPlans(list []models.Material, order []string, plans map[st
 				return err
 			}
 		}
-		mkSpool := func(n int, price float64, currency string) error {
+		mkSpool := func(n int, price float64, currency, vendor string, density, diameter float64) error {
 			if currency == "" {
 				currency = "RUB"
 			}
@@ -453,16 +457,17 @@ func (d *DB) applyMatsPlans(list []models.Material, order []string, plans map[st
 				MaterialID: mid, SpoolNo: n, Price: int64(price*100 + 0.5),
 				Currency: currency, FxRate: 1,
 				WeightInitG: 1000, WeightLeftG: 1000,
+				Vendor: vendor, Density: density, Diameter: diameter,
 			})
 			return err
 		}
 		if p.bare && p.fields.PricePerKg > 0 {
-			if err := mkSpool(0, p.fields.PricePerKg, p.fields.Currency); err != nil {
+			if err := mkSpool(0, p.fields.PricePerKg, p.fields.Currency, p.fields.Vendor, p.fields.Density, p.fields.Diameter); err != nil {
 				return fmt.Errorf("ERR_IMPORT: %w", err)
 			}
 		}
 		for _, s := range p.spools {
-			if err := mkSpool(s.n, s.price, s.currency); err != nil {
+			if err := mkSpool(s.n, s.price, s.currency, s.vendor, s.density, s.diameter); err != nil {
 				return fmt.Errorf("ERR_IMPORT: строка %d: %w", s.row, err)
 			}
 		}

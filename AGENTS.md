@@ -113,7 +113,7 @@ cost       = subtotal + fail_adj                          # итог — за с
 price      = cost*(1+margin_profit+margin_dev) + fees, затем round(step) + VAT + round(step)
            # второй проход round убирает копейки, возвращённые НДС (280×1.22=341.6→340)
 per_copy   = cost_f / copies, price_f / copies            # итоги делятся на N копий
-weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
+weight_g   = density(катушка, фолбэк материал) * PI * (diameter/2)^2 * length_mm / 1000
 ```
 
 Нулевые `purge/maint/fail/VAT/round`, `copies<=1` — нейтральны (legacy-поведение).
@@ -163,7 +163,10 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 
 `users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
 +part_purchases(printer_id, bought_at, price, qty — сумма вычисляется),
-spools(material_id, price, currency, bought_at, weight_left_g, spool_no),
+spools(material_id, price, currency, bought_at, weight_left_g, spool_no,
+vendor, color_hex, density, diameter — миграция `0016` с бэкфиллом с материала;
+материал — лишь ключ-группа для парсинга, физика партии — на катушке;
+вес работ — по плотности/диаметру привязанной катушки),
 materials.code правится с переписью снапшота (`json_replace`);
 дата закупа и архивность — только spools.bought_at/spools.archived
 (остатки, цена, селект); колонки materials.bought_at/materials.archived
