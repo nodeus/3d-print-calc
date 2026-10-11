@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import { openMaterial } from '../lib/nav';
   import { wails, type MaterialDTO, type Material, type SpoolDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
@@ -12,6 +14,7 @@
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
   import { colKeyMove } from '../lib/colkeyboard';
+  import ColorPick from '../lib/ColorPick.svelte';
 
   let materials: MaterialDTO[] = $state([]);
   let error = $state('');
@@ -19,10 +22,6 @@
   // она живёт только на катушках (добавляются отдельно после создания).
   let newCode = $state('');
   let newType = $state('PETG');
-  let newDensity: number | null = $state(null);
-  let newWeight: number | null = $state(null);
-  let newVendor = $state('');
-  let newColor = $state('#808080');
   let newNote = $state('');
   // Редактирование материала (цены здесь нет — она живёт на катушках).
   let editId = $state(0);
@@ -30,7 +29,7 @@
 
   // Катушки материала: список, раскрытие, правка.
   // Цена для расчётов — первая неархивная (порядок ListSpools); бейдж «расчётная».
-  type SpoolForm = { id: number; materialId: number; boughtAt: string; price: number | null; weight: number | null; currency: string; archived: boolean; note: string };
+  type SpoolForm = { id: number; materialId: number; boughtAt: string; price: number | null; weight: number | null; currency: string; archived: boolean; note: string; vendor: string; colorHex: string; density: number | null; diameter: number | null };
   let spools: Record<number, SpoolDTO[]> = $state({});
   let expanded = $state(0);
   let spoolEdit: SpoolForm | null = $state(null);
@@ -53,7 +52,7 @@
   }
 
   function newSpool(m: MaterialDTO) {
-    spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB', archived: false, note: '' };
+    spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB', archived: false, note: '', vendor: '', colorHex: '', density: null, diameter: null };
   }
 
   // Подсветка изменённой строки (вспышка гаснет сама через 650мс).
@@ -67,20 +66,23 @@
   }
 
   function editSpool(s: SpoolDTO) {
-    spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency, archived: s.archived, note: s.note ?? '' };
+    spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency, archived: s.archived, note: s.note ?? '', vendor: s.vendor ?? '', colorHex: s.colorHex ?? '', density: s.density || null, diameter: s.diameter || null };
   }
 
-  async function saveSpool(defWeight: number) {
+  async function saveSpool() {
     const se = spoolEdit;
     if (!se) return;
     error = '';
     try {
       if (se.id === 0) {
-        const w = se.weight ?? defWeight;
+        // Вес новой партии по умолчанию — 1000 г (у материала веса нет).
+        const w = se.weight ?? 1000;
         const sid = await wails.addSpool({
           id: 0, materialId: se.materialId, spoolNo: 0, price: se.price ?? 0,
           currency: se.currency || 'RUB', boughtAt: se.boughtAt,
           weightInitG: w, weightLeftG: w, archived: false, note: se.note.trim(),
+          vendor: se.vendor.trim(), colorHex: (se.colorHex || '').toLowerCase(),
+          density: se.density ?? 1.27, diameter: se.diameter ?? 1.75,
         });
         flash('s:' + sid);
       } else {
@@ -91,6 +93,8 @@
           Currency: se.currency || cur.currency, FxRate: 1, BoughtAt: se.boughtAt,
           WeightInitG: se.weight ?? cur.weightInitG, WeightLeftG: cur.weightLeftG,
           Archived: se.archived, Note: se.note.trim(),
+          Vendor: se.vendor.trim(), ColorHex: (se.colorHex || '').toLowerCase(),
+          Density: se.density ?? 1.27, Diameter: se.diameter ?? 1.75,
         });
         flash('s:' + se.id);
       }
@@ -117,11 +121,7 @@
   }
 
   let knownTypes = $derived([...new Set(materials.map((m) => m.type))].sort());
-  // Цвета: пресеты + фавориты (settings).
-  const presets = [
-    '#000000', '#ffffff', '#808080', '#ff0000', '#ff8000', '#ffff00',
-    '#00c000', '#00c0ff', '#0000ff', '#8000ff', '#ff40c0', '#804000',
-  ];
+  // Фавориты цвета — общие для выбора цвета катушек.
   let favs: string[] = $state([]);
   // Сортировка по клику на заголовок.
   let sortKey = $state('code');
@@ -141,9 +141,6 @@
       case 'code': return m.code.toLowerCase();
       case 'type': return (m.type || '').toLowerCase();
       case 'price': return m.avgPricePerKg;
-      case 'density': return m.density;
-      case 'weight': return m.defaultWeightG || 1000;
-      case 'vendor': return (m.vendor || '').toLowerCase();
       case 'note': return (m.note || '').toLowerCase();
       default: return m.code.toLowerCase();
     }
@@ -157,10 +154,9 @@
   }));
 
   const matCols = [
-    { key: 'code', label: 'mat.code' }, { key: 'color', label: 'mat.color' },
+    { key: 'code', label: 'mat.code' },
     { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.avg_price', num: true },
-    { key: 'density', label: 'mat.density', num: true }, { key: 'weight', label: 'mat.weight', num: true },
-    { key: 'vendor', label: 'mat.vendor' }, { key: 'note', label: 'mat.note' },
+    { key: 'note', label: 'mat.note' },
   ];
   const matKeys = matCols.map((c) => c.key);
   const matNum = (k: string) => matCols.some((c) => c.key === k && c.num);
@@ -173,6 +169,8 @@
     { key: 'price', label: 'spool.price', num: true },
     { key: 'weight', label: 'spool.weight', num: true },
     { key: 'left', label: 'spool.left', num: true },
+    { key: 'vendor', label: 'mat.vendor' }, { key: 'color', label: 'mat.color' },
+    { key: 'density', label: 'mat.density', num: true }, { key: 'diameter', label: 'imp.m_diameter', num: true },
     { key: 'status', label: 'spool.status' }, { key: 'note', label: 'mat.note' },
   ];
   const spoolKeys = spoolCols.map((c) => c.key);
@@ -191,20 +189,20 @@
       // Остаток — вычисляемый (партия минус расход по истории), не поле БД.
       case 'left': return String(Math.round(s.leftG ?? s.weightLeftG));
       case 'status': return s.archived ? $t('spool.archived') : $t('spool.active');
+      case 'vendor': return s.vendor || '—';
+      case 'density': return String(s.density || 1.27);
+      case 'diameter': return String(s.diameter || 1.75);
       case 'note': return s.note ?? '';
       default: return '';
     }
   }
 
-  // Текстовое значение ячейки (цвет — отдельно квадратиком).
+  // Текстовое значение ячейки материала (остальное — на катушках).
   function matText(m: MaterialDTO, k: string): string {
     switch (k) {
       case 'code': return m.code;
       case 'type': return m.type;
       case 'price': return money(m.avgPricePerKg, m.currency, 'ru');
-      case 'density': return String(m.density);
-      case 'weight': return String(m.defaultWeightG || 1000);
-      case 'vendor': return m.vendor;
       case 'note': return m.note;
       default: return '';
     }
@@ -243,10 +241,6 @@
     return /^#[0-9a-fA-F]{6}$/.test(s.trim());
   }
 
-  function pickColor(hex: string) {
-    if (validHex(hex)) edit.ColorHex = hex.toLowerCase();
-  }
-
   async function toggleFav(hex: string) {
     hex = hex.toLowerCase();
     const next = favs.includes(hex) ? favs.filter((c) => c !== hex) : [...favs, hex];
@@ -266,8 +260,37 @@
       error = String(e);
     }
   }
+
+  // Счётчик катушек из DTO (без раскрытия): живые + архив.
+  function spoolLive(m: MaterialDTO): number {
+    return (m.spools ?? []).filter((s) => !s.archived).length;
+  }
+  function spoolArch(m: MaterialDTO): number {
+    return (m.spools ?? []).length - spoolLive(m);
+  }
+  function spoolCountLabel(m: MaterialDTO): string {
+    const arch = spoolArch(m);
+    return arch > 0 ? `${spoolLive(m)} +${arch}` : String(spoolLive(m));
+  }
+
+  // Внешний переход (из Отчётов): раскрыть материал, подсветить катушку.
+  async function openTarget() {
+    const tgt = get(openMaterial);
+    if (!tgt) return;
+    openMaterial.set(null);
+    const m = materials.find((x) => x.code === tgt.code);
+    if (!m) return;
+    expanded = m.id;
+    await loadSpools(m.id);
+    const s = (spools[m.id] ?? []).find((x) => x.spoolNo === tgt.spoolNo);
+    flash(s ? 's:' + s.id : 'm:' + m.id);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-mid="${m.id}"]`)?.scrollIntoView({ block: 'center' });
+    });
+  }
+
   onMount(() => {
-    load();
+    load().then(() => openTarget());
     registerPdfExporter(toPDF);
     return () => registerPdfExporter(null);
   });
@@ -275,19 +298,11 @@
   async function add() {
     error = '';
     try {
-      if (newColor && !validHex(newColor)) {
-        error = $t('mat.bad_color');
-        return;
-      }
       const newId = await wails.addMaterial(
-        newCode.trim(), newType.trim() || 'PETG', newDensity ?? 1.27, newWeight ?? 1000,
-        newVendor.trim(), (newColor || '').toLowerCase(), newNote.trim(),
+        newCode.trim(), newType.trim() || 'PETG', 1.27, 1000,
+        '', '', newNote.trim(),
       );
       newCode = '';
-      newDensity = null;
-      newWeight = null;
-      newVendor = '';
-      newColor = '#808080';
       newNote = '';
       await load();
       notify($t('common.saved'));
@@ -359,15 +374,10 @@
 {#if canWrite($user)}
   <div class="row no-print">
     <input placeholder="PETG-NIT-W4" title={$t('mat.code')} bind:value={newCode} />
-    <input type="color" value={validHex(newColor) ? newColor : '#808080'} oninput={(e) => (newColor = e.currentTarget.value)} title={$t('mat.color')} />
-    <input class="hex" bind:value={newColor} placeholder="#rrggbb" title={$t('mat.color')} />
     <input list="mat-types" bind:value={newType} placeholder={$t('mat.type')} />
     <datalist id="mat-types">
       {#each knownTypes as tp}<option value={tp}></option>{/each}
     </datalist>
-    <input type="number" step="0.01" bind:value={newDensity} title={$t('mat.density')} placeholder="1.27" />
-    <input type="number" min="0" bind:value={newWeight} title={$t('mat.weight')} placeholder="1000" />
-    <input bind:value={newVendor} placeholder={$t('mat.vendor')} />
     <input bind:value={newNote} placeholder={$t('mat.note')} />
     <button onclick={add}>{$t('common.save')}</button>
   </div>
@@ -381,11 +391,7 @@
     {#each matOrd as k}
       <th class:n={matNum(k)} style={thWidth('materials', k)} data-col={k} class:dragsrc={dragKey === k}>
         {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => { if (canWrite($user)) startColDrag(e, wrapEl, k, matOrd, (dk, x) => { dragKey = dk; dropX = x; }, dropCols); }} onkeydown={(e) => colKeyMove(e, matOrd, k, dropCols)}>⋮⋮</span>{/if}
-        {#if k === 'color'}
-          {$t(matLabel(k))}
-        {:else}
-          <button class="th" onclick={() => toggleSort(k)}>{$t(matLabel(k))}{arrow(k)}</button>
-        {/if}
+        <button class="th" onclick={() => toggleSort(k)}>{$t(matLabel(k))}{arrow(k)}</button>
         <span class="rz no-print" role="separator" onmousedown={(e) => startColResize(e, 'materials', k)} ondblclick={() => resetColWidth('materials', k)}></span>
       </th>
     {/each}
@@ -398,32 +404,10 @@
           {#each matOrd as k}
             {#if k === 'code'}
               <td><input bind:value={edit.Code} placeholder="PETG-NIT-BLACK" title={$t('mat.code_rename_note')} /></td>
-            {:else if k === 'color'}
-              <td>
-                <div class="colorrow">
-                  <input type="color" value={validHex(edit.ColorHex) ? edit.ColorHex : '#000000'} oninput={(e) => (edit.ColorHex = e.currentTarget.value)} title={$t('mat.color')} />
-                  <input class="hex" bind:value={edit.ColorHex} placeholder="#rrggbb" />
-                </div>
-                <div class="colorrow">
-                  {#each favs as f}<button class="sw" style="background:{f}" title={f} onclick={() => pickColor(f)}></button>{/each}
-                  {#each presets as p}<button class="sw preset" style="background:{p}" title={p} onclick={() => pickColor(p)}></button>{/each}
-                </div>
-                {#if canWrite($user)}
-                  <div class="colorrow">
-                    <button onclick={() => edit.ColorHex && toggleFav(edit.ColorHex)}>{favs.includes(edit.ColorHex.toLowerCase()) ? '★' : '☆'} {$t('mat.fav')}</button>
-                  </div>
-                {/if}
-              </td>
             {:else if k === 'type'}
               <td><input list="mat-types-edit" bind:value={edit.Type} placeholder="PETG" /></td>
             {:else if k === 'price'}
               <td class="n" title={$t('mat.avg_note')}>{matText(m, k)}</td>
-            {:else if k === 'density'}
-              <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
-            {:else if k === 'weight'}
-              <td><input type="number" min="0" step="1" bind:value={edit.DefaultSpoolWeightG} title={$t('mat.weight')} /></td>
-            {:else if k === 'vendor'}
-              <td><input bind:value={edit.Vendor} placeholder={$t('mat.vendor')} /></td>
             {:else if k === 'note'}
               <td><input bind:value={edit.Note} placeholder={$t('mat.note')} /></td>
             {/if}
@@ -431,16 +415,12 @@
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr class:row-flash={flashKey === 'm:' + m.id}>
+        <tr data-mid={m.id} class:row-flash={flashKey === 'm:' + m.id}>
           {#each matOrd as k}
-            {#if k === 'color'}
-              <td><span class="sw" style="background:{swatch(m.colorHex)}" title={m.colorHex}></span></td>
-            {:else}
-              <td class:n={matNum(k)}>{matText(m, k)}</td>
-            {/if}
+            <td class:n={matNum(k)}>{matText(m, k)}</td>
           {/each}
           <td class="no-print">
-            <button onclick={() => toggleSpools(m)} title={$t('spool.title')}>{expanded === m.id ? '▾' : '▸'} {(spools[m.id] ?? []).length || ''}</button>
+            <button onclick={() => toggleSpools(m)} title={`${$t('spool.title')}: ${spoolLive(m)} ${$t('spool.active')} + ${spoolArch(m)} ${$t('spool.archived')}`}>{expanded === m.id ? '▾' : '▸'} {spoolCountLabel(m)}</button>
             {#if canWrite($user)}<button onclick={() => startEdit(m)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => remove(m)} aria-label={$t('common.delete_q')}>✕</button>{/if}
           </td>
         </tr>
@@ -478,16 +458,28 @@
                         <td class="n">{Math.round(s.leftG ?? s.weightLeftG)}</td>
                       {:else if k === 'status'}
                         <td><label>{$t('spool.status')}: <input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} /> {spoolEdit.archived ? $t('spool.archived') : $t('spool.active')}</label></td>
+                      {:else if k === 'vendor'}
+                        <td><input bind:value={spoolEdit.vendor} placeholder={$t('mat.vendor')} /></td>
+                      {:else if k === 'color'}
+                        <td><ColorPick bind:value={spoolEdit.colorHex} matType={m.type} favs={favs} onToggleFav={toggleFav} /></td>
+                      {:else if k === 'density'}
+                        <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.density} placeholder="1.27" /></td>
+                      {:else if k === 'diameter'}
+                        <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.diameter} placeholder="1.75" /></td>
                       {:else if k === 'note'}
                         <td><input bind:value={spoolEdit.note} placeholder={$t('mat.note')} /></td>
                       {/if}
                     {/each}
-                    <td class="no-print"><button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button> <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button></td>
+                    <td class="no-print"><button onclick={() => saveSpool()}>{$t('common.save')}</button> <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button></td>
                   </tr>
                 {:else}
                   <tr class:row-flash={flashKey === 's:' + s.id}>
                     {#each spoolOrd as k}
-                      <td class:n={spoolNum(k)}>{spoolText(s, spools[m.id] ?? [], k)}</td>
+                      {#if k === 'color'}
+                        <td><span class="sw" style="background:{swatch(s.colorHex)}" title={s.colorHex}></span></td>
+                      {:else}
+                        <td class:n={spoolNum(k)}>{spoolText(s, spools[m.id] ?? [], k)}</td>
+                      {/if}
                     {/each}
                     <td class="no-print">{#if canWrite($user)}<button onclick={() => editSpool(s)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => removeSpool(s)} aria-label={$t('common.delete_q')}>✕</button>{/if}</td>
                   </tr>
@@ -502,8 +494,12 @@
                 <input type="date" bind:value={spoolEdit.boughtAt} title={$t('spool.date')} />
                 <input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder={$t('spool.price')} title={$t('spool.price')} />
                 <input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" title={$t('spool.weight')} />
+                <input bind:value={spoolEdit.vendor} placeholder={$t('mat.vendor')} title={$t('mat.vendor')} />
+                <ColorPick bind:value={spoolEdit.colorHex} matType={m.type} favs={favs} onToggleFav={toggleFav} />
+                <input type="number" min="0" step="0.01" bind:value={spoolEdit.density} placeholder="1.27" title={$t('mat.density')} />
+                <input type="number" min="0" step="0.01" bind:value={spoolEdit.diameter} placeholder="1.75" title={$t('imp.m_diameter')} />
                 <input bind:value={spoolEdit.note} placeholder={$t('mat.note')} title={$t('mat.note')} />
-                <button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button>
+                <button onclick={() => saveSpool()}>{$t('common.save')}</button>
                 <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button>
               </div>
             {:else if !spoolEdit}
@@ -526,9 +522,5 @@
   table { font-size: 14px; }
   .err { color: var(--err); }
   .sw { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--sw-border); border-radius: 3px; padding: 0; vertical-align: middle; print-color-adjust: exact; }
-  button.sw { cursor: pointer; margin: 1px; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 14px; }
-  .colorrow { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
-  input[type='color'] { width: 40px; height: 30px; padding: 2px; }
-  input.hex { width: 90px; font-family: monospace; }
 </style>

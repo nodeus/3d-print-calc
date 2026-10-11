@@ -1057,7 +1057,7 @@
 {#if dropX != null}<div class="drop-line no-print" style="left:{dropX}px;"></div>{/if}
 <table class="tw" class:dragging={dragCol != null}>
   <thead><tr>
-    {#if canWrite($user)}<th class="no-print"><input type="checkbox" bind:this={headBox} checked={pageAll} onchange={togglePage} title={$t('hist.select_page')} /></th>{/if}
+    {#if canWrite($user)}<th class="no-print selcol"><input type="checkbox" bind:this={headBox} checked={pageAll} onchange={togglePage} title={$t('hist.select_page')} /></th>{/if}
     {#each columns as c}
       <th class:n={isNum(c)} style={thWidth('history', c)} data-col={c} class:dragsrc={dragCol === c}>
         {#if canWrite($user)}<span class="grip no-print" role="button" tabindex={0} title={$t('hist.drag_cols')} onpointerdown={(e) => gripDown(e, c)} onkeydown={(e) => colKeyMove(e, columns, c, persistColumns)}>⋮⋮</span>{/if}
@@ -1072,7 +1072,7 @@
   <tbody>
     {#each visible as j}
       <tr class:row-flash={flashKey === 'j:' + j.ID}>
-        {#if canWrite($user)}<td class="no-print"><input type="checkbox" checked={selected.includes(j.ID)} onchange={() => toggleSel(j.ID)} /></td>{/if}
+        {#if canWrite($user)}<td class="no-print selcol"><input type="checkbox" checked={selected.includes(j.ID)} onchange={() => toggleSel(j.ID)} /></td>{/if}
         {#each columns as c}
           <td class:file={c === 'filename'} class:n={isNum(c)} title={c === 'filename' ? j.Filename : undefined}>{cell(j, c)}</td>
         {/each}

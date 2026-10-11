@@ -5,6 +5,7 @@
 *.dylib
 build/
 bin/
+backup/
 desktop/build/
 # Исключение: исходник и иконка приложения — в git идут (собираются в exe);
 # остальное содержимое desktop/build/ (bin/ и прочее) — нет.

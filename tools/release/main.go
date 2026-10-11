@@ -2,7 +2,8 @@
 //
 // Раскладка артефактов:
 //
-//	release/<version>/<YYYY-MM-DD>/<os>-<arch>/3dprint-calc(.exe) + build-info.txt + SHA256SUMS
+//	release/<version>/<YYYY-MM-DD>/<os>/<arch>/3dprint-calc(.exe) + build-info.txt + SHA256SUMS
+//	+ HELP.md + CHANGELOG.md
 //
 // Версия — из desktop/version.go (const Version), дата — сегодня или -date.
 // Сборка — через wails (обязан быть на PATH), ldflags прошивает BuildDate.
@@ -137,6 +138,12 @@ func buildOne(platform, version, date, root string, upx bool) error {
 	if err := os.WriteFile(filepath.Join(dir, "SHA256SUMS"), []byte(strings.Join(sums, "\n")+"\n"), 0644); err != nil {
 		return err
 	}
+	// Доки рядом с бинарником: руководство и список изменений.
+	for _, doc := range [][2]string{{"docs/HELP.md", "HELP.md"}, {"CHANGELOG.md", "CHANGELOG.md"}} {
+		if err := copyFile(doc[0], filepath.Join(dir, doc[1])); err != nil {
+			return fmt.Errorf("доки %s: %w", doc[0], err)
+		}
+	}
 	return nil
 }
 
@@ -157,7 +164,7 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// packUPX сжимает exe через utils/upx.exe (лежит в корне репо, в git не идёт).
+// packUPX сжимает exe через utils/upx.exe (лежит локально, в git не идёт).
 // UPX может давать ложные срабатывания антивирусов и чуть более медленный
 // холодный старт — см. docs/release.md.
 func packUPX(path string) error {

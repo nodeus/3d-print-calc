@@ -8,7 +8,7 @@ go run ./tools/release -platforms windows/amd64
 go run ./tools/release -platforms windows/amd64,linux/amd64 -version 1.0.0 -date 2026-10-08 -upx=false
 ```
 
-Windows-exe пакуются UPX (`utils/upx.exe` в корне репо, в git не идёт):
+Windows-exe пакуются UPX (`utils/upx.exe`, в git не идёт):
 обычно −40…−60% размера. Минусы UPX, о которых надо знать:
 
 - некоторые антивирусы ругаются на UPX-упакованные файлы (ложные срабатывания);
@@ -18,10 +18,12 @@ Windows-exe пакуются UPX (`utils/upx.exe` в корне репо, в git
 Раскладка артефактов (в git не коммитится):
 
 ```
-release/<version>/<ГГГГ-ММ-ДД>/<os>-<arch>/
+release/<version>/<ГГГГ-ММ-ДД>/<os>/<arch>/
   3dprint-calc(.exe)
   build-info.txt   # версия, дата, платформа, git-коммит
   SHA256SUMS
+  HELP.md          # руководство пользователя
+  CHANGELOG.md     # список изменений
 ```
 
 Вручную (без инструмента) — то же самое напрямую:

@@ -1,7 +1,7 @@
 # AGENTS.md — Калькулятор стоимости 3D-печати
 
 > Источник истины для AI-агентов и разработчиков. Читать перед любыми изменениями.
-> Текущий релиз: **v1.4.18** на `main`. Фиксы — инкрементом `1.4.x`, мажорный релиз — только по команде заказчика.
+> Текущий релиз: **v2.0.0** на `main`. Фиксы — инкрементом `2.0.x`, мажорный релиз — только по команде заказчика.
 
 ## 1. Продукт и решения (зафиксировано с заказчиком)
 
@@ -71,7 +71,7 @@
 ```
 core/                       # чистый Go, ноль UI/ОС-зависимостей
   calc/                     # движок расчёта (единственное место формул)
-  models/                   # User, Customer, Maker, Material, Spool, Printer, Job, Order(+Item), Payment, FxRate
+  models/                   # User, Customer, Material, Spool, Printer, Job, Order(+Item), Payment (Maker — мёртвая структура без кода; FxRate — в store-sqlite/fx.go)
   store/                    # Repository-ИНТЕРФЕЙСЫ (без SQL)
   importers/                # csv_history (толерантен к пустым/"null"), filename_parser, gcode_meta
   export/                   # backup.zip, csv, pdf.go (gofpdf + DejaVu) + fonts/
@@ -113,7 +113,7 @@ cost       = subtotal + fail_adj                          # итог — за с
 price      = cost*(1+margin_profit+margin_dev) + fees, затем round(step) + VAT + round(step)
            # второй проход round убирает копейки, возвращённые НДС (280×1.22=341.6→340)
 per_copy   = cost_f / copies, price_f / copies            # итоги делятся на N копий
-weight_g   = density(material) * PI * (diameter/2)^2 * length_mm / 1000
+weight_g   = density(катушка, фолбэк материал) * PI * (diameter/2)^2 * length_mm / 1000
 ```
 
 Нулевые `purge/maint/fail/VAT/round`, `copies<=1` — нейтральны (legacy-поведение).
@@ -144,14 +144,17 @@ amortPerHour,opRate,prepH,postH,...,spoolNo}, cost, price, currency}` (v1 чит
 Время работ (подготовка/пост/модель) — ввод парами ч+мин (`lib/hm.ts`),
 внутри/снапшотах — десятичные часы. Копий нет: всегда `Copies: 1`
 (движок деление хранит для старых данных).
-Колонки истории — 33 ключа (`HistoryColumns` в `desktop/app.go`: 13 базовых +
-20 расчётных из снапшота); настройка — карточка с аккордеонами в Настройках
-(таб «Основное»), ярлык «Колонки: N/33» вверху Истории. Порядок колонок —
+Колонки истории — 34 ключа (`HistoryColumns` в `desktop/app.go`: 13 базовых +
+21 расчётная из снапшота); настройка — карточка с аккордеонами в Настройках
+(таб «Основное»), ярлык «Колонки: N/34» вверху Истории. Порядок колонок —
 drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, порядок —
 `orderFor`/`colOrder` в секции пользователя; у Истории порядок живёт
 в массиве видимых колонок).
 Ширины колонок — drag за край `th` (`span.rz`, `table.tw`), хранятся
 `widths[table][col]` в секции пользователя. Сортировка `button.th` — во всех таблицах.
+Межвкладочная навигация — `lib/nav.ts` (`goTab` + payload-сторы по образцу
+`openOrderId`: `openMaterial{code,spoolNo}` → Materials раскрывает и подсвечивает).
+Счётчик катушек у материала — всегда из DTO (`m.spools`: живые + архив).
 Настройки интерфейса — `user_settings.json` рядом с `app.db`
 (`desktop/uisettings.go`): окно общее, остальное по логинам; нет файла — дефолты.
 Размер окна задаётся в options до `wails.Run` (SetSize после старта ненадёжен),
@@ -161,9 +164,14 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 
 ### БД SQLite (WAL, один `app.db`)
 
-`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
+`users, customers, makers(мёртвая таблица: есть в схеме/моделях, кода нет),
+materials(code UNIQUE),
 +part_purchases(printer_id, bought_at, price, qty — сумма вычисляется),
-spools(material_id, price, currency, bought_at, weight_left_g, spool_no),
+spools(material_id, price, currency, fx_rate, bought_at, weight_init_g,
+weight_left_g, archived, spool_no, note, vendor, color_hex, density, diameter
+— vendor/color/density/diameter — миграция `0016` с бэкфиллом с материала;
+материал — лишь ключ-группа для парсинга, физика партии — на катушке;
+вес работ — по плотности/диаметру привязанной катушки),
 materials.code правится с переписью снапшота (`json_replace`);
 дата закупа и архивность — только spools.bought_at/spools.archived
 (остатки, цена, селект); колонки materials.bought_at/materials.archived
@@ -171,7 +179,6 @@ materials.code правится с переписью снапшота (`json_re
 Остаток катушки — вычисляемый (`SpoolUsedG`: партия минус Σ веса работ,
 атрибуция как в `SpoolStats`); хранимое `spools.weight_left_g` в показе
 не участвует (автосписания нет), printers(...,
-calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),
 orders(+number, +title), order_items, payments, fx_rates, settings`. Импорт идемпотентен
@@ -189,7 +196,7 @@ orders(+number, +title), order_items, payments, fx_rates, settings`. Импор�
   только через PR/merge из `feature/*`, `release/*`, `hotfix/*`.
 - `feature/<name>` от `develop` → PR в `develop`. `release/<version>` от `develop` →
   PR в `main` + back-merge в `develop`. `hotfix/<name>` от `main` → в `main` + `develop`.
-- Тег релиза: `vX.Y.Z` на `main`. Версионирование: фиксы — `1.0.x` от текущей,
+- Тег релиза: `vX.Y.Z` на `main`. Версионирование: фиксы — `2.0.x` от текущей,
   **мажорный релиз — только по команде заказчика**.
 - Коммиты: Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`), RU или EN,
   императив. Один коммит — одна логическая единица.

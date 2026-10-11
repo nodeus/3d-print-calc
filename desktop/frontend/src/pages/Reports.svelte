@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { wails, type MonthRevenue, type MaterialStat, type PrinterStat, type Debt, type SpoolStat, type PartDTO, type SpoolPurchase, type FxRate } from '../lib/wails';
   import { t, locale } from '../lib/i18n';
-  import { gotoOrder } from '../lib/nav';
+  import { gotoOrder, gotoMaterial } from '../lib/nav';
   import { downloadPDF, registerPdfExporter } from '../lib/pdf';
   import { money, num, hms } from '../lib/format';
   import { thWidth, startColResize, resetColWidth } from '../lib/colwidths';
@@ -494,7 +494,7 @@
           </th>
         {/each}
       </tr></thead>
-      <tbody>{#each topsSorted as m}<tr>{#each topOrd as k}<td class:n={repIsNum('repTopmats', k)}>{topText(m, k)}</td>{/each}</tr>{/each}</tbody>
+      <tbody>{#each topsSorted as m}<tr>{#each topOrd as k}<td class:n={repIsNum('repTopmats', k)}>{#if k === 'code'}<button class="link" onclick={() => gotoMaterial(m.code, 0)}>{topText(m, k)}</button>{:else}{topText(m, k)}{/if}</td>{/each}</tr>{/each}</tbody>
       <tfoot><tr>
         {#each topOrd as k}<td class:n={repIsNum('repTopmats', k)}><b>{k === 'code' ? $t('hist.total') : k === 'jobs' ? String(topJobsSum) : k === 'weight' ? num(topWeightSum) : ''}</b></td>{/each}
       </tr></tfoot>
@@ -542,7 +542,7 @@
           </th>
         {/each}
       </tr></thead>
-      <tbody>{#each spoolsSorted as s}<tr>{#each spoolOrd as k}{#if k === 'color'}<td><span class="sw" style="background:{s.colorHex || 'transparent'}" title={s.colorHex}></span></td>{:else}<td class:n={repIsNum('repSpools', k)}>{spoolText(s, k)}</td>{/if}{/each}</tr>{/each}</tbody>
+      <tbody>{#each spoolsSorted as s}<tr>{#each spoolOrd as k}{#if k === 'color'}<td><span class="sw" style="background:{s.colorHex || 'transparent'}" title={s.colorHex}></span></td>{:else}<td class:n={repIsNum('repSpools', k)}>{#if k === 'code'}<button class="link" onclick={() => gotoMaterial(s.code, s.spoolNo)}>{spoolText(s, k)}</button>{:else}{spoolText(s, k)}{/if}</td>{/if}{/each}</tr>{/each}</tbody>
       <tfoot><tr>
         {#each spoolOrd as k}<td class:n={repIsNum('repSpools', k)}><b>{k === 'code' ? $t('hist.total') : k === 'jobs' ? String(spoolJobsSum) : k === 'used' ? num(spoolUsedSum) : k === 'left' ? num(spoolLeftSum) : ''}</b></td>{/each}
       </tr></tfoot>
@@ -590,6 +590,7 @@
   table { font-size: 13px; }
   th.n, td.n { text-align: right; font-variant-numeric: tabular-nums; }
   tr.link { cursor: pointer; }
+  button.link { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
   .row { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .row button.on { outline: 2px solid var(--accent); font-weight: bold; }
   button.th { border: none; background: none; font-weight: bold; padding: 0; cursor: pointer; font-size: 13px; }

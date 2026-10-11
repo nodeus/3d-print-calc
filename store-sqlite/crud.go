@@ -95,14 +95,17 @@ func (r *materialsRepo) Delete(id int64) error {
 	return nil
 }
 
-// UpdateSpool правит цену/валюту/остаток партии.
+// UpdateSpool правит партию: цена/валюта/остаток + свойства партии
+// (вендор/цвет/плотность/диаметр). material_id/spool_no неизменны.
 func (r *materialsRepo) UpdateSpool(s models.Spool) error {
 	if s.ID == 0 {
 		return fmt.Errorf("ERR_SPOOL_SAVE: пустой id")
 	}
 	if _, err := r.db.Exec(`UPDATE spools SET price=?, currency=?, fx_rate=?,
-		bought_at=?, weight_init_g=?, weight_left_g=?, archived=?, note=? WHERE id=?`,
-		s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.Note, s.ID); err != nil {
+		bought_at=?, weight_init_g=?, weight_left_g=?, archived=?, note=?,
+		vendor=?, color_hex=?, density=?, diameter=? WHERE id=?`,
+		s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.Note,
+		s.Vendor, s.ColorHex, s.Density, s.Diameter, s.ID); err != nil {
 		return fmt.Errorf("ERR_SPOOL_SAVE: %w", err)
 	}
 	return nil
