@@ -62,6 +62,8 @@ type Material struct {
 }
 
 // Spool — закупочная партия (катушка) с ценой и остатком.
+// Физические свойства партии (вендор/цвет/плотность/диаметр) живут здесь:
+// у разных закупок одного кода они различаются. Материал — лишь ключ-группа.
 type Spool struct {
 	ID          int64
 	MaterialID  int64
@@ -72,8 +74,12 @@ type Spool struct {
 	WeightInitG float64
 	WeightLeftG float64
 	Archived    bool
-	SpoolNo     int    // порядковый номер внутри материала (1, 2, 3...)
-	Note        string // заметка закупки, '' = нет
+	SpoolNo     int     // порядковый номер внутри материала (1, 2, 3...)
+	Note        string  // заметка закупки, '' = нет
+	Vendor      string  // производитель партии
+	ColorHex    string  // цвет партии (#RRGGBB)
+	Density     float64 // г/см³, напр. 1.27
+	Diameter    float64 // мм прутка, напр. 1.75
 }
 
 // Printer — принтер со своим расчётом амортизации.

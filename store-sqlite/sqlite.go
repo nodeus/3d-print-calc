@@ -214,8 +214,10 @@ func (r *materialsRepo) AddSpool(s models.Spool) (int64, error) {
 		}
 	}
 	res, err := r.db.Exec(`INSERT INTO spools (material_id, price, currency, fx_rate, bought_at,
-		weight_init_g, weight_left_g, archived, spool_no, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.MaterialID, s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.SpoolNo, s.Note)
+		weight_init_g, weight_left_g, archived, spool_no, note,
+		vendor, color_hex, density, diameter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.MaterialID, s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.SpoolNo, s.Note,
+		s.Vendor, s.ColorHex, s.Density, s.Diameter)
 	if err != nil {
 		return 0, fmt.Errorf("ERR_SPOOL_ADD: %w", err)
 	}
@@ -226,7 +228,8 @@ func (r *materialsRepo) AddSpool(s models.Spool) (int64, error) {
 // ListSpools возвращает партии материала (неархивные первыми).
 func (r *materialsRepo) ListSpools(materialID int64) ([]models.Spool, error) {
 	rows, err := r.db.Query(`SELECT id, material_id, price, currency, fx_rate, bought_at,
-		weight_init_g, weight_left_g, archived, COALESCE(spool_no, 0), COALESCE(note, '') FROM spools
+		weight_init_g, weight_left_g, archived, COALESCE(spool_no, 0), COALESCE(note, ''),
+		COALESCE(vendor, ''), COALESCE(color_hex, ''), COALESCE(density, 1.27), COALESCE(diameter, 1.75) FROM spools
 		WHERE material_id=? ORDER BY archived, id`, materialID)
 	if err != nil {
 		return nil, fmt.Errorf("ERR_SPOOL_LIST: %w", err)
@@ -237,7 +240,8 @@ func (r *materialsRepo) ListSpools(materialID int64) ([]models.Spool, error) {
 		var s models.Spool
 		var archived int
 		if err := rows.Scan(&s.ID, &s.MaterialID, &s.Price, &s.Currency, &s.FxRate,
-			&s.BoughtAt, &s.WeightInitG, &s.WeightLeftG, &archived, &s.SpoolNo, &s.Note); err != nil {
+			&s.BoughtAt, &s.WeightInitG, &s.WeightLeftG, &archived, &s.SpoolNo, &s.Note,
+			&s.Vendor, &s.ColorHex, &s.Density, &s.Diameter); err != nil {
 			return nil, fmt.Errorf("ERR_SPOOL_LIST: %w", err)
 		}
 		s.Archived = archived != 0

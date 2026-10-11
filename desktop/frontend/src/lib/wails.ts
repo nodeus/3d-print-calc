@@ -74,6 +74,10 @@ export interface Spool {
   WeightLeftG: number;
   Archived: boolean;
   Note: string;
+  Vendor: string;
+  ColorHex: string;
+  Density: number;
+  Diameter: number;
 }
 
 export interface SpoolDTO {
@@ -88,6 +92,10 @@ export interface SpoolDTO {
   leftG?: number;
   archived: boolean;
   note: string;
+  vendor: string;
+  colorHex: string;
+  density: number;
+  diameter: number;
 }
 
 export interface Material {

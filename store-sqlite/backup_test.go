@@ -479,6 +479,64 @@ func TestImportMaterialsPreviewRows(t *testing.T) {
 	}
 }
 
+// TestSpoolAttrsRoundtrip: свойства партии пишутся и читаются.
+func TestSpoolAttrsRoundtrip(t *testing.T) {
+	db := openTestDB(t)
+	mid, err := db.Materials().UpsertByCode(models.Material{Code: "PETG-A", Type: "PETG", Density: 1.27})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid, err := db.Materials().AddSpool(models.Spool{MaterialID: mid, Price: 10000,
+		Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000,
+		Vendor: "НИТ", ColorHex: "#FF0000", Density: 1.24, Diameter: 2.85})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spools, err := db.Materials().ListSpools(mid)
+	if err != nil || len(spools) != 1 {
+		t.Fatalf("spools: %+v %v", spools, err)
+	}
+	s := spools[0]
+	if s.Vendor != "НИТ" || s.ColorHex != "#FF0000" || s.Density != 1.24 || s.Diameter != 2.85 {
+		t.Fatalf("attrs: %+v", s)
+	}
+	s.Vendor, s.ColorHex, s.Density, s.Diameter = "V2", "#00FF00", 1.27, 1.75
+	if err := db.Materials().UpdateSpool(s); err != nil {
+		t.Fatal(err)
+	}
+	spools, _ = db.Materials().ListSpools(mid)
+	g := spools[0]
+	if g.Vendor != "V2" || g.ColorHex != "#00FF00" || g.Density != 1.27 || g.Diameter != 1.75 || g.ID != sid {
+		t.Fatalf("после правки: %+v", g)
+	}
+}
+
+// TestImportMatsSpoolAttrs: атрибуты строки CSV пишутся на катушку.
+func TestImportMatsSpoolAttrs(t *testing.T) {
+	db := openTestDB(t)
+	raw := "code;type;vendor;price_per_kg;currency;density;diameter\n" +
+		"PETG-V-3;PETG;Вендор;700;RUB;1,24;2,85\n"
+	parsed, err := importers.ParseMaterials(strings.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ImportMatsSelected(parsed, nil); err != nil {
+		t.Fatalf("selected: %v", err)
+	}
+	m, err := db.Materials().GetByCode("PETG-V")
+	if err != nil {
+		t.Fatalf("материал: %v", err)
+	}
+	spools, _ := db.Materials().ListSpools(m.ID)
+	if len(spools) != 1 {
+		t.Fatalf("катушки: %+v", spools)
+	}
+	s := spools[0]
+	if s.SpoolNo != 3 || s.Vendor != "Вендор" || s.Density != 1.24 || s.Diameter != 2.85 {
+		t.Fatalf("атрибуты катушки: %+v", s)
+	}
+}
+
 // TestTakeLastJobs: срез по времени старта, стабильный; N<=0 и N>=len — как есть.
 func TestTakeLastJobs(t *testing.T) {
 	mk := func(fn string, day int) importers.PrintJob {

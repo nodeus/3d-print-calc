@@ -132,12 +132,16 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 	spoolIDs := map[string]int64{}
 	spoolNoByCode := map[string]int{}
 	priceByCode := map[string]float64{}
+	densityByCode := map[string]float64{}
+	diameterByCode := map[string]float64{}
 	for _, m := range list {
 		matIDs[m.Code] = m
 		if spools, err := mats.ListSpools(m.ID); err == nil && len(spools) > 0 {
 			spoolIDs[m.Code] = spools[0].ID
 			spoolNoByCode[m.Code] = spools[0].SpoolNo
 			priceByCode[m.Code] = float64(spools[0].Price) / 100
+			densityByCode[m.Code] = spools[0].Density
+			diameterByCode[m.Code] = spools[0].Diameter
 		}
 	}
 	amortHour := calc.AmortCalendarHour(47454, 1096, 8) // СПИ 3 года календарных
@@ -167,11 +171,22 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 			st.Stubs++
 			ok = true
 		}
-		pricePerKg, density := 0.0, 1.27
+		pricePerKg, density, diameter := 0.0, 1.27, 1.75
 		var spoolID int64
 		spoolNo := 0
 		if ok {
-			pricePerKg, density = priceByCode[code], m.Density
+			pricePerKg = priceByCode[code]
+			// Вес — по физике привязанной катушки (фолбэк — материал, затем 1.27/1.75).
+			density, diameter = densityByCode[code], diameterByCode[code]
+			if density <= 0 {
+				density = m.Density
+			}
+			if density <= 0 {
+				density = 1.27
+			}
+			if diameter <= 0 {
+				diameter = 1.75
+			}
 			spoolID = spoolIDs[code]
 			spoolNo = spoolNoByCode[code]
 			// Номер катушки из имени файла: линкуем именно её.
@@ -185,6 +200,16 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 						if s.SpoolNo == spoolN {
 							spoolID = s.ID
 							pricePerKg = float64(s.Price) / 100
+							density, diameter = s.Density, s.Diameter
+							if density <= 0 {
+								density = m.Density
+							}
+							if density <= 0 {
+								density = 1.27
+							}
+							if diameter <= 0 {
+								diameter = 1.75
+							}
 							found = true
 							break
 						}
@@ -209,7 +234,7 @@ func ImportRows(db DB, printerID int64, rows []importers.PrintJob, origin string
 			}
 			st.Linked++
 		}
-		weightG := calc.WeightFromLength(density, 1.75, r.FilamentUsed)
+		weightG := calc.WeightFromLength(density, diameter, r.FilamentUsed)
 		res := calc.Calculate(calc.Input{
 			TotalSec: float64(r.TotalDuration), WeightG: weightG,
 			PricePerKg: pricePerKg, Tariff: DefaultTariff, PowerKW: DefaultPower,

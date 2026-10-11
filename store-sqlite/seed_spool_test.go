@@ -5,10 +5,59 @@ import (
 	"testing"
 	"time"
 
+	"3dprint-calc/core/calc"
 	"3dprint-calc/core/importers"
 	"3dprint-calc/core/models"
 	"3dprint-calc/store-sqlite/seed"
 )
+
+// TestImportSpoolDensity: вес работы считается по физике привязанной
+// катушки (её плотность/диаметр), а не материала.
+func TestImportSpoolDensity(t *testing.T) {
+	db := openTestDB(t)
+	pid, err := db.Printers().Save(models.Printer{Name: "K1C", HoursPerDay: 8, LifeYears: 3,
+		CalendarMode: "calendar", AmortMethod: "calendar"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mid, _ := db.Materials().UpsertByCode(models.Material{Code: "PETG-D", Type: "PETG", Density: 1.27})
+	if _, err := db.Materials().AddSpool(models.Spool{MaterialID: mid, Price: 100000,
+		Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000,
+		Density: 1.30, Diameter: 1.75}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Materials().AddSpool(models.Spool{MaterialID: mid, Price: 200000,
+		Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000,
+		Density: 1.24, Diameter: 2.85}); err != nil {
+		t.Fatal(err)
+	}
+	mk := func(fn string) importers.PrintJob {
+		return importers.PrintJob{Filename: fn, Status: "completed",
+			StartTime:     time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC),
+			EndTime:       time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
+			TotalDuration: 7200, FilamentUsed: 10000}
+	}
+	rows := []importers.PrintJob{
+		mk("a_PETG-D_1h.gcode"),   // без номера → первая катушка (1.30/1.75)
+		mk("b_PETG-D-2_1h.gcode"), // №2 → вторая катушка (1.24/2.85)
+	}
+	if _, err := seed.ImportRows(db, pid, rows, "import", nil); err != nil {
+		t.Fatalf("ImportRows: %v", err)
+	}
+	jobs, _ := db.Jobs().List(0)
+	byFile := map[string]models.Job{}
+	for _, j := range jobs {
+		byFile[j.Filename] = j
+	}
+	want1 := calc.WeightFromLength(1.30, 1.75, 10000)
+	if got := byFile["a_PETG-D_1h.gcode"].WeightG; got != want1 {
+		t.Fatalf("вес по первой катушке: %v, хочу %v", got, want1)
+	}
+	want2 := calc.WeightFromLength(1.24, 2.85, 10000)
+	if got := byFile["b_PETG-D-2_1h.gcode"].WeightG; got != want2 {
+		t.Fatalf("вес по второй катушке: %v, хочу %v", got, want2)
+	}
+}
 
 // TestImportSpoolNumber: файл PETG-NIT-BLACK-2 линкуется ко второй катушке
 // материала PETG-NIT-BLACK с её ценой; несуществующий номер — откат к первой;

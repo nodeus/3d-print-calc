@@ -176,6 +176,10 @@ type SpoolDTO struct {
 	LeftG       float64 `json:"leftG"`
 	Archived    bool    `json:"archived"`
 	Note        string  `json:"note"`
+	Vendor      string  `json:"vendor"`
+	ColorHex    string  `json:"colorHex"`
+	Density     float64 `json:"density"`
+	Diameter    float64 `json:"diameter"`
 }
 
 func toSpoolDTO(s models.Spool) SpoolDTO {
@@ -183,7 +187,8 @@ func toSpoolDTO(s models.Spool) SpoolDTO {
 		ID: s.ID, MaterialID: s.MaterialID, SpoolNo: s.SpoolNo, Price: float64(s.Price) / 100,
 		Currency: s.Currency, BoughtAt: s.BoughtAt,
 		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightLeftG, Archived: s.Archived,
-		Note: s.Note,
+		Note: s.Note, Vendor: s.Vendor, ColorHex: s.ColorHex,
+		Density: s.Density, Diameter: s.Diameter,
 	}
 }
 
