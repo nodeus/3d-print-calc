@@ -140,6 +140,7 @@
   "printer.name": "Name",
   "printer.model": "Model",
   "printer.price": "Price",
+  "printer.price_ph": "Printer cost",
   "printer.amort": "Depreciation, {C}/h",
   "printer.method": "Method",
   "set.language": "Language",

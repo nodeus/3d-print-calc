@@ -140,6 +140,7 @@
   "printer.name": "Имя",
   "printer.model": "Модель",
   "printer.price": "Цена",
+  "printer.price_ph": "Стоимость принтера",
   "printer.amort": "Амортизация, {C}/ч",
   "printer.method": "Метод",
   "set.language": "Язык",

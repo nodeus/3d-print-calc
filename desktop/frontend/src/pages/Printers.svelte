@@ -367,7 +367,7 @@
     <div class="row">
       <label>{$t('printer.name')}<input bind:value={form.Name} /></label>
       <label>{$t('printer.model')}<input bind:value={form.Model} /></label>
-      <label>{$t('printer.price')}<input placeholder="47454" type="number" min="0" bind:value={form.PurchasePrice} /></label>
+      <label>{$t('printer.price')}<input placeholder={$t('printer.price_ph')} type="number" min="0" bind:value={form.PurchasePrice} /></label>
     </div>
     <div class="row">
       <label>{$t('printer.date')}<input type="date" bind:value={form.CommissioningDate} /></label>
@@ -423,7 +423,7 @@
     <b>{p.Name}</b>
     {#if canWrite($user)}
       <div class="row">
-        <input placeholder="http://192.168.1.50:7125" bind:value={urls[p.ID]} />
+        <input placeholder="http://IP:PORT" bind:value={urls[p.ID]} />
         <button onclick={() => saveURL(p)}>{$t('common.save')}</button>
         <button onclick={() => ping(p)}>{$t('moon.check')}</button>
         <button onclick={() => preview(p)}>{$t('moon.import')}</button>
