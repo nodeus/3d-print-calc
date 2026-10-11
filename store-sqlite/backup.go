@@ -446,7 +446,7 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool, limitRows int, onProgress s
 	if err != nil {
 		return rep, err
 	}
-	rows = takeLastJobs(rows, limitRows)
+	rows = TakeLastJobs(rows, limitRows)
 	rep.Total = len(rows)
 	classified, fresh, exist, err := d.ClassifyRows(rows)
 	if err != nil {
@@ -457,6 +457,27 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool, limitRows int, onProgress s
 		rep.Rows = classified
 		return rep, nil
 	}
+	applied, err := d.ImportSelected(rows, onProgress)
+	if err != nil {
+		return rep, err
+	}
+	applied.DryRun = false
+	return applied, nil
+}
+
+// ImportSelected записывает выбранные строки истории (подмножество preview).
+// Пустой список — ERR_NO_SELECTION. Принтер для записи обязан существовать.
+func (d *DB) ImportSelected(rows []importers.PrintJob, onProgress seed.ProgressFunc) (ImportReport, error) {
+	rep := ImportReport{Rows: []ImportRow{}}
+	if len(rows) == 0 {
+		return rep, fmt.Errorf("ERR_NO_SELECTION: не выбрана ни одна строка")
+	}
+	rep.Total = len(rows)
+	fresh, exist, err := d.ClassifyJobs(rows)
+	if err != nil {
+		return rep, err
+	}
+	rep.New, rep.Existing = fresh, exist
 	if rep.New == 0 {
 		return rep, nil
 	}
@@ -476,10 +497,12 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool, limitRows int, onProgress s
 	return rep, nil
 }
 
-// takeLastJobs оставляет N последних работ по времени старта (новые первыми).
+// TakeLastJobs оставляет N последних работ по времени старта (новые первыми).
 // N <= 0 или больше длины — без изменений (тот же слайс). Сортировка
 // стабильная: файлы в любом порядке дают одинаковую выборку.
-func takeLastJobs(rows []importers.PrintJob, n int) []importers.PrintJob {
+// Экспортирован для Apply-подмножества в desktop (предпросмотр и применение
+// режут одинаково).
+func TakeLastJobs(rows []importers.PrintJob, n int) []importers.PrintJob {
 	if n <= 0 || n >= len(rows) {
 		return rows
 	}

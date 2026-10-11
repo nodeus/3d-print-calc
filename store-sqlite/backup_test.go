@@ -360,6 +360,38 @@ func TestImportHistoryLimit(t *testing.T) {
 	}
 }
 
+// TestImportSelected: записывает только переданные строки; пусто — ошибка.
+func TestImportSelected(t *testing.T) {
+	db := seedTestDB(t, t.TempDir())
+	if _, err := db.Printers().Save(models.Printer{Name: "K1C", HoursPerDay: 8,
+		LifeYears: 3, CalendarMode: "calendar", AmortMethod: "calendar"}); err != nil {
+		t.Fatal(err)
+	}
+	mk := func(fn string, day int) importers.PrintJob {
+		return importers.PrintJob{Filename: fn, Status: "completed", Slicer: "Orca",
+			StartTime: time.Date(2026, 10, day, 10, 0, 0, 0, time.UTC),
+			EndTime:   time.Date(2026, 10, day, 11, 0, 0, 0, time.UTC)}
+	}
+	all := []importers.PrintJob{mk("a.gcode", 3), mk("b.gcode", 2), mk("c.gcode", 1)}
+	if _, err := db.ImportSelected(nil, nil); err == nil {
+		t.Fatal("пустой выбор обязан дать ошибку")
+	}
+	rep, err := db.ImportSelected(all[:2], nil)
+	if err != nil {
+		t.Fatalf("ImportSelected: %v", err)
+	}
+	if rep.Total != 2 || rep.New != 2 {
+		t.Fatalf("report = %+v", rep)
+	}
+	jobs, err := db.Jobs().List(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 2 {
+		t.Fatalf("записано %d, хочу 2", len(jobs))
+	}
+}
+
 // TestTakeLastJobs: срез по времени старта, стабильный; N<=0 и N>=len — как есть.
 func TestTakeLastJobs(t *testing.T) {
 	mk := func(fn string, day int) importers.PrintJob {
@@ -367,14 +399,14 @@ func TestTakeLastJobs(t *testing.T) {
 			StartTime: time.Date(2026, 10, day, 10, 0, 0, 0, time.UTC)}
 	}
 	rows := []importers.PrintJob{mk("b", 2), mk("a", 3), mk("c", 1)}
-	got := takeLastJobs(rows, 2)
+	got := TakeLastJobs(rows, 2)
 	if len(got) != 2 || got[0].Filename != "a" || got[1].Filename != "b" {
 		t.Fatalf("срез: %+v", got)
 	}
-	if full := takeLastJobs(rows, 0); len(full) != 3 || full[0].Filename != "b" {
+	if full := TakeLastJobs(rows, 0); len(full) != 3 || full[0].Filename != "b" {
 		t.Fatalf("лимит 0 меняет порядок: %+v", full)
 	}
-	if full := takeLastJobs(rows, 99); len(full) != 3 {
+	if full := TakeLastJobs(rows, 99); len(full) != 3 {
 		t.Fatalf("большой лимит: %+v", full)
 	}
 }

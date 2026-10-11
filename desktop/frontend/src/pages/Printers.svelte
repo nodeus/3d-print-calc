@@ -149,6 +149,8 @@
   let moonLimit: Record<number, number | null> = $state({});
   // Открытая модалка табличного предпросмотра (на принтер).
   let moonPreview: Record<number, ImportReport | null> = $state({});
+  // Чей предпросмотр сейчас в pending-буфере (применение — только его).
+  let moonPendingId: number | null = $state(null);
 
   function blank(): PrinterForm {
     return {
@@ -287,12 +289,13 @@
     try {
       report[p.ID] = await wails.moonrakerPreview(p.ID, moonLimit[p.ID] ?? 0);
       moonPreview[p.ID] = report[p.ID]?.dryRun ? report[p.ID] : null;
+      moonPendingId = report[p.ID]?.dryRun ? p.ID : moonPendingId;
     } catch (e) {
       error = String(e);
     }
   }
 
-  async function apply(p: PrinterDTO) {
+  async function apply(p: PrinterDTO, selected: number[]) {
     error = '';
     importing[p.ID] = true;
     progress[p.ID] = { done: 0, total: 0 };
@@ -300,8 +303,9 @@
       progress[p.ID] = { done, total };
     });
     try {
-      applied[p.ID] = await wails.moonrakerApply();
+      applied[p.ID] = await wails.moonrakerApply(selected);
       report[p.ID] = null;
+      moonPendingId = null;
     } catch (e) {
       error = String(e);
     } finally {
@@ -309,6 +313,19 @@
       wails.offImportProgress();
       moonPreview[p.ID] = null;
     }
+  }
+
+  // Отмена импорта: сбрасывает pending-буфер предпросмотра.
+  async function cancelMoonraker(p: PrinterDTO) {
+    error = '';
+    try {
+      await wails.cancelPendingImport();
+    } catch (e) {
+      error = String(e);
+    }
+    report[p.ID] = null;
+    moonPreview[p.ID] = null;
+    if (moonPendingId === p.ID) moonPendingId = null;
   }
 
   async function toPDF() {
@@ -407,10 +424,12 @@
     {/if}
     {#if status[p.ID]}<p class="ok">Moonraker {status[p.ID]}</p>{/if}
     {#if report[p.ID]}<p>{$t('set.csv_preview')}: total {report[p.ID]!.total}{#if report[p.ID]!.lifetimeTotal} / {$t('moon.lifetime_total')}: {report[p.ID]!.lifetimeTotal}{/if}, new {report[p.ID]!.new}, existing {report[p.ID]!.existing}</p>{/if}
-    {#if report[p.ID]?.dryRun && canWrite($user)}<button class="warn no-print" onclick={() => apply(p)} disabled={importing[p.ID]}>{$t('set.csv_apply')}</button>{/if}
+    {#if report[p.ID]?.dryRun && canWrite($user)}<button class="warn no-print" onclick={() => apply(p, (report[p.ID]?.rows ?? []).map((_, i) => i))} disabled={importing[p.ID]}>{$t('set.csv_apply')}</button>{/if}
+    {#if report[p.ID]?.dryRun && !moonPreview[p.ID] && moonPendingId === p.ID}<button class="no-print" onclick={() => (moonPreview[p.ID] = report[p.ID])}>{$t('imp.repreview')}</button>{/if}
+    {#if report[p.ID]?.dryRun && canWrite($user)}<button class="no-print" onclick={() => cancelMoonraker(p)}>{$t('imp.cancel')}</button>{/if}
     {#if importing[p.ID] && progress[p.ID]}<progress value={progress[p.ID].done} max={progress[p.ID].total || 1}></progress> {progress[p.ID].done}/{progress[p.ID].total}{/if}
     {#if applied[p.ID]}<p class="ok">{$t('set.csv_done')}: +{applied[p.ID]!.new} (stubs {applied[p.ID]!.stubs}, {$t('set.csv_spool_stubs')} {applied[p.ID]!.spoolStubs ?? 0})</p>{/if}
-    {#if moonPreview[p.ID]}<ImportPreview report={moonPreview[p.ID]!} perPage={$mySettings.historyPerPage > 0 ? $mySettings.historyPerPage : 50} onApply={() => apply(p)} onClose={() => (moonPreview[p.ID] = null)} />{/if}
+    {#if moonPreview[p.ID]}<ImportPreview report={moonPreview[p.ID]!} perPage={$mySettings.historyPerPage > 0 ? $mySettings.historyPerPage : 50} onApply={(sel) => apply(p, sel)} onClose={() => (moonPreview[p.ID] = null)} />{/if}
     <h4>{$t('part.title')}</h4>
     <table>
       <thead><tr><th><button class="th" onclick={() => togglePartSort('date')}>{$t('part.date')}{partArrow('date')}</button></th><th><button class="th" onclick={() => togglePartSort('name')}>{$t('part.name')}{partArrow('name')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('price')}>{$t('part.price')}{partArrow('price')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('qty')}>{$t('part.qty')}{partArrow('qty')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('total')}>{$t('part.total')}{partArrow('total')}</button></th><th><button class="th" onclick={() => togglePartSort('note')}>{$t('part.note')}{partArrow('note')}</button></th><th class="no-print"></th></tr></thead>

@@ -9,6 +9,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"3dprint-calc/core/export"
+	"3dprint-calc/core/importers"
 	"3dprint-calc/core/models"
 	sqlite "3dprint-calc/store-sqlite"
 )
@@ -190,7 +191,8 @@ func (a *App) ExportPDF(title, filename string, sections []export.Section) (stri
 }
 
 // ApplyHistoryCSV применяет запомненный PreviewHistoryCSV импорт (manager+).
-func (a *App) ApplyHistoryCSV() (sqlite.ImportReport, error) {
+// selected — индексы строк предпросмотра (nil — все); пустой список — ошибка.
+func (a *App) ApplyHistoryCSV(selected []int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
 	rep.Rows = []sqlite.ImportRow{}
 	if err := a.need(models.RoleManager); err != nil {
@@ -199,14 +201,68 @@ func (a *App) ApplyHistoryCSV() (sqlite.ImportReport, error) {
 	if len(a.pendingFile) == 0 {
 		return rep, errNoPending()
 	}
-	rep, err := a.db.ImportHistory(bytes.NewReader(a.pendingFile), false, a.pendingCSVLimit, a.emitProgress)
+	rows, err := importers.ParseHistory(bytes.NewReader(a.pendingFile))
 	if err != nil {
 		return rep, err
 	}
+	rows = sqlite.TakeLastJobs(rows, a.pendingCSVLimit)
+	picked, err := selectImportRows(rows, selected)
+	if err != nil {
+		return rep, err
+	}
+	rep.Total = len(picked)
+	fresh, exist, err := a.db.ClassifyJobs(picked)
+	if err != nil {
+		return rep, err
+	}
+	rep.New, rep.Existing = fresh, exist
+	if rep.New == 0 {
+		a.clearPendingImport()
+		return rep, nil
+	}
+	applied, err := a.db.ImportSelected(picked, a.emitProgress)
+	if err != nil {
+		return rep, err
+	}
+	applied.DryRun = false
+	a.clearPendingImport()
+	return applied, nil
+}
+
+// CancelPendingImport сбрасывает запомненный Preview импорт (CSV и Moonraker).
+// Вызывается кнопкой «Отменить импорт»; отдельных прав не требует.
+func (a *App) CancelPendingImport() {
+	a.clearPendingImport()
+}
+
+// clearPendingImport очищает все pending-буферы импорта.
+func (a *App) clearPendingImport() {
 	a.pendingFile = nil
 	a.pendingPath = ""
 	a.pendingCSVLimit = 0
-	return rep, nil
+	a.pendingMoonraker = nil
+	a.pendingPrinterID = 0
+	a.pendingNew, a.pendingExisting = 0, 0
+}
+
+// selectImportRows оставляет строки предпросмотра по индексам (порядок —
+// как в предпросмотре). nil — все строки; пустой список — ERR_NO_SELECTION;
+// индекс вне диапазона — ERR_SELECTION.
+func selectImportRows(rows []importers.PrintJob, selected []int) ([]importers.PrintJob, error) {
+	if selected == nil {
+		return rows, nil
+	}
+	if len(selected) == 0 {
+		return nil, fmt.Errorf("ERR_NO_SELECTION: не выбрана ни одна строка")
+	}
+	out := make([]importers.PrintJob, 0, len(selected))
+	for _, i := range selected {
+		if i < 0 || i >= len(rows) {
+			return nil, fmt.Errorf("ERR_SELECTION: плохой индекс строки %d", i)
+		}
+		out = append(out, rows[i])
+	}
+	return out, nil
 }
 
 // PreviewMaterialsCSV читает CSV справочника в dry-run (отдельный буфер).

@@ -11,12 +11,29 @@
   }: {
     report: ImportReport;
     perPage?: number;
-    onApply: () => void;
+    onApply: (selected: number[]) => void;
     onClose: () => void;
   } = $props();
 
   let page = $state(0);
   const rows = $derived(report.rows ?? []);
+  // Отмеченные для импорта (индексы в rows); по умолчанию — все.
+  // $effect: при новом отчёте выбор сбрасывается.
+  let checked = $state<boolean[]>([]);
+  $effect(() => {
+    checked = rows.map(() => true);
+  });
+  const selectedCount = $derived(checked.filter(Boolean).length);
+  const allChecked = $derived(rows.length > 0 && selectedCount === rows.length);
+  function toggleAll() {
+    const v = !allChecked;
+    checked = rows.map(() => v);
+  }
+  function selected(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < checked.length; i++) if (checked[i]) out.push(i);
+    return out;
+  }
   const pp = $derived(perPage > 0 ? perPage : 50);
   const pages = $derived(Math.max(1, Math.ceil(rows.length / pp)));
   const safePage = $derived(Math.min(page, pages - 1));
@@ -47,6 +64,7 @@
     {:else}
       <div class="twrap"><table class="tw">
         <thead><tr>
+          <th><input type="checkbox" checked={allChecked} onchange={toggleAll} title={$t('imp.select_all')} aria-label={$t('imp.select_all')} /></th>
           <th>{$t('hist.filename')}</th>
           <th>{$t('imp.type')}</th>
           <th>{$t('hist.status')}</th>
@@ -61,8 +79,10 @@
           <th>{$t('hist.slicer')}</th>
         </tr></thead>
         <tbody>
-          {#each visible as r}
+          {#each visible as r, vi}
+            {@const gi = safePage * pp + vi}
             <tr class:dup={r.Exists} title={r.Exists ? $t('imp.dup') : ''}>
+              <td><input type="checkbox" bind:checked={checked[gi]} aria-label={r.Filename} /></td>
               <td class="file" title={r.Filename}>{r.Filename}</td>
               <td>{r.Type || '—'}</td>
               <td>{r.Status || '—'}</td>
@@ -88,7 +108,7 @@
       </div>
     {/if}
     <div class="row">
-      {#if report.new > 0}<button class="warn" onclick={onApply}>{$t('set.csv_apply')}</button>{/if}
+      {#if report.new > 0}<button class="warn" onclick={() => onApply(selected())} disabled={selectedCount === 0}>{$t('set.csv_apply')} ({selectedCount})</button>{/if}
       <button onclick={onClose}>{$t('common.cancel')}</button>
     </div>
   </div>

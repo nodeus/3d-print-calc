@@ -461,7 +461,7 @@
     }
   }
 
-  async function applyCSV() {
+  async function applyCSV(selected: number[]) {
     error = '';
     importing = true;
     progress = { done: 0, total: 0 };
@@ -469,7 +469,8 @@
       progress = { done, total };
     });
     try {
-      csvApplied = await wails.applyHistoryCSV();
+      csvApplied = await wails.applyHistoryCSV(selected);
+      csvReport = null;
     } catch (e) {
       error = String(e);
     } finally {
@@ -477,6 +478,18 @@
       wails.offImportProgress();
       csvPreview = null;
     }
+  }
+
+  // Отмена импорта: сбрасывает pending-буферы (предпросмотр закрывается).
+  async function cancelCSV() {
+    error = '';
+    try {
+      await wails.cancelPendingImport();
+    } catch (e) {
+      error = String(e);
+    }
+    csvReport = null;
+    csvPreview = null;
   }
 
   async function applyMatsCSV() {
@@ -641,7 +654,9 @@
     <button onclick={() => run(wails.exportMaterialsCSV, (p) => (backupPath = p))}>{$t('set.csv_mats_out')}</button>
     <input type="number" min="1" step="1" bind:value={csvLimit} placeholder={$t('set.csv_limit')} title={$t('set.csv_limit')} style={`width:${$t('set.csv_limit').length + 5}ch`} />
     <button onclick={previewCSV}>{$t('set.csv_in')}</button>
-    {#if csvReport?.dryRun}<button class="warn" onclick={applyCSV} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
+    {#if csvReport?.dryRun}<button class="warn" onclick={() => applyCSV((csvReport?.rows ?? []).map((_, i) => i))} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
+    {#if csvReport?.dryRun && !csvPreview}<button onclick={() => (csvPreview = csvReport)}>{$t('imp.repreview')}</button>{/if}
+    {#if csvReport?.dryRun}<button onclick={cancelCSV}>{$t('imp.cancel')}</button>{/if}
     <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
     {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
   </div>

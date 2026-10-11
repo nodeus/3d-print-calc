@@ -67,7 +67,8 @@ func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport,
 }
 
 // MoonrakerApply применяет запомненный Preview импорт (manager+).
-func (a *App) MoonrakerApply() (sqlite.ImportReport, error) {
+// selected — индексы строк предпросмотра (nil — все); пустой список — ошибка.
+func (a *App) MoonrakerApply(selected []int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
 	rep.Rows = []sqlite.ImportRow{}
 	if err := a.need(models.RoleManager); err != nil {
@@ -76,12 +77,25 @@ func (a *App) MoonrakerApply() (sqlite.ImportReport, error) {
 	if len(a.pendingMoonraker) == 0 {
 		return rep, errNoPending()
 	}
-	st, err := seed.ImportRows(a.db, a.pendingPrinterID, a.pendingMoonraker, "moonraker", a.emitProgress)
+	picked, err := selectImportRows(a.pendingMoonraker, selected)
 	if err != nil {
 		return rep, err
 	}
-	rep.Total, rep.New, rep.Existing, rep.Stubs, rep.SpoolStubs =
-		len(a.pendingMoonraker), a.pendingNew, a.pendingExisting, st.Stubs, st.SpoolStubs
+	rep.Total = len(picked)
+	fresh, exist, err := a.db.ClassifyJobs(picked)
+	if err != nil {
+		return rep, err
+	}
+	rep.New, rep.Existing = fresh, exist
+	if rep.New == 0 {
+		a.pendingMoonraker = nil
+		return rep, nil
+	}
+	st, err := seed.ImportRows(a.db, a.pendingPrinterID, picked, "moonraker", a.emitProgress)
+	if err != nil {
+		return rep, err
+	}
+	rep.Stubs, rep.SpoolStubs = st.Stubs, st.SpoolStubs
 	a.pendingMoonraker = nil
 	return rep, nil
 }
