@@ -30,6 +30,7 @@ type MaterialDTO struct {
 	Diameter       float64    `json:"diameter"`
 	DefaultWeightG float64    `json:"defaultWeightG"`
 	PricePerKg     float64    `json:"pricePerKg"`
+	AvgPricePerKg  float64    `json:"avgPricePerKg"` // простое среднее по ВСЕМ катушкам, только для витрины
 	Currency       string     `json:"currency"`
 	SpoolID        int64      `json:"spoolId"`
 	SpoolLeftG     float64    `json:"spoolLeftG"`
@@ -58,6 +59,11 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
 			dto.PricePerKg = float64(spools[0].Price) / 100
+			var sum int64
+			for _, s := range spools {
+				sum += s.Price
+			}
+			dto.AvgPricePerKg = float64(sum) / float64(len(spools)) / 100
 			dto.Currency = spools[0].Currency
 			dto.SpoolID = spools[0].ID
 			dto.SpoolLeftG = spools[0].WeightLeftG

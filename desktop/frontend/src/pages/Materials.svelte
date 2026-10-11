@@ -144,7 +144,7 @@
     switch (sortKey) {
       case 'code': return m.code.toLowerCase();
       case 'type': return (m.type || '').toLowerCase();
-      case 'price': return m.pricePerKg;
+      case 'price': return m.avgPricePerKg;
       case 'density': return m.density;
       case 'weight': return m.defaultWeightG || 1000;
       case 'vendor': return (m.vendor || '').toLowerCase();
@@ -162,7 +162,7 @@
 
   const matCols = [
     { key: 'code', label: 'mat.code' }, { key: 'color', label: 'mat.color' },
-    { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.price', num: true },
+    { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.avg_price', num: true },
     { key: 'density', label: 'mat.density', num: true }, { key: 'weight', label: 'mat.weight', num: true },
     { key: 'vendor', label: 'mat.vendor' }, { key: 'note', label: 'mat.note' },
   ];
@@ -208,7 +208,7 @@
     switch (k) {
       case 'code': return m.code;
       case 'type': return m.type;
-      case 'price': return money(m.pricePerKg, m.currency, 'ru');
+      case 'price': return money(m.avgPricePerKg, m.currency, 'ru');
       case 'density': return String(m.density);
       case 'weight': return String(m.defaultWeightG || 1000);
       case 'vendor': return m.vendor;
@@ -424,7 +424,7 @@
             {:else if k === 'type'}
               <td><input list="mat-types-edit" bind:value={edit.Type} placeholder="PETG" /></td>
             {:else if k === 'price'}
-              <td class="n" title={$t('mat.price_spool_note')}>{matText(m, k)}</td>
+              <td class="n" title={$t('mat.avg_note')}>{matText(m, k)}</td>
             {:else if k === 'density'}
               <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
             {:else if k === 'weight'}
