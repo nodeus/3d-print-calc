@@ -71,7 +71,7 @@
 ```
 core/                       # чистый Go, ноль UI/ОС-зависимостей
   calc/                     # движок расчёта (единственное место формул)
-  models/                   # User, Customer, Maker, Material, Spool, Printer, Job, Order(+Item), Payment, FxRate
+  models/                   # User, Customer, Material, Spool, Printer, Job, Order(+Item), Payment (Maker — мёртвая структура без кода; FxRate — в store-sqlite/fx.go)
   store/                    # Repository-ИНТЕРФЕЙСЫ (без SQL)
   importers/                # csv_history (толерантен к пустым/"null"), filename_parser, gcode_meta
   export/                   # backup.zip, csv, pdf.go (gofpdf + DejaVu) + fonts/
@@ -144,9 +144,9 @@ amortPerHour,opRate,prepH,postH,...,spoolNo}, cost, price, currency}` (v1 чит
 Время работ (подготовка/пост/модель) — ввод парами ч+мин (`lib/hm.ts`),
 внутри/снапшотах — десятичные часы. Копий нет: всегда `Copies: 1`
 (движок деление хранит для старых данных).
-Колонки истории — 33 ключа (`HistoryColumns` в `desktop/app.go`: 13 базовых +
-20 расчётных из снапшота); настройка — карточка с аккордеонами в Настройках
-(таб «Основное»), ярлык «Колонки: N/33» вверху Истории. Порядок колонок —
+Колонки истории — 34 ключа (`HistoryColumns` в `desktop/app.go`: 13 базовых +
+21 расчётная из снапшота); настройка — карточка с аккордеонами в Настройках
+(таб «Основное»), ярлык «Колонки: N/34» вверху Истории. Порядок колонок —
 drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, порядок —
 `orderFor`/`colOrder` в секции пользователя; у Истории порядок живёт
 в массиве видимых колонок).
@@ -164,10 +164,12 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 
 ### БД SQLite (WAL, один `app.db`)
 
-`users, customers, makers(type: designer|modeller|printer_op), materials(code UNIQUE),
+`users, customers, makers(мёртвая таблица: есть в схеме/моделях, кода нет),
+materials(code UNIQUE),
 +part_purchases(printer_id, bought_at, price, qty — сумма вычисляется),
-spools(material_id, price, currency, bought_at, weight_left_g, spool_no,
-vendor, color_hex, density, diameter — миграция `0016` с бэкфиллом с материала;
+spools(material_id, price, currency, fx_rate, bought_at, weight_init_g,
+weight_left_g, archived, spool_no, note, vendor, color_hex, density, diameter
+— vendor/color/density/diameter — миграция `0016` с бэкфиллом с материала;
 материал — лишь ключ-группа для парсинга, физика партии — на катушке;
 вес работ — по плотности/диаметру привязанной катушки),
 materials.code правится с переписью снапшота (`json_replace`);
@@ -177,7 +179,6 @@ materials.code правится с переписью снапшота (`json_re
 Остаток катушки — вычисляемый (`SpoolUsedG`: партия минус Σ веса работ,
 атрибуция как в `SpoolStats`); хранимое `spools.weight_left_g` в показе
 не участвует (автосписания нет), printers(...,
-calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 calendar_mode, amort_method, moonraker_url), jobs(filename+start_at UNIQUE,
 cost_snapshot JSON v2, origin: import|manual|moonraker, + end_at/slicer/size/...),
 orders(+number, +title), order_items, payments, fx_rates, settings`. Импорт идемпотентен
