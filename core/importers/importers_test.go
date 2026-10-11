@@ -8,18 +8,20 @@ import (
 )
 
 func TestParseHistory_RealCSV(t *testing.T) {
-	// Фикстура — боевой файл принтера. Тест гоняется из каталога пакета.
-	f, err := os.Open("../../csv/print_history.csv")
+	// Фикстура — урезанный representative-набор (testdata): все edge-кейсы
+	// боевого файла (пусто/null, запятая, статусы, кириллица). Гоняется
+	// из каталога пакета.
+	f, err := os.Open("../../testdata/print_history_mini.csv")
 	if err != nil {
-		t.Skipf("нет фикстуры csv/print_history.csv: %v", err)
+		t.Skipf("нет фикстуры testdata/print_history_mini.csv: %v", err)
 	}
 	defer f.Close()
 	jobs, err := ParseHistory(f)
 	if err != nil {
 		t.Fatalf("ParseHistory: %v", err)
 	}
-	if len(jobs) != 490 {
-		t.Fatalf("строк = %d, хочу 490", len(jobs))
+	if len(jobs) != 16 {
+		t.Fatalf("строк = %d, хочу 16", len(jobs))
 	}
 	first := jobs[0]
 	if first.Filename != "10-inch-rack-mount-for-tenda-25-gbit-switch_PETG-PPL01_4h17m.gcode" {
@@ -46,13 +48,35 @@ func TestParseHistory_RealCSV(t *testing.T) {
 	}
 	// В файле есть cancelled — парсер обязан их пропускать молча (не ошибка).
 	cancelled := 0
+	byStatus := map[string]int{}
 	for _, j := range jobs {
+		byStatus[j.Status]++
 		if j.Status == "cancelled" {
 			cancelled++
 		}
 	}
 	if cancelled == 0 {
 		t.Errorf("ожидались cancelled-строки в фикстуре")
+	}
+	for _, st := range []string{"error", "klippy_shutdown", "klippy_disconnect"} {
+		if byStatus[st] == 0 {
+			t.Errorf("нет статуса %q в фикстуре", st)
+		}
+	}
+	// Пусто/"null" в числах → 0, а не ошибка.
+	byFile := map[string]PrintJob{}
+	for _, j := range jobs {
+		byFile[j.Filename] = j
+	}
+	nullRow := byFile["gridfinity_bin_PETG_34m12s.gcode"]
+	if nullRow.EstimatedTime != 0 || nullRow.FilamentTotal != 0 {
+		t.Errorf("пусто/null: %+v", nullRow)
+	}
+	if r := byFile["hook_PLA_1h10m.gcode"]; r.FilamentUsed != 0 {
+		t.Errorf("пустой filament_used: %+v", r)
+	}
+	if r := byFile["part_no_size_PETG_45m.gcode"]; r.Size != 0 {
+		t.Errorf("пустой size: %+v", r)
 	}
 }
 

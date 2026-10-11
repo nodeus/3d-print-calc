@@ -45,6 +45,10 @@
 
 ## 2. Исходные данные (legacy Excel)
 
+> Папки `xlsx/` и `csv/` — локальные legacy-сиды, в git не идут (рантайм
+> их не читает — первый запуск чистый). Тесты — на урезанной фикстуре
+> `testdata/print_history_mini.csv` (все edge-кейсы боевого файла).
+
 - `xlsx/3dprint-calc.xlsx` — 3 листа: `Калькулятор печати`, `Материалы`, `print_history`.
 - `csv/print_history.csv` — 491 строка, `;`-разделитель, десятичная запятая:
   `filename;type;status;size;start_time;end_time;estimated_time;print_duration;total_duration;filament_total;filament_used;slicer`.
@@ -221,7 +225,7 @@ orders(+number, +title), order_items, payments, fx_rates, settings`. Импор�
 - Вкладки — в `<svelte:boundary>` + `{#key tab}` (ошибка не залипает между вкладками).
   `onMount` — не `async` с возвратом подписки (svelte-check это ловит).
 - SQL: миграции только добавлением файлов `migrations/NNNN_name.sql` (up-блоки, SQLite-совместимо).
-- Тесты: `core/calc` — table-driven, фикстуры из `csv/print_history.csv`;
+- Тесты: `core/calc` — table-driven, фикстуры из `testdata/print_history_mini.csv`;
   регресс `E16` (+24₽) и плотности — обязательные кейсы.
 - Валюты — коды ISO, деньги — `int64` минорных единиц + `fx_rate` снапшотом. Float — только для
   промежуточных kWh/часов, итог — округление по правилу.

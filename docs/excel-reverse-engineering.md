@@ -1,6 +1,7 @@
 # Excel reverse-engineering — 3dprint-calc.xlsx
 
-Источник: `xlsx/3dprint-calc.xlsx`, `csv/print_history.csv`. Разбор выполнен 2026-10-07.
+Источник: `xlsx/3dprint-calc.xlsx`, `csv/print_history.csv` (локальные файлы,
+в git не идут). Разбор выполнен 2026-10-07.
 Канон формул для `core/calc` — раздел 3. Дальше — как было в Excel.
 
 ## Листы
