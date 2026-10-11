@@ -4,7 +4,8 @@
   import { user } from '../lib/session';
   import { applyMySettings } from '../lib/usersettings';
 
-  let login = $state('admin');
+  // Поля всегда пустые при старте (безопасность: без подстановки логина).
+  let login = $state('');
   let password = $state('');
   let error = $state('');
   let pending = $state(false);
