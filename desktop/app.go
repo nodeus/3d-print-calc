@@ -481,6 +481,24 @@ func (a *App) DeleteJobs(ids []int64) (store.BulkDeleteReport, error) {
 	return a.db.Jobs().DeleteJobs(ids)
 }
 
+// BulkPreviewJobs — превью массовой правки без записи (manager+).
+func (a *App) BulkPreviewJobs(ids []int64, patch store.JobBulkPatch) ([]store.BulkJobPreview, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return nil, err
+	}
+	return a.db.Jobs().BulkPreview(ids, patch)
+}
+
+// BulkApplyJobs — массовая правка выбранных (manager+). Пишутся только
+// работы с реальными отличиями; отчёт — числом.
+func (a *App) BulkApplyJobs(ids []int64, patch store.JobBulkPatch) (store.BulkApplyReport, error) {
+	var rep store.BulkApplyReport
+	if err := a.need(models.RoleManager); err != nil {
+		return rep, err
+	}
+	return a.db.Jobs().BulkApply(ids, patch)
+}
+
 // JobEdit — поля правки работы истории (материал отдельно: не колонка jobs).
 // Расчётные поля (тарифы, ставки, наценки...) фронт шлёт полным набором:
 // бэкенд пересчитывает снапшот строго по ним, старый контекст не используется.
