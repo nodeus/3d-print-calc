@@ -210,14 +210,14 @@ func TestImportMaterials(t *testing.T) {
 		"PETG-OLD;PETG;NIT;900;RUB;1,27;1,75\n" +
 		"PETG-NEW;PETG;;0;RUB;1,27;1,75\n" +
 		"PETG-PRICE;PETG;V;1000;RUB;1,27;1,75\n"
-	rep, err := db.ImportMaterials(strings.NewReader(raw), true, nil)
+	rep, err := db.ImportMaterials(strings.NewReader(raw), true, 0, nil)
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}
 	if rep.Total != 3 || rep.New != 2 || rep.Existing != 1 {
 		t.Fatalf("dry-run: %+v", rep)
 	}
-	rep, err = db.ImportMaterials(strings.NewReader(raw), false, nil)
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false, 0, nil)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestImportMaterials(t *testing.T) {
 		t.Fatalf("лишние катушки: %+v", nsp2)
 	}
 	// Повтор: всё существующее.
-	rep, err = db.ImportMaterials(strings.NewReader(raw), false, nil)
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false, 0, nil)
 	if err != nil {
 		t.Fatalf("re-apply: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestImportMaterialsSpools(t *testing.T) {
 		"PETG-NIT-BLACK-4;PETG;НИТ;900;RUB;1,27;1,75\n" +
 		"PETG-NIT-BLACK-5;PETG;;1200;RUB;1,27;1,75\n"
 	prog, calls := progressCounter(t, 1)
-	rep, err := db.ImportMaterials(strings.NewReader(raw), false, prog)
+	rep, err := db.ImportMaterials(strings.NewReader(raw), false, 0, prog)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -303,11 +303,11 @@ func TestImportMaterialsSpools(t *testing.T) {
 	dup := "code;type;vendor;price_per_kg;currency;density;diameter\n" +
 		"PETG-X-1;PETG;;0;RUB;1,27;1,75\n" +
 		"PETG-X-1;PETG;;0;RUB;1,27;1,75\n"
-	if _, err := db.ImportMaterials(strings.NewReader(dup), true, nil); err == nil {
+	if _, err := db.ImportMaterials(strings.NewReader(dup), true, 0, nil); err == nil {
 		t.Fatal("дубль номера принят")
 	}
 	// Повтор: всё существующее (и номера заняты).
-	rep, err = db.ImportMaterials(strings.NewReader(raw), false, nil)
+	rep, err = db.ImportMaterials(strings.NewReader(raw), false, 0, nil)
 	if err != nil {
 		t.Fatalf("re-apply: %v", err)
 	}
@@ -389,6 +389,93 @@ func TestImportSelected(t *testing.T) {
 	}
 	if len(jobs) != 2 {
 		t.Fatalf("записано %d, хочу 2", len(jobs))
+	}
+}
+
+// TestImportMaterialsPreviewRows: dry-run отдаёт строки со статусом,
+// лимит режет хвост файла; применяется только выбранное подмножество.
+func TestImportMaterialsPreviewRows(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	if _, err := mats.UpsertByCode(models.Material{Code: "PETG-OLD", Type: "PETG", Density: 1.27}); err != nil {
+		t.Fatal(err)
+	}
+	raw := "code;type;vendor;price_per_kg;currency;density;diameter\n" +
+		"PETG-OLD;PETG;NIT;900;RUB;1,27;1,75\n" +
+		"PETG-NEW;PETG;;0;RUB;1,27;1,75\n" +
+		"PETG-N-1;PETG;;500;RUB;1,27;1,75\n" +
+		"PETG-N-2;PETG;;600;RUB;1,27;1,75\n"
+	rep, err := db.ImportMaterials(strings.NewReader(raw), true, 0, nil)
+	if err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	if rep.Total != 4 || rep.New != 3 || rep.Existing != 1 {
+		t.Fatalf("report = %+v", rep)
+	}
+	if len(rep.MatRows) != 4 {
+		t.Fatalf("строк preview = %d, хочу 4", len(rep.MatRows))
+	}
+	want := []struct {
+		code string
+		no   int
+		ex   bool
+	}{
+		{"PETG-OLD", 0, true}, {"PETG-NEW", 0, false},
+		{"PETG-N-1", 1, false}, {"PETG-N-2", 2, false},
+	}
+	for i, w := range want {
+		r := rep.MatRows[i]
+		if r.Code != w.code || r.SpoolNo != w.no || r.Exists != w.ex {
+			t.Fatalf("строка %d = %+v, хочу %+v", i, r, w)
+		}
+	}
+	if rep.MatRows[1].PricePerKg != 0 || rep.MatRows[2].Vendor != "" {
+		t.Fatalf("значения строк: %+v", rep.MatRows[1:3])
+	}
+	js, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dec struct {
+		MatRows []map[string]any `json:"matRows"`
+	}
+	if err := json.Unmarshal(js, &dec); err != nil {
+		t.Fatal(err)
+	}
+	if len(dec.MatRows) != 4 || dec.MatRows[2]["Code"] != "PETG-N-1" ||
+		dec.MatRows[2]["spoolNo"] != float64(1) || dec.MatRows[0]["exists"] != true {
+		t.Fatalf("JSON matRows: %v", dec.MatRows)
+	}
+	// Лимит 2 — хвост файла.
+	rep2, err := db.ImportMaterials(strings.NewReader(raw), true, 2, nil)
+	if err != nil {
+		t.Fatalf("dry-run limit: %v", err)
+	}
+	if rep2.Total != 2 || len(rep2.MatRows) != 2 || rep2.MatRows[0].Code != "PETG-N-1" {
+		t.Fatalf("limit report = %+v", rep2.MatRows)
+	}
+	// Применение только выбранного: парсинг + лимит + выборка, как в desktop.
+	parsed, err := importers.ParseMaterials(strings.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed = TakeLastMats(parsed, 0)
+	picked := []importers.MaterialRow{parsed[1]}
+	rep3, err := db.ImportMatsSelected(picked, nil)
+	if err != nil {
+		t.Fatalf("selected: %v", err)
+	}
+	if rep3.Total != 1 || rep3.New != 1 {
+		t.Fatalf("selected report = %+v", rep3)
+	}
+	if _, err := mats.GetByCode("PETG-NEW"); err != nil {
+		t.Fatalf("выбранный не создан: %v", err)
+	}
+	if _, err := mats.GetByCode("PETG-N"); err == nil {
+		t.Fatal("невыбранный создан")
+	}
+	if _, err := db.ImportMatsSelected(nil, nil); err == nil {
+		t.Fatal("пустой выбор принят")
 	}
 }
 
