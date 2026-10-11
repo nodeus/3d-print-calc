@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"3dprint-calc/core/calc"
+	"3dprint-calc/core/importers"
 	"3dprint-calc/core/models"
 )
 
@@ -446,5 +448,99 @@ func TestMaterialAvgPrice(t *testing.T) {
 	}
 	if dto.PricePerKg != 1000 {
 		t.Fatalf("расчётная цена тронута: %v", dto.PricePerKg)
+	}
+}
+
+// TestMaterialsApplySelectedCancel: применение только выбранных строк
+// материалов; отмена сбрасывает pendingMats (дальше — ERR_NO_PENDING).
+func TestMaterialsApplySelectedCancel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{ctx: context.Background(), db: db, dbPath: path}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatal(err)
+	}
+	raw := "code;type;vendor;price_per_kg;currency;density;diameter\n" +
+		"PETG-A;PETG;;100;RUB;1,27;1,75\n" +
+		"PETG-B;PETG;;200;RUB;1,27;1,75\n"
+	app.pendingMats = []byte(raw)
+	app.pendingMatsLimit = 0
+	applied, err := app.ApplyMaterialsCSV([]int{1})
+	if err != nil {
+		t.Fatalf("Apply selected: %v", err)
+	}
+	if applied.New != 1 {
+		t.Fatalf("applied = %+v", applied)
+	}
+	mats, err := app.GetMaterials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, m := range mats {
+		got[m.Code] = true
+	}
+	if got["PETG-A"] || !got["PETG-B"] {
+		t.Fatalf("созданы: %v", got)
+	}
+	// Отмена после нового preview-буфера: apply невозможен.
+	app.pendingMats = []byte(raw)
+	app.CancelPendingImport()
+	if len(app.pendingMats) != 0 {
+		t.Fatal("pendingMats не сброшен")
+	}
+	if _, err := app.ApplyMaterialsCSV(nil); err == nil {
+		t.Fatal("apply после отмены принят")
+	}
+}
+
+// TestPendingGuardSequential: предпросмотр при занятом чужом буфере —
+// ERR_PENDING_EXISTS; повторный preview своего типа не блокируется.
+func TestPendingGuardSequential(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{ctx: context.Background(), db: db, dbPath: path}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatal(err)
+	}
+	// История pending → материалы и Moonraker заблокированы.
+	app.pendingFile = []byte("x")
+	if _, err := app.PreviewMaterialsCSV(0); err == nil ||
+		!strings.Contains(err.Error(), "ERR_PENDING_EXISTS") {
+		t.Fatalf("материалы при истории: %v", err)
+	}
+	if _, err := app.MoonrakerPreview(1, 0); err == nil ||
+		!strings.Contains(err.Error(), "ERR_PENDING_EXISTS") {
+		t.Fatalf("moonraker при истории: %v", err)
+	}
+	// Свой тип не блокируется: Moonraker с занятым своим буфером доходит
+	// до поиска принтера (в пустой БД — ERR_PRINTER_NOT_FOUND, не guard).
+	// (CSV-диалоги в headless-тесте не вызываем: runtime роняет процесс.)
+	app.pendingFile = nil
+	app.pendingMoonraker = []importers.PrintJob{{Filename: "x"}}
+	if _, err := app.MoonrakerPreview(1, 0); err == nil ||
+		strings.Contains(err.Error(), "ERR_PENDING_EXISTS") {
+		t.Fatalf("повтор moonraker: %v", err)
+	}
+	app.pendingMoonraker = nil
+	// Материалы pending → история и Moonraker заблокированы.
+	app.pendingMats = []byte("x")
+	if _, err := app.MoonrakerPreview(1, 0); err == nil ||
+		!strings.Contains(err.Error(), "ERR_PENDING_EXISTS") {
+		t.Fatalf("moonraker при материалах: %v", err)
+	}
+	// Отмена открывает всё.
+	app.CancelPendingImport()
+	if _, err := app.MoonrakerPreview(1, 0); err == nil ||
+		strings.Contains(err.Error(), "ERR_PENDING_EXISTS") {
+		t.Fatalf("после отмены: %v", err)
 	}
 }

@@ -251,7 +251,9 @@ func (d *DB) ExportMaterialsCSV(w io.Writer) error {
 }
 
 // ImportMaterials импортирует справочник материалов. dryRun=true —
-// только отчёт без записи. onProgress — прогресс применения (nil — молча).
+// только отчёт без записи (со строками предпросмотра MatRows).
+// limitRows — максимум последних строк файла (<=0 — все).
+// onProgress — прогресс применения (nil — молча).
 //
 // Новая парадигма «материал + катушки»: строка с кодом вида КОД-N —
 // это N-я катушка базового материала (создаётся материал при отсутствии
@@ -261,42 +263,102 @@ func (d *DB) ExportMaterialsCSV(w io.Writer) error {
 // Существующее не трогается вообще (ни поля, ни цены, ни катушки);
 // дубль номера внутри файла — ошибка со строкой. bought_at пусто
 // (дата неизвестна). Повтор идемпотентен.
-func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressFunc) (ImportReport, error) {
+func (d *DB) ImportMaterials(r io.Reader, dryRun bool, limitRows int, onProgress seed.ProgressFunc) (ImportReport, error) {
 	var rep ImportReport
 	rep.DryRun = dryRun
+	rep.Rows = []ImportRow{}
+	rep.MatRows = []ImportMatRow{}
 	rows, err := importers.ParseMaterials(r)
 	if err != nil {
 		return rep, err
 	}
+	rows = TakeLastMats(rows, limitRows)
 	rep.Total = len(rows)
-	mats := d.Materials()
-	list, err := mats.List()
+	list, err := d.Materials().List()
 	if err != nil {
 		return rep, fmt.Errorf("ERR_IMPORT: %w", err)
 	}
-	type spoolPlan struct {
-		n        int
-		price    float64
-		currency string
-		row      int
+	order, plans, matRows, fresh, exist, err := d.planMaterials(list, rows)
+	if err != nil {
+		return rep, err
 	}
-	type matPlan struct {
-		isNew  bool // базы не было в БД — создаём (существующие не трогаем)
-		fields importers.MaterialRow
-		spools []spoolPlan
-		bare   bool // строка без номера (legacy: первая катушка при цене)
+	rep.New, rep.Existing = fresh, exist
+	if dryRun {
+		rep.MatRows = matRows
+		return rep, nil
 	}
+	if err := d.applyMatsPlans(list, order, plans, onProgress); err != nil {
+		return rep, err
+	}
+	return rep, nil
+}
+
+// ImportMatsSelected записывает выбранные строки предпросмотра материалов.
+// Пустой список — ERR_NO_SELECTION.
+func (d *DB) ImportMatsSelected(rows []importers.MaterialRow, onProgress seed.ProgressFunc) (ImportReport, error) {
+	rep := ImportReport{Rows: []ImportRow{}, MatRows: []ImportMatRow{}}
+	if len(rows) == 0 {
+		return rep, fmt.Errorf("ERR_NO_SELECTION: не выбрана ни одна строка")
+	}
+	rep.Total = len(rows)
+	list, err := d.Materials().List()
+	if err != nil {
+		return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+	}
+	order, plans, _, fresh, exist, err := d.planMaterials(list, rows)
+	if err != nil {
+		return rep, err
+	}
+	rep.New, rep.Existing = fresh, exist
+	if rep.New == 0 {
+		return rep, nil
+	}
+	if err := d.applyMatsPlans(list, order, plans, onProgress); err != nil {
+		return rep, err
+	}
+	return rep, nil
+}
+
+// TakeLastMats оставляет N последних строк файла (порядок файла).
+// N <= 0 или больше длины — без изменений.
+func TakeLastMats(rows []importers.MaterialRow, n int) []importers.MaterialRow {
+	if n <= 0 || n >= len(rows) {
+		return rows
+	}
+	return rows[len(rows)-n:]
+}
+
+type spoolPlan struct {
+	n        int
+	price    float64
+	currency string
+	row      int
+}
+
+type matPlan struct {
+	isNew  bool // базы не было в БД — создаём (существующие не трогаем)
+	fields importers.MaterialRow
+	spools []spoolPlan
+	bare   bool // строка без номера (legacy: первая катушка при цене)
+}
+
+// planMaterials раскладывает строки по материалам/катушкам и считает
+// новые/существующие. Записи нет — используется dry-run и ImportMatsSelected.
+func (d *DB) planMaterials(list []models.Material, rows []importers.MaterialRow) (order []string, plans map[string]*matPlan, matRows []ImportMatRow, fresh, exist int, err error) {
+	mats := d.Materials()
 	knownMats := map[string]bool{}
 	existingNos := map[string]map[int]bool{}
 	for _, m := range list {
 		knownMats[m.Code] = true
 	}
-	plans := map[string]*matPlan{}
-	order := []string{}
+	plans = map[string]*matPlan{}
+	matRows = []ImportMatRow{}
 	for i, row := range rows {
 		rowNo := i + 2
 		if knownMats[row.Code] {
-			rep.Existing++
+			exist++
+			_, n := importers.SplitSpoolNo(row.Code)
+			matRows = append(matRows, ImportMatRow{MaterialRow: row, SpoolNo: n, Exists: true})
 			continue
 		}
 		base, n := importers.SplitSpoolNo(row.Code)
@@ -315,7 +377,8 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressF
 				}
 			}
 			if existingNos[base][n] {
-				rep.Existing++
+				exist++
+				matRows = append(matRows, ImportMatRow{MaterialRow: row, SpoolNo: n, Exists: true})
 				continue
 			}
 		}
@@ -327,7 +390,7 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressF
 		}
 		if n == 0 {
 			if p.bare {
-				return rep, fmt.Errorf("ERR_IMPORT: строка %d: дубль материала %q", rowNo, base)
+				return nil, nil, nil, 0, 0, fmt.Errorf("ERR_IMPORT: строка %d: дубль материала %q", rowNo, base)
 			}
 			p.bare = true
 			// Поля материала — из первой строки базы.
@@ -337,7 +400,7 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressF
 		} else {
 			for _, s := range p.spools {
 				if s.n == n {
-					return rep, fmt.Errorf("ERR_IMPORT: строка %d: дубль катушки %q №%d", rowNo, base, n)
+					return nil, nil, nil, 0, 0, fmt.Errorf("ERR_IMPORT: строка %d: дубль катушки %q №%d", rowNo, base, n)
 				}
 			}
 			if existingNos[base] == nil {
@@ -346,11 +409,15 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressF
 			existingNos[base][n] = true
 			p.spools = append(p.spools, spoolPlan{n: n, price: row.PricePerKg, currency: row.Currency, row: rowNo})
 		}
-		rep.New++
+		matRows = append(matRows, ImportMatRow{MaterialRow: row, SpoolNo: n, Exists: false})
+		fresh++
 	}
-	if dryRun {
-		return rep, nil
-	}
+	return order, plans, matRows, fresh, exist, nil
+}
+
+// applyMatsPlans записывает спланированные материалы/катушки.
+func (d *DB) applyMatsPlans(list []models.Material, order []string, plans map[string]*matPlan, onProgress seed.ProgressFunc) error {
+	mats := d.Materials()
 	for i, base := range order {
 		p := plans[base]
 		var mid int64
@@ -369,13 +436,13 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressF
 				Density: density, Diameter: p.fields.Diameter,
 			})
 			if err != nil {
-				return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+				return fmt.Errorf("ERR_IMPORT: %w", err)
 			}
 		} else {
 			var err error
 			mid, err = matIDByCode(list, base)
 			if err != nil {
-				return rep, err
+				return err
 			}
 		}
 		mkSpool := func(n int, price float64, currency string) error {
@@ -391,19 +458,19 @@ func (d *DB) ImportMaterials(r io.Reader, dryRun bool, onProgress seed.ProgressF
 		}
 		if p.bare && p.fields.PricePerKg > 0 {
 			if err := mkSpool(0, p.fields.PricePerKg, p.fields.Currency); err != nil {
-				return rep, fmt.Errorf("ERR_IMPORT: %w", err)
+				return fmt.Errorf("ERR_IMPORT: %w", err)
 			}
 		}
 		for _, s := range p.spools {
 			if err := mkSpool(s.n, s.price, s.currency); err != nil {
-				return rep, fmt.Errorf("ERR_IMPORT: строка %d: %w", s.row, err)
+				return fmt.Errorf("ERR_IMPORT: строка %d: %w", s.row, err)
 			}
 		}
 		if onProgress != nil {
 			onProgress(i+1, len(order))
 		}
 	}
-	return rep, nil
+	return nil
 }
 
 // matIDByCode ищет id материала по коду в готовом списке.
@@ -423,16 +490,26 @@ type ImportRow struct {
 	Exists bool `json:"exists"`
 }
 
+// ImportMatRow — одна строка предпросмотра импорта материалов: значения
+// MaterialRow плюс номер катушки (SpoolNo из КОД-N, 0 — без номера)
+// и флаг Exists (материал/катушка уже есть в БД).
+type ImportMatRow struct {
+	importers.MaterialRow
+	SpoolNo int  `json:"spoolNo"`
+	Exists  bool `json:"exists"`
+}
+
 // ImportReport — итог импорта истории.
 type ImportReport struct {
-	Total         int         `json:"total"`
-	New           int         `json:"new"`
-	Existing      int         `json:"existing"`
-	Stubs         int         `json:"stubs"`
-	SpoolStubs    int         `json:"spoolStubs"`
-	DryRun        bool        `json:"dryRun"`
-	LifetimeTotal int         `json:"lifetimeTotal,omitempty"` // всего за всё время (Moonraker totals)
-	Rows          []ImportRow `json:"rows"`                    // строки предпросмотра (только dry-run)
+	Total         int            `json:"total"`
+	New           int            `json:"new"`
+	Existing      int            `json:"existing"`
+	Stubs         int            `json:"stubs"`
+	SpoolStubs    int            `json:"spoolStubs"`
+	DryRun        bool           `json:"dryRun"`
+	LifetimeTotal int            `json:"lifetimeTotal,omitempty"` // всего за всё время (Moonraker totals)
+	Rows          []ImportRow    `json:"rows"`                    // строки предпросмотра (только dry-run)
+	MatRows       []ImportMatRow `json:"matRows"`                 // строки предпросмотра материалов (только dry-run)
 }
 
 // ImportHistory импортирует CSV принтера. dryRun=true — только отчёт без записи.
@@ -442,6 +519,7 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool, limitRows int, onProgress s
 	var rep ImportReport
 	rep.DryRun = dryRun
 	rep.Rows = []ImportRow{}
+	rep.MatRows = []ImportMatRow{}
 	rows, err := importers.ParseHistory(r)
 	if err != nil {
 		return rep, err

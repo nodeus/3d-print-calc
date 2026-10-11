@@ -131,6 +131,9 @@ func (a *App) saveCSV(defaultName, title string) (string, error) {
 // limitRows — максимум последних работ (<=0 — все), запоминается для Apply.
 func (a *App) PreviewHistoryCSV(limitRows int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
+	if len(a.pendingMoonraker) > 0 || len(a.pendingMats) > 0 {
+		return rep, errPendingExists
+	}
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title:   "Выбрать CSV истории",
 		Filters: []runtime.FileFilter{{DisplayName: "CSV (*.csv)", Pattern: "*.csv"}},
@@ -217,7 +220,9 @@ func (a *App) ApplyHistoryCSV(selected []int) (sqlite.ImportReport, error) {
 	}
 	rep.New, rep.Existing = fresh, exist
 	if rep.New == 0 {
-		a.clearPendingImport()
+		a.pendingFile = nil
+		a.pendingPath = ""
+		a.pendingCSVLimit = 0
 		return rep, nil
 	}
 	applied, err := a.db.ImportSelected(picked, a.emitProgress)
@@ -225,37 +230,41 @@ func (a *App) ApplyHistoryCSV(selected []int) (sqlite.ImportReport, error) {
 		return rep, err
 	}
 	applied.DryRun = false
-	a.clearPendingImport()
+	a.pendingFile = nil
+	a.pendingPath = ""
+	a.pendingCSVLimit = 0
 	return applied, nil
 }
 
-// CancelPendingImport сбрасывает запомненный Preview импорт (CSV и Moonraker).
-// Вызывается кнопкой «Отменить импорт»; отдельных прав не требует.
+// CancelPendingImport сбрасывает запомненный Preview импорт
+// (история CSV, Moonraker, материалы). Отдельных прав не требует.
 func (a *App) CancelPendingImport() {
 	a.clearPendingImport()
 }
 
-// clearPendingImport очищает все pending-буферы импорта.
+// clearPendingImport очищает все pending-буферы импорта (история, Moonraker, материалы).
 func (a *App) clearPendingImport() {
 	a.pendingFile = nil
 	a.pendingPath = ""
 	a.pendingCSVLimit = 0
+	a.pendingMats = nil
+	a.pendingMatsLimit = 0
 	a.pendingMoonraker = nil
 	a.pendingPrinterID = 0
 	a.pendingNew, a.pendingExisting = 0, 0
 }
 
-// selectImportRows оставляет строки предпросмотра по индексам (порядок —
+// selectIndices оставляет строки предпросмотра по индексам (порядок —
 // как в предпросмотре). nil — все строки; пустой список — ERR_NO_SELECTION;
 // индекс вне диапазона — ERR_SELECTION.
-func selectImportRows(rows []importers.PrintJob, selected []int) ([]importers.PrintJob, error) {
+func selectIndices[T any](rows []T, selected []int) ([]T, error) {
 	if selected == nil {
 		return rows, nil
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("ERR_NO_SELECTION: не выбрана ни одна строка")
 	}
-	out := make([]importers.PrintJob, 0, len(selected))
+	out := make([]T, 0, len(selected))
 	for _, i := range selected {
 		if i < 0 || i >= len(rows) {
 			return nil, fmt.Errorf("ERR_SELECTION: плохой индекс строки %d", i)
@@ -265,9 +274,20 @@ func selectImportRows(rows []importers.PrintJob, selected []int) ([]importers.Pr
 	return out, nil
 }
 
+// selectImportRows — выборка строк истории (см. selectIndices).
+func selectImportRows(rows []importers.PrintJob, selected []int) ([]importers.PrintJob, error) {
+	return selectIndices(rows, selected)
+}
+
 // PreviewMaterialsCSV читает CSV справочника в dry-run (отдельный буфер).
-func (a *App) PreviewMaterialsCSV() (sqlite.ImportReport, error) {
+// limitRows — максимум последних строк файла (<=0 — все), запоминается для Apply.
+func (a *App) PreviewMaterialsCSV(limitRows int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
+	rep.Rows = []sqlite.ImportRow{}
+	rep.MatRows = []sqlite.ImportMatRow{}
+	if len(a.pendingFile) > 0 || len(a.pendingMoonraker) > 0 {
+		return rep, errPendingExists
+	}
 	path, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
 		Title:   "Импорт CSV материалов",
 		Filters: []runtime.FileFilter{{DisplayName: "CSV (*.csv)", Pattern: "*.csv"}},
@@ -279,29 +299,43 @@ func (a *App) PreviewMaterialsCSV() (sqlite.ImportReport, error) {
 	if err != nil {
 		return rep, err
 	}
-	rep, err = a.db.ImportMaterials(bytes.NewReader(data), true, nil)
+	rep, err = a.db.ImportMaterials(bytes.NewReader(data), true, limitRows, nil)
 	if err != nil {
 		return rep, err
 	}
 	a.pendingMats = data
+	a.pendingMatsLimit = limitRows
 	return rep, nil
 }
 
 // ApplyMaterialsCSV применяет запомненный PreviewMaterialsCSV импорт (manager+).
-func (a *App) ApplyMaterialsCSV() (sqlite.ImportReport, error) {
+// selected — индексы строк предпросмотра (nil — все); пустой список — ошибка.
+func (a *App) ApplyMaterialsCSV(selected []int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
+	rep.Rows = []sqlite.ImportRow{}
+	rep.MatRows = []sqlite.ImportMatRow{}
 	if err := a.need(models.RoleManager); err != nil {
 		return rep, err
 	}
 	if len(a.pendingMats) == 0 {
 		return rep, errNoPending()
 	}
-	rep, err := a.db.ImportMaterials(bytes.NewReader(a.pendingMats), false, a.emitProgress)
+	rows, err := importers.ParseMaterials(bytes.NewReader(a.pendingMats))
+	if err != nil {
+		return rep, err
+	}
+	rows = sqlite.TakeLastMats(rows, a.pendingMatsLimit)
+	picked, err := selectIndices(rows, selected)
+	if err != nil {
+		return rep, err
+	}
+	applied, err := a.db.ImportMatsSelected(picked, a.emitProgress)
 	if err != nil {
 		return rep, err
 	}
 	a.pendingMats = nil
-	return rep, nil
+	a.pendingMatsLimit = 0
+	return applied, nil
 }
 
 func errNoPending() error {
@@ -309,6 +343,11 @@ func errNoPending() error {
 }
 
 var errPending = errors.New("ERR_NO_PENDING: сначала выберите файл (preview)")
+
+// errPendingExists — импорт только последовательный: предпросмотр при
+// занятом чужом буфере запрещён (порядок применения влияет на результат:
+// материалы меняют катушки и цены, история привязывается к катушкам).
+var errPendingExists = errors.New("ERR_PENDING_EXISTS: сначала примените или отмените текущий импорт")
 
 // reopen открывает БД после restore.
 func (a *App) reopen() error {
