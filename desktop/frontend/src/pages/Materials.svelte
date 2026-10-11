@@ -30,7 +30,7 @@
 
   // Катушки материала: список, раскрытие, правка.
   // Цена для расчётов — первая неархивная (порядок ListSpools); бейдж «расчётная».
-  type SpoolForm = { id: number; materialId: number; boughtAt: string; price: number | null; weight: number | null; currency: string; archived: boolean };
+  type SpoolForm = { id: number; materialId: number; boughtAt: string; price: number | null; weight: number | null; currency: string; archived: boolean; note: string };
   let spools: Record<number, SpoolDTO[]> = $state({});
   let expanded = $state(0);
   let spoolEdit: SpoolForm | null = $state(null);
@@ -57,7 +57,7 @@
   }
 
   function newSpool(m: MaterialDTO) {
-    spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB', archived: false };
+    spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB', archived: false, note: '' };
   }
 
   // Подсветка изменённой строки (вспышка гаснет сама через 650мс).
@@ -71,7 +71,7 @@
   }
 
   function editSpool(s: SpoolDTO) {
-    spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency, archived: s.archived };
+    spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency, archived: s.archived, note: s.note ?? '' };
   }
 
   async function saveSpool(defWeight: number) {
@@ -84,7 +84,7 @@
         const sid = await wails.addSpool({
           id: 0, materialId: se.materialId, spoolNo: 0, price: se.price ?? 0,
           currency: se.currency || 'RUB', boughtAt: se.boughtAt,
-          weightInitG: w, weightLeftG: w, archived: false,
+          weightInitG: w, weightLeftG: w, archived: false, note: se.note.trim(),
         });
         flash('s:' + sid);
       } else {
@@ -94,7 +94,7 @@
           ID: cur.id, MaterialID: cur.materialId, Price: Math.round((se.price ?? 0) * 100),
           Currency: se.currency || cur.currency, FxRate: 1, BoughtAt: se.boughtAt,
           WeightInitG: se.weight ?? cur.weightInitG, WeightLeftG: cur.weightLeftG,
-          Archived: se.archived,
+          Archived: se.archived, Note: se.note.trim(),
         });
         flash('s:' + se.id);
       }
@@ -178,6 +178,7 @@
     { key: 'weight', label: 'spool.weight', num: true },
     { key: 'left', label: 'spool.left', num: true },
     { key: 'flag', label: '' },
+    { key: 'note', label: 'mat.note' },
   ];
   const spoolKeys = spoolCols.map((c) => c.key);
   const spoolNum = (k: string) => spoolCols.some((c) => c.key === k && c.num);
@@ -199,6 +200,7 @@
         const arch = s.archived ? ` · ${$t('spool.archived')}` : '';
         return star + arch;
       }
+      case 'note': return s.note ?? '';
       default: return '';
     }
   }
@@ -485,6 +487,8 @@
                         <td class="n">{Math.round(s.leftG ?? s.weightLeftG)}</td>
                       {:else if k === 'flag'}
                         <td><input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} />{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
+                      {:else if k === 'note'}
+                        <td><input bind:value={spoolEdit.note} placeholder={$t('mat.note')} /></td>
                       {/if}
                     {/each}
                     <td class="no-print"><button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button> <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button></td>
@@ -507,6 +511,7 @@
                 <input type="date" bind:value={spoolEdit.boughtAt} title={$t('spool.date')} />
                 <input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder={$t('spool.price')} title={$t('spool.price')} />
                 <input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" title={$t('spool.weight')} />
+                <input bind:value={spoolEdit.note} placeholder={$t('mat.note')} title={$t('mat.note')} />
                 <button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button>
                 <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button>
               </div>

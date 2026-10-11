@@ -73,6 +73,7 @@ export interface Spool {
   WeightInitG: number;
   WeightLeftG: number;
   Archived: boolean;
+  Note: string;
 }
 
 export interface SpoolDTO {
@@ -86,6 +87,7 @@ export interface SpoolDTO {
   weightLeftG: number;
   leftG?: number;
   archived: boolean;
+  note: string;
 }
 
 export interface Material {

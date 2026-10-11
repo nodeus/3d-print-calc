@@ -175,6 +175,7 @@ type SpoolDTO struct {
 	WeightLeftG float64 `json:"weightLeftG"`
 	LeftG       float64 `json:"leftG"`
 	Archived    bool    `json:"archived"`
+	Note        string  `json:"note"`
 }
 
 func toSpoolDTO(s models.Spool) SpoolDTO {
@@ -182,6 +183,7 @@ func toSpoolDTO(s models.Spool) SpoolDTO {
 		ID: s.ID, MaterialID: s.MaterialID, SpoolNo: s.SpoolNo, Price: float64(s.Price) / 100,
 		Currency: s.Currency, BoughtAt: s.BoughtAt,
 		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightLeftG, Archived: s.Archived,
+		Note: s.Note,
 	}
 }
 
@@ -234,7 +236,7 @@ func (a *App) AddSpool(s SpoolDTO) (int64, error) {
 	}
 	return a.db.Materials().AddSpool(models.Spool{
 		MaterialID: s.MaterialID, Price: int64(s.Price*100 + 0.5), Currency: s.Currency,
-		FxRate: 1, BoughtAt: s.BoughtAt,
+		FxRate: 1, BoughtAt: s.BoughtAt, Note: s.Note,
 		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightInitG,
 	})
 }
