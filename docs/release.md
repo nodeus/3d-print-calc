@@ -18,10 +18,12 @@ Windows-exe пакуются UPX (`utils/upx.exe`, в git не идёт):
 Раскладка артефактов (в git не коммитится):
 
 ```
-release/<version>/<ГГГГ-ММ-ДД>/<os>-<arch>/
+release/<version>/<ГГГГ-ММ-ДД>/<os>/<arch>/
   3dprint-calc(.exe)
   build-info.txt   # версия, дата, платформа, git-коммит
   SHA256SUMS
+  HELP.md          # руководство пользователя
+  CHANGELOG.md     # список изменений
 ```
 
 Вручную (без инструмента) — то же самое напрямую:
