@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
+  import { openMaterial } from '../lib/nav';
   import { wails, type MaterialDTO, type Material, type SpoolDTO } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
@@ -258,8 +260,37 @@
       error = String(e);
     }
   }
+
+  // Счётчик катушек из DTO (без раскрытия): живые + архив.
+  function spoolLive(m: MaterialDTO): number {
+    return (m.spools ?? []).filter((s) => !s.archived).length;
+  }
+  function spoolArch(m: MaterialDTO): number {
+    return (m.spools ?? []).length - spoolLive(m);
+  }
+  function spoolCountLabel(m: MaterialDTO): string {
+    const arch = spoolArch(m);
+    return arch > 0 ? `${spoolLive(m)} +${arch}` : String(spoolLive(m));
+  }
+
+  // Внешний переход (из Отчётов): раскрыть материал, подсветить катушку.
+  async function openTarget() {
+    const tgt = get(openMaterial);
+    if (!tgt) return;
+    openMaterial.set(null);
+    const m = materials.find((x) => x.code === tgt.code);
+    if (!m) return;
+    expanded = m.id;
+    await loadSpools(m.id);
+    const s = (spools[m.id] ?? []).find((x) => x.spoolNo === tgt.spoolNo);
+    flash(s ? 's:' + s.id : 'm:' + m.id);
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-mid="${m.id}"]`)?.scrollIntoView({ block: 'center' });
+    });
+  }
+
   onMount(() => {
-    load();
+    load().then(() => openTarget());
     registerPdfExporter(toPDF);
     return () => registerPdfExporter(null);
   });
@@ -384,12 +415,12 @@
           <td class="no-print"><button onclick={saveEdit}>{$t('common.save')}</button> <button onclick={() => (editId = 0)}>{$t('common.cancel')}</button></td>
         </tr>
       {:else}
-        <tr class:row-flash={flashKey === 'm:' + m.id}>
+        <tr data-mid={m.id} class:row-flash={flashKey === 'm:' + m.id}>
           {#each matOrd as k}
             <td class:n={matNum(k)}>{matText(m, k)}</td>
           {/each}
           <td class="no-print">
-            <button onclick={() => toggleSpools(m)} title={$t('spool.title')}>{expanded === m.id ? '▾' : '▸'} {(spools[m.id] ?? []).length || ''}</button>
+            <button onclick={() => toggleSpools(m)} title={`${$t('spool.title')}: ${spoolLive(m)} ${$t('spool.active')} + ${spoolArch(m)} ${$t('spool.archived')}`}>{expanded === m.id ? '▾' : '▸'} {spoolCountLabel(m)}</button>
             {#if canWrite($user)}<button onclick={() => startEdit(m)} aria-label={$t('common.edit')}>✎</button> <button onclick={() => remove(m)} aria-label={$t('common.delete_q')}>✕</button>{/if}
           </td>
         </tr>

@@ -97,6 +97,13 @@ th.dragsrc {
 table.tw {
   table-layout: fixed;
 }
+/* Служебная колонка чекбоксов: строго по размеру чекбокса, вне системы
+   пользовательских ширин (не настраивается, не участвует в drag/resize). */
+th.selcol,
+td.selcol {
+  width: 32px;
+  max-width: 32px;
+}
 table.tw th {
   position: relative;
   overflow: visible;
