@@ -2,7 +2,7 @@
 //
 // Раскладка артефактов:
 //
-//	release/<version>/<YYYY-MM-DD>/<os>-<arch>/3dprint-calc(.exe) + build-info.txt + SHA256SUMS
+//	release/<version>/<YYYY-MM-DD>/<os>/<arch>/3dprint-calc(.exe) + build-info.txt + SHA256SUMS
 //
 // Версия — из desktop/version.go (const Version), дата — сегодня или -date.
 // Сборка — через wails (обязан быть на PATH), ldflags прошивает BuildDate.
@@ -157,7 +157,7 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// packUPX сжимает exe через utils/upx.exe (лежит в корне репо, в git не идёт).
+// packUPX сжимает exe через utils/upx.exe (лежит локально, в git не идёт).
 // UPX может давать ложные срабатывания антивирусов и чуть более медленный
 // холодный старт — см. docs/release.md.
 func packUPX(path string) error {
