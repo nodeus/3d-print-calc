@@ -6,6 +6,16 @@
 build/
 bin/
 desktop/build/
+# Исключение: исходник и иконка приложения — в git идут (собираются в exe);
+# остальное содержимое desktop/build/ (bin/ и прочее) — нет.
+# (Папку целиком игнорить нельзя — тогда исключения файлов не сработают,
+# это касается и общего правила build/ выше.)
+!desktop/build/
+desktop/build/*
+!desktop/build/appicon.png
+!desktop/build/windows/
+desktop/build/windows/*
+!desktop/build/windows/icon.ico
 /release/
 
 # Wails / frontend (dist и package.json.md5 — артефакты `wails build`, в git не идут;
