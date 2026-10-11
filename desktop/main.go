@@ -76,7 +76,7 @@ func main() {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.eventsOn = true
-	runtime.WindowSetTitle(ctx, fmt.Sprintf("3D Print Cost Calculator v%s (%s)", Version, BuildDate))
+	runtime.WindowSetTitle(ctx, fmt.Sprintf("3D Print Cost Calculator v%s (%s)", Version, buildDateLabel()))
 	// Размер уже задан в options до Run; здесь только позиция из настроек.
 	if w, err := a.GetWindowSettings(); err == nil && w.W > 0 && w.H > 0 {
 		runtime.WindowSetPosition(ctx, w.X, w.Y)
