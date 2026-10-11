@@ -35,10 +35,6 @@
   let expanded = $state(0);
   let spoolEdit: SpoolForm | null = $state(null);
 
-  function calcSpool(list: SpoolDTO[]): SpoolDTO | null {
-    return list.find((s) => !s.archived) ?? null;
-  }
-
   async function toggleSpools(m: MaterialDTO) {
     if (expanded === m.id) {
       expanded = 0;
@@ -177,8 +173,7 @@
     { key: 'price', label: 'spool.price', num: true },
     { key: 'weight', label: 'spool.weight', num: true },
     { key: 'left', label: 'spool.left', num: true },
-    { key: 'flag', label: '' },
-    { key: 'note', label: 'mat.note' },
+    { key: 'status', label: 'spool.status' }, { key: 'note', label: 'mat.note' },
   ];
   const spoolKeys = spoolCols.map((c) => c.key);
   const spoolNum = (k: string) => spoolCols.some((c) => c.key === k && c.num);
@@ -186,7 +181,7 @@
 
   let spoolOrd = $derived(orderFor($mySettings.colOrder, 'spools', spoolKeys));
 
-  // Текст ячейки катушки (flag — маркеры ★/архив, шапка пустая).
+  // Текст ячейки катушки (status — В работе / В архиве).
   function spoolText(s: SpoolDTO, list: SpoolDTO[], k: string): string {
     switch (k) {
       case 'num': return String(s.spoolNo || '—');
@@ -195,11 +190,7 @@
       case 'weight': return String(s.weightInitG);
       // Остаток — вычисляемый (партия минус расход по истории), не поле БД.
       case 'left': return String(Math.round(s.leftG ?? s.weightLeftG));
-      case 'flag': {
-        const star = calcSpool(list)?.id === s.id ? `★ ${$t('spool.calc')}` : '';
-        const arch = s.archived ? ` · ${$t('spool.archived')}` : '';
-        return star + arch;
-      }
+      case 'status': return s.archived ? $t('spool.archived') : $t('spool.active');
       case 'note': return s.note ?? '';
       default: return '';
     }
@@ -485,8 +476,8 @@
                         <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
                       {:else if k === 'left'}
                         <td class="n">{Math.round(s.leftG ?? s.weightLeftG)}</td>
-                      {:else if k === 'flag'}
-                        <td><input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} />{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
+                      {:else if k === 'status'}
+                        <td><label>{$t('spool.status')}: <input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} /> {spoolEdit.archived ? $t('spool.archived') : $t('spool.active')}</label></td>
                       {:else if k === 'note'}
                         <td><input bind:value={spoolEdit.note} placeholder={$t('mat.note')} /></td>
                       {/if}
