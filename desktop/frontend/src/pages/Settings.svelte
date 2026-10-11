@@ -15,6 +15,7 @@
   import { colKeyMove } from '../lib/colkeyboard';
   import { calcFormDefaults, applyCalcDefaults, type CalcForm } from '../lib/calcform';
   import Users from './Users.svelte';
+  import ImportPreview from '../lib/ImportPreview.svelte';
 
   let currency = $state('RUB');
   const codes = ['RUB', 'USD', 'EUR', 'KZT', 'BYN'];
@@ -28,6 +29,8 @@
   let backupManifest: BackupManifest | null = $state(null);
   let csvReport: ImportReport | null = $state(null);
   let csvApplied: ImportReport | null = $state(null);
+  // Открытая модалка табличного предпросмотра CSV (null — закрыта).
+  let csvPreview: ImportReport | null = $state(null);
   // Лимит последних работ CSV (null — пусто, т.е. весь файл).
   let csvLimit: number | null = $state(null);
   let matsReport: ImportReport | null = $state(null);
@@ -447,6 +450,17 @@
     run(wails.applyBackup, (r) => (backupManifest = r));
   }
 
+  async function previewCSV() {
+    error = '';
+    try {
+      const r = await wails.previewHistoryCSV(csvLimit ?? 0);
+      csvReport = r;
+      if (r?.dryRun) csvPreview = r;
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   async function applyCSV() {
     error = '';
     importing = true;
@@ -461,6 +475,7 @@
     } finally {
       importing = false;
       wails.offImportProgress();
+      csvPreview = null;
     }
   }
 
@@ -625,7 +640,7 @@
     <button onclick={() => run(wails.exportJobsCSV, (p) => (backupPath = p))}>{$t('set.csv_jobs_out')}</button>
     <button onclick={() => run(wails.exportMaterialsCSV, (p) => (backupPath = p))}>{$t('set.csv_mats_out')}</button>
     <input type="number" min="1" step="1" bind:value={csvLimit} placeholder={$t('set.csv_limit')} title={$t('set.csv_limit')} style={`width:${$t('set.csv_limit').length + 5}ch`} />
-    <button onclick={() => run(() => wails.previewHistoryCSV(csvLimit ?? 0), (r) => (csvReport = r))}>{$t('set.csv_in')}</button>
+    <button onclick={previewCSV}>{$t('set.csv_in')}</button>
     {#if csvReport?.dryRun}<button class="warn" onclick={applyCSV} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
     <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
     {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
@@ -636,6 +651,7 @@
   {#if matsReport}<p>{$t('set.csv_preview')}: total {matsReport.total}, new {matsReport.new}, existing {matsReport.existing}</p>{/if}
   {#if matsApplied}<p class="ok">{$t('set.csv_done')}: +{matsApplied.new}</p>{/if}
 </div>
+{#if csvPreview}<ImportPreview report={csvPreview} perPage={historyPerPage} onApply={applyCSV} onClose={() => (csvPreview = null)} />{/if}
 
 {:else if setTab === 'access'}
 <div class="card">

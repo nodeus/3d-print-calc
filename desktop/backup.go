@@ -192,6 +192,7 @@ func (a *App) ExportPDF(title, filename string, sections []export.Section) (stri
 // ApplyHistoryCSV применяет запомненный PreviewHistoryCSV импорт (manager+).
 func (a *App) ApplyHistoryCSV() (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
+	rep.Rows = []sqlite.ImportRow{}
 	if err := a.need(models.RoleManager); err != nil {
 		return rep, err
 	}

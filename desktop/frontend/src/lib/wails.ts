@@ -234,6 +234,22 @@ export interface BackupManifest {
   files?: string[];
 }
 
+export interface ImportRow {
+  Filename: string;
+  Type: string;
+  Status: string;
+  Size: number;
+  StartTime: string;
+  EndTime: string;
+  EstimatedTime: number;
+  PrintDuration: number;
+  TotalDuration: number;
+  FilamentTotal: number;
+  FilamentUsed: number;
+  Slicer: string;
+  Exists: boolean;
+}
+
 export interface ImportReport {
   total: number;
   new: number;
@@ -242,6 +258,7 @@ export interface ImportReport {
   spoolStubs: number;
   dryRun: boolean;
   lifetimeTotal?: number;
+  rows: ImportRow[];
 }
 
 export interface BulkDeleteReport {

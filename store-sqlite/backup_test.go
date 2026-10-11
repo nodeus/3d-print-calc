@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -375,5 +376,78 @@ func TestTakeLastJobs(t *testing.T) {
 	}
 	if full := takeLastJobs(rows, 99); len(full) != 3 {
 		t.Fatalf("большой лимит: %+v", full)
+	}
+}
+
+// TestImportHistoryPreviewRows: dry-run отдаёт строки предпросмотра — ровно
+// лимит, с флагом Exists; apply-отчёт — пустой (не null) список строк.
+func TestImportHistoryPreviewRows(t *testing.T) {
+	db := seedTestDB(t, t.TempDir())
+	if _, err := db.Printers().Save(models.Printer{Name: "K1C", HoursPerDay: 8,
+		LifeYears: 3, CalendarMode: "calendar", AmortMethod: "calendar"}); err != nil {
+		t.Fatal(err)
+	}
+	raw := "filename;type;status;size;start_time;end_time;estimated_time;print_duration;" +
+		"total_duration;filament_total;filament_used;slicer\n" +
+		"b.gcode;job;completed;1;02.10.2026 10:00;02.10.2026 11:00;3600;3600;3600;1000;900;Orca\n" +
+		"a.gcode;job;completed;1;03.10.2026 10:00;03.10.2026 11:00;3600;3600;3600;1000;1000;Orca\n" +
+		"c.gcode;job;completed;1;01.10.2026 10:00;01.10.2026 11:00;3600;3600;3600;1000;800;Orca\n"
+	rep, err := db.ImportHistory(strings.NewReader(raw), true, 2, nil)
+	if err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	if len(rep.Rows) != 2 {
+		t.Fatalf("строк preview = %d, хочу 2", len(rep.Rows))
+	}
+	if rep.Rows[0].Filename != "a.gcode" || rep.Rows[1].Filename != "b.gcode" {
+		t.Fatalf("порядок preview: %q, %q", rep.Rows[0].Filename, rep.Rows[1].Filename)
+	}
+	for _, r := range rep.Rows {
+		if r.Exists {
+			t.Fatalf("Exists до импорта: %+v", r)
+		}
+	}
+	r0 := rep.Rows[0]
+	if r0.Slicer != "Orca" || r0.FilamentUsed != 1000 || r0.PrintDuration != 3600 || r0.Size != 1 {
+		t.Fatalf("значения строки: %+v", r0)
+	}
+	if r0.StartTime.Format("02.01.2006 15:04") != "03.10.2026 10:00" {
+		t.Fatalf("время строки: %v", r0.StartTime)
+	}
+	// JSON для фронта: имена полей как в Go + exists.
+	js, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dec struct {
+		Rows []map[string]any `json:"rows"`
+	}
+	if err := json.Unmarshal(js, &dec); err != nil {
+		t.Fatal(err)
+	}
+	if len(dec.Rows) != 2 || dec.Rows[0]["Filename"] != "a.gcode" || dec.Rows[0]["exists"] != false {
+		t.Fatalf("JSON rows: %v", dec.Rows)
+	}
+	// Apply: строки не возвращаются (пустой, не null), затем дублей видно в preview.
+	rep2, err := db.ImportHistory(strings.NewReader(raw), false, 2, nil)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if rep2.Rows == nil || len(rep2.Rows) != 0 {
+		t.Fatalf("apply rows обязан быть пустым списком: %+v", rep2.Rows)
+	}
+	rep3, err := db.ImportHistory(strings.NewReader(raw), true, 0, nil)
+	if err != nil {
+		t.Fatalf("re-preview: %v", err)
+	}
+	if len(rep3.Rows) != 3 || rep3.New != 1 || rep3.Existing != 2 {
+		t.Fatalf("re-preview: %+v", rep3)
+	}
+	flags := map[string]bool{}
+	for _, r := range rep3.Rows {
+		flags[r.Filename] = r.Exists
+	}
+	if !flags["a.gcode"] || !flags["b.gcode"] || flags["c.gcode"] {
+		t.Fatalf("флаги Exists: %v", flags)
 	}
 }

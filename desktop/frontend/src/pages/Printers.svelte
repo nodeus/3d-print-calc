@@ -12,6 +12,7 @@
   import { orderFor, saveTableOrder } from '../lib/colorder';
   import { startColDrag } from '../lib/coldrag';
   import { colKeyMove } from '../lib/colkeyboard';
+  import ImportPreview from '../lib/ImportPreview.svelte';
 
   let printers: PrinterDTO[] = $state([]);
   let error = $state('');
@@ -146,6 +147,8 @@
   let progress: Record<number, { done: number; total: number }> = $state({});
   // Лимит последних работ Moonraker (null — пусто, т.е. вся история).
   let moonLimit: Record<number, number | null> = $state({});
+  // Открытая модалка табличного предпросмотра (на принтер).
+  let moonPreview: Record<number, ImportReport | null> = $state({});
 
   function blank(): PrinterForm {
     return {
@@ -283,6 +286,7 @@
     applied[p.ID] = null;
     try {
       report[p.ID] = await wails.moonrakerPreview(p.ID, moonLimit[p.ID] ?? 0);
+      moonPreview[p.ID] = report[p.ID]?.dryRun ? report[p.ID] : null;
     } catch (e) {
       error = String(e);
     }
@@ -303,6 +307,7 @@
     } finally {
       importing[p.ID] = false;
       wails.offImportProgress();
+      moonPreview[p.ID] = null;
     }
   }
 
@@ -405,6 +410,7 @@
     {#if report[p.ID]?.dryRun && canWrite($user)}<button class="warn no-print" onclick={() => apply(p)} disabled={importing[p.ID]}>{$t('set.csv_apply')}</button>{/if}
     {#if importing[p.ID] && progress[p.ID]}<progress value={progress[p.ID].done} max={progress[p.ID].total || 1}></progress> {progress[p.ID].done}/{progress[p.ID].total}{/if}
     {#if applied[p.ID]}<p class="ok">{$t('set.csv_done')}: +{applied[p.ID]!.new} (stubs {applied[p.ID]!.stubs}, {$t('set.csv_spool_stubs')} {applied[p.ID]!.spoolStubs ?? 0})</p>{/if}
+    {#if moonPreview[p.ID]}<ImportPreview report={moonPreview[p.ID]!} perPage={$mySettings.historyPerPage > 0 ? $mySettings.historyPerPage : 50} onApply={() => apply(p)} onClose={() => (moonPreview[p.ID] = null)} />{/if}
     <h4>{$t('part.title')}</h4>
     <table>
       <thead><tr><th><button class="th" onclick={() => togglePartSort('date')}>{$t('part.date')}{partArrow('date')}</button></th><th><button class="th" onclick={() => togglePartSort('name')}>{$t('part.name')}{partArrow('name')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('price')}>{$t('part.price')}{partArrow('price')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('qty')}>{$t('part.qty')}{partArrow('qty')}</button></th><th class="n"><button class="th" onclick={() => togglePartSort('total')}>{$t('part.total')}{partArrow('total')}</button></th><th><button class="th" onclick={() => togglePartSort('note')}>{$t('part.note')}{partArrow('note')}</button></th><th class="no-print"></th></tr></thead>

@@ -41,15 +41,17 @@ func (a *App) MoonrakerStatus(printerID int64) (string, error) {
 func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
 	rep.DryRun = true
+	rep.Rows = []sqlite.ImportRow{}
 	rows, err := a.fetchMoonraker(printerID, limit)
 	if err != nil {
 		return rep, err
 	}
-	fresh, exist, err := a.db.ClassifyJobs(rows)
+	classified, fresh, exist, err := a.db.ClassifyRows(rows)
 	if err != nil {
 		return rep, err
 	}
 	rep.Total, rep.New, rep.Existing = len(rows), fresh, exist
+	rep.Rows = classified
 	// Lifetime-счётчик: сколько работ принтер видел за всё время.
 	if p, ferr := a.findPrinter(printerID); ferr == nil && p.MoonrakerURL != "" {
 		ctx, cancel := context.WithTimeout(a.ctx, 15*time.Second)
@@ -67,6 +69,7 @@ func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport,
 // MoonrakerApply применяет запомненный Preview импорт (manager+).
 func (a *App) MoonrakerApply() (sqlite.ImportReport, error) {
 	var rep sqlite.ImportReport
+	rep.Rows = []sqlite.ImportRow{}
 	if err := a.need(models.RoleManager); err != nil {
 		return rep, err
 	}
