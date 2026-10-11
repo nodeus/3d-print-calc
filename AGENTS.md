@@ -216,6 +216,9 @@ orders(+number, +title), order_items, payments, fx_rates, settings`. Импор�
 - Проверки: `go build ./...`, `go vet ./...`, `go test ./...`, `gofmt -l .` (пусто),
   `npm run check` в `desktop/frontend` (svelte-check: ловит ошибки шаблонов,
   которые `vite build` пропускает — напр. `{YYYY}` в атрибутах).
+- Порядок сдачи работы: после правок кода — dev-билд (`wails build` из `desktop/`),
+  затем просьба заказчику проверить визуально/вживую и только потом коммит.
+  Без подтверждения проверки не коммитить.
 - Бэкап/восстановление: `backup.zip (app.db + csv/json)` в 1 клик, импорт с dry-run.
 
 ## 7. Что НЕ делать
