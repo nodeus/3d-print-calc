@@ -12,7 +12,7 @@ import (
 //
 // По умолчанию — dev.
 var (
-	Version   = "1.4.17"
+	Version   = "1.4.18"
 	BuildDate = "dev"
 )
 
