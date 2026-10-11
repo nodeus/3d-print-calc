@@ -21,4 +21,5 @@
 
 - `main` — релизы, `develop` — интеграция. Прямые коммиты в них запрещены.
 - `feature/<name>` от `develop` → merge в `develop` (коммит `merge: feature/<name> into develop`).
+- После мёржа topic-ветку удалять локально (`git branch -d <name>`); remote — по мере появления.
 - Релизный тег `vX.Y.Z` — на `main`; фиксы — `1.0.x`, мажор — только по команде заказчика.
