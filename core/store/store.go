@@ -44,6 +44,8 @@ type Jobs interface {
 	DeleteJob(id int64) error                                                         // manual — удалить; edited import — откат; чистый import — блок
 	DeleteJobs(ids []int64) (BulkDeleteReport, error)                                 // bulk чекбоксами: всё выбранное физически, кроме связанных с заказами
 	UpdateManual(j models.Job, material string, spoolID int64, in JobCalcInput) error // правка + автопересчёт (manual и import)
+	BulkPreview(ids []int64, p JobBulkPatch) ([]BulkJobPreview, error)                // превью массовой правки без записи
+	BulkApply(ids []int64, p JobBulkPatch) (BulkApplyReport, error)                   // массовая правка: только реально изменившиеся поля
 	RevertJob(id int64) error                                                         // откат изменённой к импорту
 }
 
@@ -76,6 +78,63 @@ type JobCalcInput struct {
 	Copies       int
 	VATRate      float64
 	RoundStep    float64
+}
+
+// JobBulkPatch — разреженный патч массовой правки истории: применяются
+// только непустые поля (числа — указатели: 0 значим; Material/SpoolID —
+// ""/0 = нетронуто; снять линк катушки в bulk нельзя).
+// Единицы — как в JobCalcInput (failRate/vatRate — доли).
+type JobBulkPatch struct {
+	Status       *string
+	StartAt      *string
+	EndAt        *string
+	PrintSec     *int64
+	TotalSec     *int64
+	WeightG      *float64
+	LengthM      *float64
+	Slicer       *string
+	Material     string
+	SpoolID      int64
+	Tariff       *float64
+	PowerKW      *float64
+	AmortPerHour *float64
+	MaintPerHour *float64
+	PurgeWasteG  *float64
+	OpRate       *float64
+	PrepH        *float64
+	PostH        *float64
+	DesignerRate *float64
+	ModelH       *float64
+	ModelPrice   *float64
+	ExtraMat     *float64
+	FailRate     *float64
+	MarginProfit *float64
+	MarginDev    *float64
+	Fees         *float64
+	Copies       *int
+	VATRate      *float64
+	RoundStep    *float64
+}
+
+// BulkChange — одно поле превью: ключ, старое и новое сырые значения.
+type BulkChange struct {
+	Field string `json:"field"`
+	Old   any    `json:"old"`
+	New   any    `json:"new"`
+}
+
+// BulkJobPreview — превью одной работы: итог пересчёта + тронутые поля.
+type BulkJobPreview struct {
+	JobID    int64        `json:"jobId"`
+	Filename string       `json:"filename"`
+	Cost     float64      `json:"cost"`
+	Price    float64      `json:"price"`
+	Changes  []BulkChange `json:"changes"`
+}
+
+// BulkApplyReport — итог массовой правки (писались только changed-работы).
+type BulkApplyReport struct {
+	Updated int `json:"updated"`
 }
 
 // Users — локальные пользователи и роли.

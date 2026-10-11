@@ -54,6 +54,7 @@ export interface MaterialDTO {
   diameter: number;
   defaultWeightG: number;
   pricePerKg: number;
+  avgPricePerKg: number;
   currency: string;
   spoolId: number;
   spoolLeftG: number;
@@ -72,6 +73,7 @@ export interface Spool {
   WeightInitG: number;
   WeightLeftG: number;
   Archived: boolean;
+  Note: string;
 }
 
 export interface SpoolDTO {
@@ -85,6 +87,7 @@ export interface SpoolDTO {
   weightLeftG: number;
   leftG?: number;
   archived: boolean;
+  note: string;
 }
 
 export interface Material {
@@ -231,6 +234,22 @@ export interface BackupManifest {
   files?: string[];
 }
 
+export interface ImportRow {
+  Filename: string;
+  Type: string;
+  Status: string;
+  Size: number;
+  StartTime: string;
+  EndTime: string;
+  EstimatedTime: number;
+  PrintDuration: number;
+  TotalDuration: number;
+  FilamentTotal: number;
+  FilamentUsed: number;
+  Slicer: string;
+  Exists: boolean;
+}
+
 export interface ImportReport {
   total: number;
   new: number;
@@ -239,11 +258,63 @@ export interface ImportReport {
   spoolStubs: number;
   dryRun: boolean;
   lifetimeTotal?: number;
+  rows: ImportRow[];
 }
 
 export interface BulkDeleteReport {
   deleted: number;
   skippedOrder: string[];
+}
+
+export interface BulkChange {
+  field: string;
+  old: number | string | null;
+  new: number | string | null;
+}
+
+export interface BulkJobPreview {
+  jobId: number;
+  filename: string;
+  cost: number;
+  price: number;
+  changes: BulkChange[];
+}
+
+export interface BulkApplyReport {
+  updated: number;
+}
+
+// Разреженный патч bulk-правки: null/''/0 = поле нетронуто.
+export interface JobBulkPatch {
+  status: string | null;
+  startAt: string | null;
+  endAt: string | null;
+  printSec: number | null;
+  totalSec: number | null;
+  weightG: number | null;
+  lengthM: number | null;
+  slicer: string | null;
+  material: string;
+  spoolId: number;
+  tariff: number | null;
+  powerKW: number | null;
+  amortPerHour: number | null;
+  maintPerHour: number | null;
+  purgeWasteG: number | null;
+  opRate: number | null;
+  prepH: number | null;
+  postH: number | null;
+  designerRate: number | null;
+  modelH: number | null;
+  modelPrice: number | null;
+  extraMat: number | null;
+  failRate: number | null;
+  marginProfit: number | null;
+  marginDev: number | null;
+  fees: number | null;
+  copies: number | null;
+  vatRate: number | null;
+  roundStep: number | null;
 }
 
 export interface UserDTO {
@@ -443,7 +514,8 @@ declare global {
           ExportJobsCSV(): Promise<string>;
           ExportMaterialsCSV(): Promise<string>;
           PreviewHistoryCSV(limitRows: number): Promise<ImportReport>;
-          ApplyHistoryCSV(): Promise<ImportReport>;
+          ApplyHistoryCSV(selected: number[]): Promise<ImportReport>;
+          CancelPendingImport(): Promise<void>;
           PreviewMaterialsCSV(): Promise<ImportReport>;
           ApplyMaterialsCSV(): Promise<ImportReport>;
           Login(login: string, password: string): Promise<UserDTO>;
@@ -464,6 +536,8 @@ declare global {
           DeleteOrder(id: number): Promise<void>;
           DeleteJob(id: number): Promise<void>;
           DeleteJobs(ids: number[]): Promise<BulkDeleteReport>;
+          BulkPreviewJobs(ids: number[], patch: JobBulkPatch): Promise<BulkJobPreview[]>;
+          BulkApplyJobs(ids: number[], patch: JobBulkPatch): Promise<BulkApplyReport>;
           UpdateManualJob(job: JobEdit): Promise<void>;
           OrderNumberSettings(): Promise<Record<string, string>>;
           SetOrderNumberSettings(template: string, seq: string): Promise<void>;
@@ -488,7 +562,7 @@ declare global {
           SetMoonrakerURL(printerId: number, url: string): Promise<void>;
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
-          MoonrakerApply(): Promise<ImportReport>;
+          MoonrakerApply(selected: number[]): Promise<ImportReport>;
           AddMaterial(code: string, matType: string, density: number, weightG: number, vendor: string, colorHex: string, note: string): Promise<number>;
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
@@ -549,7 +623,8 @@ export const wails = {
   exportJobsCSV: () => api().ExportJobsCSV(),
   exportMaterialsCSV: () => api().ExportMaterialsCSV(),
   previewHistoryCSV: (limitRows: number) => api().PreviewHistoryCSV(limitRows),
-  applyHistoryCSV: () => api().ApplyHistoryCSV(),
+  applyHistoryCSV: (selected: number[]) => api().ApplyHistoryCSV(selected),
+  cancelPendingImport: () => api().CancelPendingImport(),
   previewMaterialsCSV: () => api().PreviewMaterialsCSV(),
   applyMaterialsCSV: () => api().ApplyMaterialsCSV(),
   login: (login: string, password: string) => api().Login(login, password),
@@ -571,6 +646,8 @@ export const wails = {
   deleteOrder: (id: number) => api().DeleteOrder(id),
   deleteJob: (id: number) => api().DeleteJob(id),
   deleteJobs: (ids: number[]) => api().DeleteJobs(ids),
+  bulkPreviewJobs: (ids: number[], patch: JobBulkPatch) => api().BulkPreviewJobs(ids, patch),
+  bulkApplyJobs: (ids: number[], patch: JobBulkPatch) => api().BulkApplyJobs(ids, patch),
   updateManualJob: (job: JobEdit) => api().UpdateManualJob(job),
   orderNumberSettings: () => api().OrderNumberSettings(),
   setOrderNumberSettings: (template: string, seq: string) => api().SetOrderNumberSettings(template, seq),
@@ -594,7 +671,7 @@ export const wails = {
   setMoonrakerURL: (printerId: number, url: string) => api().SetMoonrakerURL(printerId, url),
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
   moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
-  moonrakerApply: () => api().MoonrakerApply(),
+  moonrakerApply: (selected: number[]) => api().MoonrakerApply(selected),
   addMaterial: (code: string, matType: string, density: number, weightG: number, vendor: string, colorHex: string, note: string) =>
     api().AddMaterial(code, matType, density, weightG, vendor, colorHex, note),
   updateMaterial: (m: Material) => api().UpdateMaterial(m),

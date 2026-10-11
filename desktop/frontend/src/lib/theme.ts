@@ -123,6 +123,9 @@ export const THEME_PRESET_DARK = THEME_PRESETS.filter((p) => p.dark);
 export const THEME_PRESET_LIGHT = THEME_PRESETS.filter((p) => !p.dark);
 
 // applyTheme ставит тему: light/dark — атрибут, custom — атрибут + переменные.
+// color-scheme выставляется явно по флагу пресета, чтобы нативные контролы
+// (чекбоксы, спиннеры, скроллбары) не брали схему из ОС. Чужим импортным
+// темам без флага и базовым light/dark сбрасываем в дефолт CSS.
 export function applyTheme(name: string, custom: Record<string, ThemeVars>): void {
   const vars = custom[name];
   if (name !== 'light' && name !== 'dark' && vars) {
@@ -132,10 +135,14 @@ export function applyTheme(name: string, custom: Record<string, ThemeVars>): voi
       if (vars[k]) root.style.setProperty(`--${k}`, vars[k]);
       else root.style.removeProperty(`--${k}`);
     }
+    const preset = THEME_PRESETS.find((p) => p.name === name);
+    if (preset) root.style.colorScheme = preset.dark ? 'dark' : 'light';
+    else root.style.removeProperty('color-scheme');
   } else {
     document.documentElement.setAttribute('data-theme', name === 'dark' ? 'dark' : 'light');
     const root = document.documentElement;
     for (const k of THEME_VARS) root.style.removeProperty(`--${k}`);
+    root.style.removeProperty('color-scheme');
   }
   uiTheme.set(name);
 }

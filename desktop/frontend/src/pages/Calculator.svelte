@@ -381,12 +381,6 @@
     return $t('calc.amort_calendar');
   }
 
-  // Первая живая катушка материала — «расчётная» для подсказки.
-  let isCalcSpool = $derived.by(() => {
-    if (!selSpool) return false;
-    return (selSpool.mat.spools ?? []).find((s) => !s.archived)?.id === selSpool.spool.id;
-  });
-
   // Смена принтера пользователем: ставки берутся с принтера — говорим об этом.
   // Программные вызовы selectPrinter (загрузка) молчат.
   function onPrinterChange(id: number) {
@@ -639,7 +633,7 @@
         </select>
       </label>
     </div>
-    {#if selSpool}<p class="note">{selSpool.mat.code} · {money(selSpool.spool.price, selSpool.spool.currency, $locale)}/кг{#if (selSpool.spool.leftG ?? selSpool.spool.weightLeftG) > 0}, {Math.round(selSpool.spool.leftG ?? selSpool.spool.weightLeftG)} {$locale === 'ru' ? 'г' : 'g'}{/if}{#if isCalcSpool} · ★ {$t('spool.calc')}{/if}</p>{/if}
+    {#if selSpool}<p class="note">{selSpool.mat.code} · {money(selSpool.spool.price, selSpool.spool.currency, $locale)}/кг{#if (selSpool.spool.leftG ?? selSpool.spool.weightLeftG) > 0}, {Math.round(selSpool.spool.leftG ?? selSpool.spool.weightLeftG)} {$locale === 'ru' ? 'г' : 'g'}{/if}</p>{/if}
     <div class="row">
       <label>{$t('calc.time_h')}<input placeholder="3" type="number" min="0" bind:value={timeH} oninput={recalc} /></label>
       <label>{$t('calc.time_m')}<input placeholder="30" type="number" min="0" max="59" bind:value={timeM} oninput={recalc} /></label>

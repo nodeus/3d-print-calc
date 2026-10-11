@@ -397,4 +397,54 @@ func TestAddMaterialFullFields(t *testing.T) {
 	if dto.ID == 0 || dto.Note != "тестовая заметка" || dto.PricePerKg != 0 || dto.HasLiveSpool {
 		t.Fatalf("DTO: %+v", dto)
 	}
+	if dto.AvgPricePerKg != 0 {
+		t.Fatalf("среднее без катушек: %+v", dto)
+	}
+}
+
+// TestMaterialAvgPrice: витринное среднее — простое по ВСЕМ катушкам
+// (включая архивную); расчётная PricePerKg не меняется.
+func TestMaterialAvgPrice(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{db: db, dbPath: path}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatal(err)
+	}
+	id, err := app.AddMaterial("PETG-AVG", "PETG", 1.27, 1000, "", "", "")
+	if err != nil || id == 0 {
+		t.Fatalf("AddMaterial: %v %d", id, err)
+	}
+	for _, s := range []models.Spool{
+		{MaterialID: id, Price: 100000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000},
+		{MaterialID: id, Price: 200000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000},
+		{MaterialID: id, Price: 300000, Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000, Archived: true},
+	} {
+		if _, err := db.Materials().AddSpool(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mats, err := app.GetMaterials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dto MaterialDTO
+	for _, x := range mats {
+		if x.Code == "PETG-AVG" {
+			dto = x
+		}
+	}
+	if dto.ID == 0 {
+		t.Fatal("материал не найден")
+	}
+	if dto.AvgPricePerKg != 2000 {
+		t.Fatalf("среднее: %v, хочу 2000", dto.AvgPricePerKg)
+	}
+	if dto.PricePerKg != 1000 {
+		t.Fatalf("расчётная цена тронута: %v", dto.PricePerKg)
+	}
 }

@@ -30,6 +30,7 @@ type MaterialDTO struct {
 	Diameter       float64    `json:"diameter"`
 	DefaultWeightG float64    `json:"defaultWeightG"`
 	PricePerKg     float64    `json:"pricePerKg"`
+	AvgPricePerKg  float64    `json:"avgPricePerKg"` // простое среднее по ВСЕМ катушкам, только для витрины
 	Currency       string     `json:"currency"`
 	SpoolID        int64      `json:"spoolId"`
 	SpoolLeftG     float64    `json:"spoolLeftG"`
@@ -58,6 +59,11 @@ func (a *App) GetMaterials() ([]MaterialDTO, error) {
 		}
 		if spools, err := a.db.Materials().ListSpools(m.ID); err == nil && len(spools) > 0 {
 			dto.PricePerKg = float64(spools[0].Price) / 100
+			var sum int64
+			for _, s := range spools {
+				sum += s.Price
+			}
+			dto.AvgPricePerKg = float64(sum) / float64(len(spools)) / 100
 			dto.Currency = spools[0].Currency
 			dto.SpoolID = spools[0].ID
 			dto.SpoolLeftG = spools[0].WeightLeftG
@@ -169,6 +175,7 @@ type SpoolDTO struct {
 	WeightLeftG float64 `json:"weightLeftG"`
 	LeftG       float64 `json:"leftG"`
 	Archived    bool    `json:"archived"`
+	Note        string  `json:"note"`
 }
 
 func toSpoolDTO(s models.Spool) SpoolDTO {
@@ -176,6 +183,7 @@ func toSpoolDTO(s models.Spool) SpoolDTO {
 		ID: s.ID, MaterialID: s.MaterialID, SpoolNo: s.SpoolNo, Price: float64(s.Price) / 100,
 		Currency: s.Currency, BoughtAt: s.BoughtAt,
 		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightLeftG, Archived: s.Archived,
+		Note: s.Note,
 	}
 }
 
@@ -228,7 +236,7 @@ func (a *App) AddSpool(s SpoolDTO) (int64, error) {
 	}
 	return a.db.Materials().AddSpool(models.Spool{
 		MaterialID: s.MaterialID, Price: int64(s.Price*100 + 0.5), Currency: s.Currency,
-		FxRate: 1, BoughtAt: s.BoughtAt,
+		FxRate: 1, BoughtAt: s.BoughtAt, Note: s.Note,
 		WeightInitG: s.WeightInitG, WeightLeftG: s.WeightInitG,
 	})
 }
@@ -471,6 +479,24 @@ func (a *App) DeleteJobs(ids []int64) (store.BulkDeleteReport, error) {
 		return rep, err
 	}
 	return a.db.Jobs().DeleteJobs(ids)
+}
+
+// BulkPreviewJobs — превью массовой правки без записи (manager+).
+func (a *App) BulkPreviewJobs(ids []int64, patch store.JobBulkPatch) ([]store.BulkJobPreview, error) {
+	if err := a.need(models.RoleManager); err != nil {
+		return nil, err
+	}
+	return a.db.Jobs().BulkPreview(ids, patch)
+}
+
+// BulkApplyJobs — массовая правка выбранных (manager+). Пишутся только
+// работы с реальными отличиями; отчёт — числом.
+func (a *App) BulkApplyJobs(ids []int64, patch store.JobBulkPatch) (store.BulkApplyReport, error) {
+	var rep store.BulkApplyReport
+	if err := a.need(models.RoleManager); err != nil {
+		return rep, err
+	}
+	return a.db.Jobs().BulkApply(ids, patch)
 }
 
 // JobEdit — поля правки работы истории (материал отдельно: не колонка jobs).

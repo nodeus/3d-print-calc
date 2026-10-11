@@ -58,7 +58,10 @@ textarea {
   background-color: var(--input-bg);
   color: var(--input-fg);
   border: 1px solid var(--btn-border);
-  border-radius: 4px;
+}
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
 }
 button {
   background-color: var(--btn-bg);

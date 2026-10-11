@@ -30,14 +30,10 @@
 
   // Катушки материала: список, раскрытие, правка.
   // Цена для расчётов — первая неархивная (порядок ListSpools); бейдж «расчётная».
-  type SpoolForm = { id: number; materialId: number; boughtAt: string; price: number | null; weight: number | null; currency: string; archived: boolean };
+  type SpoolForm = { id: number; materialId: number; boughtAt: string; price: number | null; weight: number | null; currency: string; archived: boolean; note: string };
   let spools: Record<number, SpoolDTO[]> = $state({});
   let expanded = $state(0);
   let spoolEdit: SpoolForm | null = $state(null);
-
-  function calcSpool(list: SpoolDTO[]): SpoolDTO | null {
-    return list.find((s) => !s.archived) ?? null;
-  }
 
   async function toggleSpools(m: MaterialDTO) {
     if (expanded === m.id) {
@@ -57,7 +53,7 @@
   }
 
   function newSpool(m: MaterialDTO) {
-    spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB', archived: false };
+    spoolEdit = { id: 0, materialId: m.id, boughtAt: '', price: null, weight: null, currency: 'RUB', archived: false, note: '' };
   }
 
   // Подсветка изменённой строки (вспышка гаснет сама через 650мс).
@@ -71,7 +67,7 @@
   }
 
   function editSpool(s: SpoolDTO) {
-    spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency, archived: s.archived };
+    spoolEdit = { id: s.id, materialId: s.materialId, boughtAt: s.boughtAt, price: s.price, weight: s.weightInitG, currency: s.currency, archived: s.archived, note: s.note ?? '' };
   }
 
   async function saveSpool(defWeight: number) {
@@ -84,7 +80,7 @@
         const sid = await wails.addSpool({
           id: 0, materialId: se.materialId, spoolNo: 0, price: se.price ?? 0,
           currency: se.currency || 'RUB', boughtAt: se.boughtAt,
-          weightInitG: w, weightLeftG: w, archived: false,
+          weightInitG: w, weightLeftG: w, archived: false, note: se.note.trim(),
         });
         flash('s:' + sid);
       } else {
@@ -94,7 +90,7 @@
           ID: cur.id, MaterialID: cur.materialId, Price: Math.round((se.price ?? 0) * 100),
           Currency: se.currency || cur.currency, FxRate: 1, BoughtAt: se.boughtAt,
           WeightInitG: se.weight ?? cur.weightInitG, WeightLeftG: cur.weightLeftG,
-          Archived: se.archived,
+          Archived: se.archived, Note: se.note.trim(),
         });
         flash('s:' + se.id);
       }
@@ -144,7 +140,7 @@
     switch (sortKey) {
       case 'code': return m.code.toLowerCase();
       case 'type': return (m.type || '').toLowerCase();
-      case 'price': return m.pricePerKg;
+      case 'price': return m.avgPricePerKg;
       case 'density': return m.density;
       case 'weight': return m.defaultWeightG || 1000;
       case 'vendor': return (m.vendor || '').toLowerCase();
@@ -162,7 +158,7 @@
 
   const matCols = [
     { key: 'code', label: 'mat.code' }, { key: 'color', label: 'mat.color' },
-    { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.price', num: true },
+    { key: 'type', label: 'mat.type' }, { key: 'price', label: 'mat.avg_price', num: true },
     { key: 'density', label: 'mat.density', num: true }, { key: 'weight', label: 'mat.weight', num: true },
     { key: 'vendor', label: 'mat.vendor' }, { key: 'note', label: 'mat.note' },
   ];
@@ -177,7 +173,7 @@
     { key: 'price', label: 'spool.price', num: true },
     { key: 'weight', label: 'spool.weight', num: true },
     { key: 'left', label: 'spool.left', num: true },
-    { key: 'flag', label: '' },
+    { key: 'status', label: 'spool.status' }, { key: 'note', label: 'mat.note' },
   ];
   const spoolKeys = spoolCols.map((c) => c.key);
   const spoolNum = (k: string) => spoolCols.some((c) => c.key === k && c.num);
@@ -185,7 +181,7 @@
 
   let spoolOrd = $derived(orderFor($mySettings.colOrder, 'spools', spoolKeys));
 
-  // Текст ячейки катушки (flag — маркеры ★/архив, шапка пустая).
+  // Текст ячейки катушки (status — В работе / В архиве).
   function spoolText(s: SpoolDTO, list: SpoolDTO[], k: string): string {
     switch (k) {
       case 'num': return String(s.spoolNo || '—');
@@ -194,11 +190,8 @@
       case 'weight': return String(s.weightInitG);
       // Остаток — вычисляемый (партия минус расход по истории), не поле БД.
       case 'left': return String(Math.round(s.leftG ?? s.weightLeftG));
-      case 'flag': {
-        const star = calcSpool(list)?.id === s.id ? `★ ${$t('spool.calc')}` : '';
-        const arch = s.archived ? ` · ${$t('spool.archived')}` : '';
-        return star + arch;
-      }
+      case 'status': return s.archived ? $t('spool.archived') : $t('spool.active');
+      case 'note': return s.note ?? '';
       default: return '';
     }
   }
@@ -208,7 +201,7 @@
     switch (k) {
       case 'code': return m.code;
       case 'type': return m.type;
-      case 'price': return money(m.pricePerKg, m.currency, 'ru');
+      case 'price': return money(m.avgPricePerKg, m.currency, 'ru');
       case 'density': return String(m.density);
       case 'weight': return String(m.defaultWeightG || 1000);
       case 'vendor': return m.vendor;
@@ -424,7 +417,7 @@
             {:else if k === 'type'}
               <td><input list="mat-types-edit" bind:value={edit.Type} placeholder="PETG" /></td>
             {:else if k === 'price'}
-              <td class="n" title={$t('mat.price_spool_note')}>{matText(m, k)}</td>
+              <td class="n" title={$t('mat.avg_note')}>{matText(m, k)}</td>
             {:else if k === 'density'}
               <td><input placeholder="1.27" type="number" step="0.01" bind:value={edit.Density} /></td>
             {:else if k === 'weight'}
@@ -478,13 +471,15 @@
                       {:else if k === 'date'}
                         <td><input type="date" bind:value={spoolEdit.boughtAt} /></td>
                       {:else if k === 'price'}
-                        <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" /></td>
+                        <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder={$t('spool.price')} /></td>
                       {:else if k === 'weight'}
                         <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
                       {:else if k === 'left'}
                         <td class="n">{Math.round(s.leftG ?? s.weightLeftG)}</td>
-                      {:else if k === 'flag'}
-                        <td><input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} />{#if calcSpool(spools[m.id] ?? [])?.id === s.id}★ {$t('spool.calc')}{/if}</td>
+                      {:else if k === 'status'}
+                        <td><label>{$t('spool.status')}: <input type="checkbox" bind:checked={spoolEdit.archived} title={$t('spool.archived')} /> {spoolEdit.archived ? $t('spool.archived') : $t('spool.active')}</label></td>
+                      {:else if k === 'note'}
+                        <td><input bind:value={spoolEdit.note} placeholder={$t('mat.note')} /></td>
                       {/if}
                     {/each}
                     <td class="no-print"><button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button> <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button></td>
@@ -505,8 +500,9 @@
             {#if spoolEdit && spoolEdit.id === 0 && spoolEdit.materialId === m.id}
               <div class="row">
                 <input type="date" bind:value={spoolEdit.boughtAt} title={$t('spool.date')} />
-                <input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" title={$t('spool.price')} />
+                <input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder={$t('spool.price')} title={$t('spool.price')} />
                 <input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" title={$t('spool.weight')} />
+                <input bind:value={spoolEdit.note} placeholder={$t('mat.note')} title={$t('mat.note')} />
                 <button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button>
                 <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button>
               </div>

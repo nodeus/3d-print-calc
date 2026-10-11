@@ -35,3 +35,8 @@ wails build -platform windows/amd64 -ldflags "-X main.BuildDate=2026-10-08"
 GitFlow: `release/<version>` от `develop` → merge в `main` + тег `vX.Y.Z` +
 back-merge в `develop`. Подписи exe и автообновления нет — обновление
 пользователей идёт через backup.zip (см. `docs/updating.md`).
+
+Перед тегом обновить `CHANGELOG.md`: только пользовательские изменения
+(`feat`/`fix`/`refactor`/`docs`/`perf`), без внутреннего (`chore`/`build`/`ci`,
+`test`) и служебного (мёржи, релизные коммиты). Язык записей — как в истории
+коммитов релиза (см. скилл `changelog-generator`).

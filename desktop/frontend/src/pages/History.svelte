@@ -2,7 +2,7 @@
   import { onMount, untrack } from 'svelte';
   import { tick } from 'svelte';
   import { get } from 'svelte/store';
-  import { wails, type JobDTO, type MaterialDTO, type SpoolDTO } from '../lib/wails';
+  import { wails, type JobDTO, type MaterialDTO, type SpoolDTO, type BulkJobPreview, type JobBulkPatch } from '../lib/wails';
   import { t } from '../lib/i18n';
   import { user, canWrite } from '../lib/session';
   import { num, hms, money } from '../lib/format';
@@ -541,6 +541,190 @@
     }
   }
 
+  // Массовая правка: разреженный патч (null/''/0 = поле нетронуто,
+  // плейсхолдеры «—»). Применяются только реально изменившиеся поля.
+  let bulkOpen = $state(false);
+  let bulkReview: BulkJobPreview[] | null = $state(null);
+  let bulkStatus = $state('');
+  let bulkStartAt: string | null = $state(null);
+  let bulkEndAt: string | null = $state(null);
+  let bulkPrintSec: number | null = $state(null);
+  let bulkTotalSec: number | null = $state(null);
+  let bulkWeightG: number | null = $state(null);
+  let bulkLengthM: number | null = $state(null);
+  let bulkSlicer: string | null = $state(null);
+  let bulkSpoolId = $state(0);
+  let bulkTariff: number | null = $state(null);
+  let bulkPowerKW: number | null = $state(null);
+  let bulkAmort: number | null = $state(null);
+  let bulkMaint: number | null = $state(null);
+  let bulkPurgeG: number | null = $state(null);
+  let bulkOpRate: number | null = $state(null);
+  let bulkPrep = $state({ h: null as number | null, m: null as number | null });
+  let bulkPost = $state({ h: null as number | null, m: null as number | null });
+  let bulkDesignerRate: number | null = $state(null);
+  let bulkModel = $state({ h: null as number | null, m: null as number | null });
+  let bulkModelPrice: number | null = $state(null);
+  let bulkExtraMat: number | null = $state(null);
+  let bulkFailPct: number | null = $state(null);
+  let bulkMarginProfitPct: number | null = $state(null);
+  let bulkMarginDevPct: number | null = $state(null);
+  let bulkFees: number | null = $state(null);
+  let bulkCopies: number | null = $state(null);
+  let bulkVatPct: number | null = $state(null);
+  let bulkRoundStep: number | null = $state(null);
+
+  function openBulkEdit() {
+    bulkOpen = true;
+    bulkReview = null;
+  }
+
+  function closeBulkEdit() {
+    bulkOpen = false;
+    bulkReview = null;
+  }
+
+  // Материал bulk-правки выводится из выбранной катушки (как в одиночной).
+  function bulkMaterial(): string {
+    if (!bulkSpoolId) return '';
+    const f = spoolFind(bulkSpoolId);
+    return f ? f.mat.code : '';
+  }
+
+  function bulkPatch(): JobBulkPatch {
+    const txt = (v: string | null) => (v == null || v.trim() === '' ? null : v.trim());
+    const dec = (p: { h: number | null; m: number | null }) =>
+      p.h == null && p.m == null ? null : joinHours(p.h, p.m);
+    const pct = (v: number | null) => (v == null ? null : v / 100);
+    return {
+      status: bulkStatus === '' ? null : bulkStatus,
+      startAt: txt(bulkStartAt), endAt: txt(bulkEndAt),
+      printSec: bulkPrintSec, totalSec: bulkTotalSec,
+      weightG: bulkWeightG, lengthM: bulkLengthM, slicer: txt(bulkSlicer),
+      material: bulkMaterial(), spoolId: bulkSpoolId,
+      tariff: bulkTariff, powerKW: bulkPowerKW,
+      amortPerHour: bulkAmort, maintPerHour: bulkMaint,
+      purgeWasteG: bulkPurgeG, opRate: bulkOpRate,
+      prepH: dec(bulkPrep), postH: dec(bulkPost),
+      designerRate: bulkDesignerRate, modelH: dec(bulkModel), modelPrice: bulkModelPrice,
+      extraMat: bulkExtraMat, failRate: pct(bulkFailPct),
+      marginProfit: pct(bulkMarginProfitPct), marginDev: pct(bulkMarginDevPct),
+      fees: bulkFees, copies: bulkCopies,
+      vatRate: pct(bulkVatPct), roundStep: bulkRoundStep,
+    };
+  }
+
+  // Тронуто ли поле (для бледно-красной подсветки).
+  function bulkTouched(kind: string): boolean {
+    switch (kind) {
+      case 'status': return bulkStatus !== '';
+      case 'spool': return bulkSpoolId !== 0;
+      case 'startAt': return (bulkStartAt ?? '').trim() !== '';
+      case 'endAt': return (bulkEndAt ?? '').trim() !== '';
+      case 'slicer': return (bulkSlicer ?? '').trim() !== '';
+      case 'printSec': return bulkPrintSec != null;
+      case 'totalSec': return bulkTotalSec != null;
+      case 'weightG': return bulkWeightG != null;
+      case 'lengthM': return bulkLengthM != null;
+      case 'tariff': return bulkTariff != null;
+      case 'powerKW': return bulkPowerKW != null;
+      case 'amort': return bulkAmort != null;
+      case 'maint': return bulkMaint != null;
+      case 'purge': return bulkPurgeG != null;
+      case 'opRate': return bulkOpRate != null;
+      case 'prep': return bulkPrep.h != null || bulkPrep.m != null;
+      case 'post': return bulkPost.h != null || bulkPost.m != null;
+      case 'designer': return bulkDesignerRate != null;
+      case 'model': return bulkModel.h != null || bulkModel.m != null;
+      case 'modelPrice': return bulkModelPrice != null;
+      case 'extra': return bulkExtraMat != null;
+      case 'fail': return bulkFailPct != null;
+      case 'marginProfit': return bulkMarginProfitPct != null;
+      case 'marginDev': return bulkMarginDevPct != null;
+      case 'fees': return bulkFees != null;
+      case 'copies': return bulkCopies != null;
+      case 'vat': return bulkVatPct != null;
+      case 'round': return bulkRoundStep != null;
+      default: return false;
+    }
+  }
+
+  async function showBulkReview() {
+    error = '';
+    const ids = [...selected];
+    if (!ids.length) return;
+    try {
+      bulkReview = await wails.bulkPreviewJobs(ids, bulkPatch());
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function applyBulk() {
+    error = '';
+    const ids = [...selected];
+    if (!ids.length) return;
+    try {
+      const rep = await wails.bulkApplyJobs(ids, bulkPatch());
+      closeBulkEdit();
+      await load();
+      notify(`${$t('hist.bulk_updated')}: ${rep.updated}`);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  // Подписи полей просмотра (ключи i18n) и форматирование старое → новое.
+  const bulkLabels: Record<string, string> = {
+    status: 'hist.status', startAt: 'hist.start', endAt: 'hist.end',
+    printSec: 'hist.print_sec', totalSec: 'hist.total_sec',
+    weightG: 'hist.weight', lengthM: 'hist.length', slicer: 'hist.slicer',
+    material: 'calc.material', spoolNo: 'calc.spool',
+    tariff: 'calc.tariff', powerKW: 'calc.power', amortPerHour: 'calc.amort',
+    maintPerHour: 'calc.maint', purgeWasteG: 'calc.purge', opRate: 'calc.op_rate',
+    prepH: 'calc.prep_h', postH: 'calc.post_h', designerRate: 'calc.designer_rate',
+    modelH: 'calc.model_h', modelPrice: 'calc.model_price', extraMat: 'calc.extra',
+    failRate: 'calc.fail', marginProfit: 'calc.margin_profit', marginDev: 'calc.margin_dev',
+    fees: 'calc.fees', copies: 'calc.copies', vatRate: 'calc.vat', roundStep: 'calc.round',
+    cost: 'hist.cost', price: 'calc.price',
+  };
+  const bulkFieldOrder = [...Object.keys(bulkLabels)];
+
+  function bulkLabel(field: string): string {
+    const k = bulkLabels[field] ?? field;
+    return k.includes('.') ? $t(k) : k;
+  }
+
+  function jobCurrency(jobId: number): string {
+    const j = jobs.find((x) => x.ID === jobId);
+    try {
+      return JSON.parse(j?.CostSnapshot ?? '{}')?.currency ?? 'RUB';
+    } catch {
+      return 'RUB';
+    }
+  }
+
+  function bulkVal(field: string, v: number | string | null, jobId: number): string {
+    if (v == null) return '—';
+    if (field === 'cost' || field === 'price') {
+      return typeof v === 'number' ? money(v, jobCurrency(jobId), $locale) : String(v);
+    }
+    if (typeof v === 'number' && ['failRate', 'marginProfit', 'marginDev', 'vatRate'].includes(field)) {
+      return `${Math.round(v * 10000) / 100}%`;
+    }
+    return String(v);
+  }
+
+  let bulkCols: string[] = $derived.by((): string[] => {
+    const rows: BulkJobPreview[] = bulkReview ?? [];
+    return [...new Set(rows.flatMap((p) => p.changes.map((c) => c.field)))]
+      .sort((a, b) => bulkFieldOrder.indexOf(a) - bulkFieldOrder.indexOf(b));
+  });
+  let bulkHasChanges = $derived.by((): boolean => {
+    const rows: BulkJobPreview[] = bulkReview ?? [];
+    return rows.some((p) => p.changes.length > 0);
+  });
+
   // Правка работы истории (manual и import) с автопересчётом на бэкенде.
   // Расчётные поля — как в Калькуляторе (проценты — %, в snapshot уйдут долями).
   // Катушка — отдельным селектом (editSpoolId), материал выводится из неё.
@@ -772,6 +956,77 @@
     </div>
   </div>
 {/if}
+{#if bulkOpen}
+  <div class="card">
+    <h3>{$t('hist.bulk_edit')} ({selected.length})</h3>
+    <div class="row">
+      <label>{$t('hist.status')}
+        <select bind:value={bulkStatus} class:changed={bulkTouched('status')}>
+          <option value="">—</option>
+          {#each ['completed', 'cancelled', 'error'] as s}<option value={s}>{statusLabel(s)}</option>{/each}
+        </select>
+      </label>
+      <label>{$t('calc.spool')}
+        <select bind:value={bulkSpoolId} class:changed={bulkTouched('spool')}>
+          <option value={0}>—</option>
+          {#each materials.filter((m) => (m.spools ?? []).some((s) => !s.archived)) as m}
+            <optgroup label={m.code}>
+              {#each (m.spools ?? []).filter((s) => !s.archived) as s}
+                <option value={s.id}>{m.code}-{s.spoolNo || '?'} — {money(s.price, s.currency, $locale)}/кг</option>
+              {/each}
+            </optgroup>
+          {/each}
+        </select>
+      </label>
+      {#if bulkSpoolId}<span class="count">{bulkMaterial()}</span>{/if}
+      <label>{$t('hist.slicer')}<input bind:value={bulkSlicer} placeholder="—" class:changed={bulkTouched('slicer')} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('hist.start')}<input bind:value={bulkStartAt} placeholder="—" class:changed={bulkTouched('startAt')} /></label>
+      <label>{$t('hist.end')}<input bind:value={bulkEndAt} placeholder="—" class:changed={bulkTouched('endAt')} /></label>
+      <label>{$t('hist.print_sec')}<input placeholder="—" type="number" min="0" bind:value={bulkPrintSec} class:changed={bulkTouched('printSec')} /></label>
+      <label>{$t('hist.total_sec')}<input placeholder="—" type="number" min="0" bind:value={bulkTotalSec} class:changed={bulkTouched('totalSec')} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('hist.weight')}<input placeholder="—" type="number" min="0" step="0.01" bind:value={bulkWeightG} class:changed={bulkTouched('weightG')} /></label>
+      <label>{$t('hist.length')}<input placeholder="—" type="number" min="0" step="0.01" bind:value={bulkLengthM} class:changed={bulkTouched('lengthM')} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('calc.tariff')}<input placeholder="—" type="number" min="0" step="0.01" bind:value={bulkTariff} class:changed={bulkTouched('tariff')} /></label>
+      <label>{$t('calc.power')}<input placeholder="—" type="number" min="0" step="0.01" bind:value={bulkPowerKW} class:changed={bulkTouched('powerKW')} /></label>
+      <label>{$t('calc.amort')}<input placeholder="—" type="number" min="0" step="0.01" bind:value={bulkAmort} class:changed={bulkTouched('amort')} /></label>
+      <label>{$t('calc.maint')}<input placeholder="—" type="number" min="0" step="0.1" bind:value={bulkMaint} class:changed={bulkTouched('maint')} /></label>
+      <label>{$t('calc.purge')}<input placeholder="—" type="number" min="0" step="0.1" bind:value={bulkPurgeG} class:changed={bulkTouched('purge')} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('calc.op_rate')}<input placeholder="—" type="number" min="0" bind:value={bulkOpRate} class:changed={bulkTouched('opRate')} /></label>
+      <label>{$t('calc.prep_h')}<input placeholder="—" type="number" min="0" bind:value={bulkPrep.h} class:changed={bulkTouched('prep')} /></label>
+      <label>{$t('calc.prep_m')}<input placeholder="—" type="number" min="0" max="59" bind:value={bulkPrep.m} class:changed={bulkTouched('prep')} /></label>
+      <label>{$t('calc.post_h')}<input placeholder="—" type="number" min="0" bind:value={bulkPost.h} class:changed={bulkTouched('post')} /></label>
+      <label>{$t('calc.post_m')}<input placeholder="—" type="number" min="0" max="59" bind:value={bulkPost.m} class:changed={bulkTouched('post')} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('calc.designer_rate')}<input placeholder="—" type="number" min="0" bind:value={bulkDesignerRate} class:changed={bulkTouched('designer')} /></label>
+      <label>{$t('calc.model_h')}<input placeholder="—" type="number" min="0" bind:value={bulkModel.h} class:changed={bulkTouched('model')} /></label>
+      <label>{$t('calc.model_m')}<input placeholder="—" type="number" min="0" max="59" bind:value={bulkModel.m} class:changed={bulkTouched('model')} /></label>
+      <label>{$t('calc.model_price')}<input placeholder="—" type="number" min="0" bind:value={bulkModelPrice} class:changed={bulkTouched('modelPrice')} /></label>
+      <label>{$t('calc.extra')}<input placeholder="—" type="number" min="0" bind:value={bulkExtraMat} class:changed={bulkTouched('extra')} /></label>
+    </div>
+    <div class="row">
+      <label>{$t('calc.fail')}<input placeholder="—" type="number" min="0" step="0.1" bind:value={bulkFailPct} class:changed={bulkTouched('fail')} /></label>
+      <label>{$t('calc.margin_profit')}<input placeholder="—" type="number" min="0" step="1" bind:value={bulkMarginProfitPct} class:changed={bulkTouched('marginProfit')} /></label>
+      <label>{$t('calc.margin_dev')}<input placeholder="—" type="number" min="0" step="1" bind:value={bulkMarginDevPct} class:changed={bulkTouched('marginDev')} /></label>
+      <label>{$t('calc.fees')}<input placeholder="—" type="number" min="0" bind:value={bulkFees} class:changed={bulkTouched('fees')} /></label>
+      <label>{$t('calc.copies')}<input placeholder="—" type="number" min="1" step="1" bind:value={bulkCopies} class:changed={bulkTouched('copies')} /></label>
+      <label>{$t('calc.vat')}<input placeholder="—" type="number" min="0" step="1" bind:value={bulkVatPct} class:changed={bulkTouched('vat')} /></label>
+      <label>{$t('calc.round')}<input placeholder="—" type="number" min="0" step="1" bind:value={bulkRoundStep} class:changed={bulkTouched('round')} /></label>
+    </div>
+    <div class="row">
+      <button onclick={showBulkReview}>{$t('hist.bulk_show')}</button>
+      <button onclick={closeBulkEdit}>{$t('common.cancel')}</button>
+    </div>
+  </div>
+{/if}
 <div class="toolbar no-print">
   <input placeholder={$t('hist.search')} bind:value={query} oninput={() => (page = 0)} />
   <select bind:value={statusFilter} onchange={() => (page = 0)}>
@@ -786,6 +1041,7 @@
   <button onclick={openColumns}>{$t('hist.columns_btn')}: {columns.length}/{allColumns.length}</button>
   {#if canWrite($user)}
     <span class="count">{$t('hist.selected_n')}: {selected.length}</span>
+    <button onclick={openBulkEdit} disabled={!selected.length}>{$t('hist.bulk_edit')}</button>
     <button onclick={removeSelected} disabled={!selected.length}>{$t('hist.delete_selected')}</button>
     {#if selected.length}<button onclick={() => { selected = []; bulkMsg = ''; }}>{$t('hist.clear_sel')}</button>{/if}
   {/if}
@@ -842,9 +1098,50 @@
 </table>
 </div>
 
+{#if bulkReview}
+  <div class="bOverlay no-print" role="dialog" aria-modal="true" aria-label={$t('hist.bulk_review')}>
+    <div class="bCard">
+      <h3>{$t('hist.bulk_review')} ({bulkReview.length})</h3>
+      {#if !bulkHasChanges}
+        <p class="note">{$t('hist.bulk_no_changes')}</p>
+      {:else}
+        <div class="twrap"><table class="tw">
+          <thead><tr><th>{$t('hist.filename')}</th>{#each bulkCols as k}<th class="n">{bulkLabel(k)}</th>{/each}</tr></thead>
+          <tbody>
+            {#each bulkReview as p}
+              <tr>
+                <td class="file" title={p.filename}>{p.filename}</td>
+                {#each bulkCols as k}
+                  {@const ch = p.changes.find((c) => c.field === k)}
+                  <td class="n">{ch ? `${bulkVal(ch.field, ch.old, p.jobId)} → ${bulkVal(ch.field, ch.new, p.jobId)}` : '—'}</td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table></div>
+      {/if}
+      <div class="row">
+        <button onclick={applyBulk} disabled={!bulkHasChanges}>{$t('hist.bulk_apply')}</button>
+        <button onclick={() => (bulkReview = null)}>{$t('common.cancel')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
   .note { color: var(--muted); }
+  input.changed, select.changed {
+    background-color: color-mix(in srgb, var(--err) 12%, transparent);
+  }
+  .bOverlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .bCard {
+    background: var(--bg); border: 1px solid var(--card-border); border-radius: 8px;
+    padding: 16px; max-width: min(1000px, 92vw); max-height: 84vh; overflow: auto;
+  }
   input, select, button { padding: 6px; font-size: 14px; }
   .count { color: var(--muted); font-size: 13px; }
   .pager { margin-left: auto; display: flex; gap: 4px; align-items: center; }
