@@ -79,12 +79,24 @@ mobile/          задел Flutter-клиента (кода нет, контр�
 migrations/      SQL-миграции (канон схемы; копия в desktop/assets/migrations для go:embed)
 tools/           seed, release, qrcode, dbcheck, rename_history — только здесь
 utils/           локальный upx.exe для релизов (в git не идёт)
-xlsx/ + csv/     legacy Excel и CSV-фикстура (источник сида)
+xlsx/ + csv/     legacy-сиды (только локально, не в git; тесты — на testdata/)
 docs/            HELP, release, updating, api-contract, excel-reverse-engineering,
                  workflow, material-colors
 ```
 
 Правила для разработчиков — [AGENTS.md](AGENTS.md) (читать обязательно).
+
+## Лицензии
+
+- Программа — **MIT** (см. [LICENSE](LICENSE)), © Ilya V Shirinkin aka nodeus.
+- Начало — файл-калькулятор `xlsx/3dprint-calc.xlsx` автора: программа выросла
+  из него (файл — локальный legacy-сид, в git не идёт).
+- Стороннее (прямые зависимости; полные тексты — в `go.mod` / `package.json`):
+  Go — Wails v2 (MIT), modernc.org/sqlite (BSD), gofpdf (MIT), go-qrcode (MIT),
+  x/crypto (BSD-3); frontend — Svelte 5 (MIT), Vite (MIT), TypeScript (Apache-2.0).
+- Сборка Windows-exe — [UPX](https://github.com/upx/upx) (GPL v2+ с исключением
+  для упакованных бинарников): используется только как внешний пакер
+  `utils/upx.exe`, в git и исходники не входит.
 
 ## Автор
 
