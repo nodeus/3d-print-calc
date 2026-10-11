@@ -113,7 +113,7 @@ func TestBackupRoundTrip(t *testing.T) {
 func TestJobsCSVRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	db := seedTestDB(t, dir)
-	f, err := os.Open("../csv/print_history.csv")
+	f, err := os.Open("../testdata/print_history_mini.csv")
 	if err != nil {
 		t.Skipf("нет фикстуры: %v", err)
 	}
@@ -144,8 +144,8 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}
-	if !rep.DryRun || rep.New != 490 || rep.Existing != 0 {
-		t.Fatalf("dry-run report = %+v, хочу {490 490 0}", rep)
+	if !rep.DryRun || rep.New != 16 || rep.Existing != 0 {
+		t.Fatalf("dry-run report = %+v, хочу {16 16 0}", rep)
 	}
 	if n, _ := db2.TableCounts(); n["jobs"] != 0 {
 		t.Fatalf("dry-run обязан ничего не писать: %v", n)
@@ -158,12 +158,12 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 	if _, err := db2.Printers().Save(models.Printer{Name: "K1C", HoursPerDay: 8, LifeYears: 3, CalendarMode: "calendar", AmortMethod: "calendar"}); err != nil {
 		t.Fatal(err)
 	}
-	prog, calls := progressCounter(t, 490)
+	prog, calls := progressCounter(t, 16)
 	rep2, err := db2.ImportHistory(bytes.NewReader(buf.Bytes()), false, 0, prog)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if rep2.New != 490 {
+	if rep2.New != 16 {
 		t.Fatalf("apply report = %+v", rep2)
 	}
 	if *calls == 0 {
@@ -174,7 +174,7 @@ func TestJobsCSVRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reimport: %v", err)
 	}
-	if rep3.New != 0 || rep3.Existing != 490 {
+	if rep3.New != 0 || rep3.Existing != 16 {
 		t.Fatalf("reimport report = %+v", rep3)
 	}
 }

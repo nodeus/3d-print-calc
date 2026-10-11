@@ -79,7 +79,7 @@ mobile/          задел Flutter-клиента (кода нет, контр�
 migrations/      SQL-миграции (канон схемы; копия в desktop/assets/migrations для go:embed)
 tools/           seed, release, qrcode, dbcheck, rename_history — только здесь
 utils/           локальный upx.exe для релизов (в git не идёт)
-xlsx/ + csv/     legacy Excel и CSV-фикстура (источник сида)
+xlsx/ + csv/     legacy-сиды (только локально, не в git; тесты — на testdata/)
 docs/            HELP, release, updating, api-contract, excel-reverse-engineering,
                  workflow, material-colors
 ```

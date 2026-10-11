@@ -41,6 +41,11 @@ coverage.txt
 *.sqlite-*
 app.db
 
+# Legacy seeds (local only, never commit; runtime starts clean).
+# Tests use trimmed fixtures in testdata/.
+/xlsx/
+/csv/
+
 # Backups / exports with real data
 *.zip
 backup*.zip
