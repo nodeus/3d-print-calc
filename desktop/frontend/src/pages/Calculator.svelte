@@ -68,7 +68,9 @@
   // Живые катушки для селекта: свои данные + подпись КОД-N.
   let selSpool = $derived(spoolOf(spoolId));
   let pricePerKg = $derived(selSpool?.spool.price ?? materials.find((m) => m.code === matCode)?.pricePerKg ?? 0);
-  let density = $derived(materials.find((m) => m.code === matCode)?.density ?? 1.27);
+  // Физика прутка — с выбранной катушки (фолбэк — материал, затем 1.27/1.75).
+  let density = $derived(selSpool?.spool.density || materials.find((m) => m.code === matCode)?.density || 1.27);
+  let diameter = $derived(selSpool?.spool.diameter || 1.75);
   // Материалы с живыми катушками (плюс уже выбранный для совместимости).
   let activeMaterials = $derived(materials.filter((m) => m.hasLiveSpool || m.code === matCode));
   // Опции селекта: живые катушки видимых материалов + текущая (если архивная).
@@ -393,7 +395,7 @@
   async function syncWeightFromFilament() {
     if (filamentMM == null || filamentMM <= 0) return;
     try {
-      weightG = Math.round((await wails.weightFromLength(density, 1.75, filamentMM)) * 100) / 100;
+      weightG = Math.round((await wails.weightFromLength(density, diameter, filamentMM)) * 100) / 100;
     } catch (e) {
       error = String(e);
     }
