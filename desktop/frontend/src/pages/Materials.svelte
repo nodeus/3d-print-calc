@@ -478,7 +478,7 @@
                       {:else if k === 'date'}
                         <td><input type="date" bind:value={spoolEdit.boughtAt} /></td>
                       {:else if k === 'price'}
-                        <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" /></td>
+                        <td><input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder={$t('spool.price')} /></td>
                       {:else if k === 'weight'}
                         <td><input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" /></td>
                       {:else if k === 'left'}
@@ -505,7 +505,7 @@
             {#if spoolEdit && spoolEdit.id === 0 && spoolEdit.materialId === m.id}
               <div class="row">
                 <input type="date" bind:value={spoolEdit.boughtAt} title={$t('spool.date')} />
-                <input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder="869" title={$t('spool.price')} />
+                <input type="number" min="0" step="0.01" bind:value={spoolEdit.price} placeholder={$t('spool.price')} title={$t('spool.price')} />
                 <input type="number" min="0" step="1" bind:value={spoolEdit.weight} placeholder="1000" title={$t('spool.weight')} />
                 <button onclick={() => saveSpool(m.defaultWeightG || 1000)}>{$t('common.save')}</button>
                 <button onclick={() => (spoolEdit = null)}>{$t('common.cancel')}</button>
