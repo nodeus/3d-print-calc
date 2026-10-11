@@ -234,6 +234,22 @@ export interface BackupManifest {
   files?: string[];
 }
 
+export interface ImportRow {
+  Filename: string;
+  Type: string;
+  Status: string;
+  Size: number;
+  StartTime: string;
+  EndTime: string;
+  EstimatedTime: number;
+  PrintDuration: number;
+  TotalDuration: number;
+  FilamentTotal: number;
+  FilamentUsed: number;
+  Slicer: string;
+  Exists: boolean;
+}
+
 export interface ImportReport {
   total: number;
   new: number;
@@ -242,6 +258,7 @@ export interface ImportReport {
   spoolStubs: number;
   dryRun: boolean;
   lifetimeTotal?: number;
+  rows: ImportRow[];
 }
 
 export interface BulkDeleteReport {
@@ -497,7 +514,8 @@ declare global {
           ExportJobsCSV(): Promise<string>;
           ExportMaterialsCSV(): Promise<string>;
           PreviewHistoryCSV(limitRows: number): Promise<ImportReport>;
-          ApplyHistoryCSV(): Promise<ImportReport>;
+          ApplyHistoryCSV(selected: number[]): Promise<ImportReport>;
+          CancelPendingImport(): Promise<void>;
           PreviewMaterialsCSV(): Promise<ImportReport>;
           ApplyMaterialsCSV(): Promise<ImportReport>;
           Login(login: string, password: string): Promise<UserDTO>;
@@ -544,7 +562,7 @@ declare global {
           SetMoonrakerURL(printerId: number, url: string): Promise<void>;
           MoonrakerStatus(printerId: number): Promise<string>;
           MoonrakerPreview(printerId: number, limit: number): Promise<ImportReport>;
-          MoonrakerApply(): Promise<ImportReport>;
+          MoonrakerApply(selected: number[]): Promise<ImportReport>;
           AddMaterial(code: string, matType: string, density: number, weightG: number, vendor: string, colorHex: string, note: string): Promise<number>;
           UpdateMaterial(m: Material): Promise<void>;
           DeleteMaterial(id: number): Promise<void>;
@@ -605,7 +623,8 @@ export const wails = {
   exportJobsCSV: () => api().ExportJobsCSV(),
   exportMaterialsCSV: () => api().ExportMaterialsCSV(),
   previewHistoryCSV: (limitRows: number) => api().PreviewHistoryCSV(limitRows),
-  applyHistoryCSV: () => api().ApplyHistoryCSV(),
+  applyHistoryCSV: (selected: number[]) => api().ApplyHistoryCSV(selected),
+  cancelPendingImport: () => api().CancelPendingImport(),
   previewMaterialsCSV: () => api().PreviewMaterialsCSV(),
   applyMaterialsCSV: () => api().ApplyMaterialsCSV(),
   login: (login: string, password: string) => api().Login(login, password),
@@ -652,7 +671,7 @@ export const wails = {
   setMoonrakerURL: (printerId: number, url: string) => api().SetMoonrakerURL(printerId, url),
   moonrakerStatus: (printerId: number) => api().MoonrakerStatus(printerId),
   moonrakerPreview: (printerId: number, limit: number) => api().MoonrakerPreview(printerId, limit),
-  moonrakerApply: () => api().MoonrakerApply(),
+  moonrakerApply: (selected: number[]) => api().MoonrakerApply(selected),
   addMaterial: (code: string, matType: string, density: number, weightG: number, vendor: string, colorHex: string, note: string) =>
     api().AddMaterial(code, matType, density, weightG, vendor, colorHex, note),
   updateMaterial: (m: Material) => api().UpdateMaterial(m),

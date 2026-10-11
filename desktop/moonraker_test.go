@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"3dprint-calc/core/importers"
 	"3dprint-calc/core/models"
 )
 
@@ -69,7 +70,7 @@ func TestMoonrakerPreviewApply(t *testing.T) {
 	if !rep.DryRun || rep.Total != 1 || rep.New != 1 {
 		t.Fatalf("preview = %+v", rep)
 	}
-	applied, err := app.MoonrakerApply()
+	applied, err := app.MoonrakerApply(nil)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -162,7 +163,7 @@ func TestMoonrakerPreviewAllPages(t *testing.T) {
 	if rep.Total != totalJobs || rep.New != totalJobs || rep.LifetimeTotal != totalJobs {
 		t.Fatalf("preview = %+v, хочу все %d", rep, totalJobs)
 	}
-	applied, err := app.MoonrakerApply()
+	applied, err := app.MoonrakerApply(nil)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestMoonrakerPreviewLimit(t *testing.T) {
 	if rep.Total != 100 || rep.New != 100 {
 		t.Fatalf("preview = %+v, хочу 100 первых", rep)
 	}
-	if _, err := app.MoonrakerApply(); err != nil {
+	if _, err := app.MoonrakerApply(nil); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	jobs, err := app.GetJobs(0)
@@ -256,5 +257,98 @@ func TestMoonrakerPreviewLimit(t *testing.T) {
 		if j.Filename < "bulk_000.gcode" || j.Filename > "bulk_099.gcode" {
 			t.Fatalf("лишняя работа: %q", j.Filename)
 		}
+	}
+}
+
+// TestMoonrakerApplySelected: применяются только отмеченные строки;
+// пустой выбор и плохой индекс — ошибки; отмена сбрасывает pending.
+func TestMoonrakerApplySelected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/server/info":
+			w.Write([]byte(`{"result": {"moonraker_version": "v0.9.3"}}`))
+		case "/server/history/list":
+			w.Write([]byte(moonrakerHistoryJSON))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer srv.Close()
+
+	path := filepath.Join(t.TempDir(), "app.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatalf("openDB: %v", err)
+	}
+	defer db.Close()
+	app := &App{ctx: context.Background(), db: db, dbPath: path}
+	if _, err := app.Login("admin", "admin123"); err != nil {
+		t.Fatal(err)
+	}
+	pid, err := app.AddPrinter(models.Printer{
+		Name: "K1C-sel", LifeYears: 3, HoursPerDay: 8,
+		CalendarMode: "calendar", AmortMethod: "calendar", PowerKW: 0.35,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.SetMoonrakerURL(pid, srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := app.MoonrakerPreview(pid, 50)
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	if len(rep.Rows) != 1 || rep.Rows[0].Exists {
+		t.Fatalf("preview rows = %+v", rep.Rows)
+	}
+	// Пустой выбор — ошибка, pending жив.
+	if _, err := app.MoonrakerApply([]int{}); err == nil ||
+		!strings.Contains(err.Error(), "ERR_NO_SELECTION") {
+		t.Fatalf("пустой выбор обязан дать ERR_NO_SELECTION: %v", err)
+	}
+	// Плохой индекс — ошибка.
+	if _, err := app.MoonrakerApply([]int{7}); err == nil ||
+		!strings.Contains(err.Error(), "ERR_SELECTION") {
+		t.Fatalf("плохой индекс обязан дать ERR_SELECTION: %v", err)
+	}
+	// Отмена — pending сброшен, apply невозможен.
+	app.CancelPendingImport()
+	if _, err := app.MoonrakerApply(nil); err == nil ||
+		!strings.Contains(err.Error(), "ERR_NO_PENDING") {
+		t.Fatalf("после отмены обязан быть ERR_NO_PENDING: %v", err)
+	}
+	// Повторный preview + выбор единственной строки — импорт идёт.
+	if _, err := app.MoonrakerPreview(pid, 50); err != nil {
+		t.Fatalf("Preview2: %v", err)
+	}
+	applied, err := app.MoonrakerApply([]int{0})
+	if err != nil {
+		t.Fatalf("Apply selected: %v", err)
+	}
+	if applied.New != 1 || applied.Total != 1 {
+		t.Fatalf("applied = %+v", applied)
+	}
+}
+
+// TestSelectImportRows: nil — всё, подмножество по порядку, пусто и
+// вне диапазона — ошибки с кодами.
+func TestSelectImportRows(t *testing.T) {
+	rows := []importers.PrintJob{{Filename: "a"}, {Filename: "b"}, {Filename: "c"}}
+	all, err := selectImportRows(rows, nil)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("nil = %+v, %v", all, err)
+	}
+	sub, err := selectImportRows(rows, []int{2, 0})
+	if err != nil || len(sub) != 2 || sub[0].Filename != "c" || sub[1].Filename != "a" {
+		t.Fatalf("subset = %+v, %v", sub, err)
+	}
+	if _, err := selectImportRows(rows, []int{}); err == nil ||
+		!strings.Contains(err.Error(), "ERR_NO_SELECTION") {
+		t.Fatalf("пусто: %v", err)
+	}
+	if _, err := selectImportRows(rows, []int{3}); err == nil ||
+		!strings.Contains(err.Error(), "ERR_SELECTION") {
+		t.Fatalf("индекс 3: %v", err)
 	}
 }

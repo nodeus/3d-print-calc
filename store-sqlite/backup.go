@@ -416,15 +416,23 @@ func matIDByCode(list []models.Material, code string) (int64, error) {
 	return 0, fmt.Errorf("ERR_IMPORT: нет материала %q", code)
 }
 
+// ImportRow — одна строка предпросмотра импорта: значения PrintJob
+// плюс флаг Exists (работа уже есть в БД по filename+start_at).
+type ImportRow struct {
+	importers.PrintJob
+	Exists bool `json:"exists"`
+}
+
 // ImportReport — итог импорта истории.
 type ImportReport struct {
-	Total         int  `json:"total"`
-	New           int  `json:"new"`
-	Existing      int  `json:"existing"`
-	Stubs         int  `json:"stubs"`
-	SpoolStubs    int  `json:"spoolStubs"`
-	DryRun        bool `json:"dryRun"`
-	LifetimeTotal int  `json:"lifetimeTotal,omitempty"` // всего за всё время (Moonraker totals)
+	Total         int         `json:"total"`
+	New           int         `json:"new"`
+	Existing      int         `json:"existing"`
+	Stubs         int         `json:"stubs"`
+	SpoolStubs    int         `json:"spoolStubs"`
+	DryRun        bool        `json:"dryRun"`
+	LifetimeTotal int         `json:"lifetimeTotal,omitempty"` // всего за всё время (Moonraker totals)
+	Rows          []ImportRow `json:"rows"`                    // строки предпросмотра (только dry-run)
 }
 
 // ImportHistory импортирует CSV принтера. dryRun=true — только отчёт без записи.
@@ -433,18 +441,44 @@ type ImportReport struct {
 func (d *DB) ImportHistory(r io.Reader, dryRun bool, limitRows int, onProgress seed.ProgressFunc) (ImportReport, error) {
 	var rep ImportReport
 	rep.DryRun = dryRun
+	rep.Rows = []ImportRow{}
 	rows, err := importers.ParseHistory(r)
 	if err != nil {
 		return rep, err
 	}
-	rows = takeLastJobs(rows, limitRows)
+	rows = TakeLastJobs(rows, limitRows)
+	rep.Total = len(rows)
+	classified, fresh, exist, err := d.ClassifyRows(rows)
+	if err != nil {
+		return rep, err
+	}
+	rep.New, rep.Existing = fresh, exist
+	if dryRun {
+		rep.Rows = classified
+		return rep, nil
+	}
+	applied, err := d.ImportSelected(rows, onProgress)
+	if err != nil {
+		return rep, err
+	}
+	applied.DryRun = false
+	return applied, nil
+}
+
+// ImportSelected записывает выбранные строки истории (подмножество preview).
+// Пустой список — ERR_NO_SELECTION. Принтер для записи обязан существовать.
+func (d *DB) ImportSelected(rows []importers.PrintJob, onProgress seed.ProgressFunc) (ImportReport, error) {
+	rep := ImportReport{Rows: []ImportRow{}}
+	if len(rows) == 0 {
+		return rep, fmt.Errorf("ERR_NO_SELECTION: не выбрана ни одна строка")
+	}
 	rep.Total = len(rows)
 	fresh, exist, err := d.ClassifyJobs(rows)
 	if err != nil {
 		return rep, err
 	}
 	rep.New, rep.Existing = fresh, exist
-	if dryRun || rep.New == 0 {
+	if rep.New == 0 {
 		return rep, nil
 	}
 	printers, err := d.Printers().List()
@@ -463,10 +497,12 @@ func (d *DB) ImportHistory(r io.Reader, dryRun bool, limitRows int, onProgress s
 	return rep, nil
 }
 
-// takeLastJobs оставляет N последних работ по времени старта (новые первыми).
+// TakeLastJobs оставляет N последних работ по времени старта (новые первыми).
 // N <= 0 или больше длины — без изменений (тот же слайс). Сортировка
 // стабильная: файлы в любом порядке дают одинаковую выборку.
-func takeLastJobs(rows []importers.PrintJob, n int) []importers.PrintJob {
+// Экспортирован для Apply-подмножества в desktop (предпросмотр и применение
+// режут одинаково).
+func TakeLastJobs(rows []importers.PrintJob, n int) []importers.PrintJob {
 	if n <= 0 || n >= len(rows) {
 		return rows
 	}
@@ -478,26 +514,38 @@ func takeLastJobs(rows []importers.PrintJob, n int) []importers.PrintJob {
 	return sorted[:n]
 }
 
-// ClassifyJobs делит строки на новые/существующие (по filename+start_at).
-// Записи нет — используется dry-run превью CSV и Moonraker.
-func (d *DB) ClassifyJobs(rows []importers.PrintJob) (fresh, exist int, err error) {
+// ClassifyRows делит строки на новые/существующие (по filename+start_at)
+// и возвращает их с флагом Exists. Записи нет — используется dry-run
+// превью CSV и Moonraker.
+func (d *DB) ClassifyRows(rows []importers.PrintJob) ([]ImportRow, int, int, error) {
 	existing, err := d.Jobs().List(0)
 	if err != nil {
-		return 0, 0, fmt.Errorf("ERR_IMPORT: %w", err)
+		return []ImportRow{}, 0, 0, fmt.Errorf("ERR_IMPORT: %w", err)
 	}
 	keys := make(map[string]bool, len(existing))
 	for _, j := range existing {
 		keys[j.Filename+"\x00"+j.StartAt] = true
 	}
+	out := make([]ImportRow, 0, len(rows))
+	fresh, exist := 0, 0
 	for _, row := range rows {
 		key := row.Filename + "\x00" + row.StartTime.Format("2006-01-02 15:04")
-		if keys[key] {
+		dup := keys[key]
+		if dup {
 			exist++
 		} else {
 			fresh++
 		}
+		out = append(out, ImportRow{PrintJob: row, Exists: dup})
 	}
-	return fresh, exist, nil
+	return out, fresh, exist, nil
+}
+
+// ClassifyJobs делит строки на новые/существующие (по filename+start_at).
+// Записи нет — используется dry-run превью CSV и Moonraker.
+func (d *DB) ClassifyJobs(rows []importers.PrintJob) (fresh, exist int, err error) {
+	_, fresh, exist, err = d.ClassifyRows(rows)
+	return fresh, exist, err
 }
 
 func itoa(v int64) string {
