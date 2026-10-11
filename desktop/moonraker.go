@@ -42,6 +42,10 @@ func (a *App) MoonrakerPreview(printerID int64, limit int) (sqlite.ImportReport,
 	var rep sqlite.ImportReport
 	rep.DryRun = true
 	rep.Rows = []sqlite.ImportRow{}
+	rep.MatRows = []sqlite.ImportMatRow{}
+	if len(a.pendingFile) > 0 || len(a.pendingMats) > 0 {
+		return rep, errPendingExists
+	}
 	rows, err := a.fetchMoonraker(printerID, limit)
 	if err != nil {
 		return rep, err

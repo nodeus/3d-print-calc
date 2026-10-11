@@ -37,6 +37,7 @@ type App struct {
 	pendingPath      string
 	pendingCSVLimit  int                  // лимит последних работ CSV (<=0 — все)
 	pendingMats      []byte               // CSV материалов после preview, до apply
+	pendingMatsLimit int                  // лимит последних строк материалов (<=0 — все)
 	pendingMoonraker []importers.PrintJob // строки Moonraker после preview
 	pendingPrinterID int64
 	pendingNew       int

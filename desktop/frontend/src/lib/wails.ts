@@ -259,6 +259,19 @@ export interface ImportReport {
   dryRun: boolean;
   lifetimeTotal?: number;
   rows: ImportRow[];
+  matRows: ImportMatRow[];
+}
+
+export interface ImportMatRow {
+  Code: string;
+  Type: string;
+  Vendor: string;
+  PricePerKg: number;
+  Currency: string;
+  Density: number;
+  Diameter: number;
+  SpoolNo: number;
+  Exists: boolean;
 }
 
 export interface BulkDeleteReport {
@@ -516,8 +529,8 @@ declare global {
           PreviewHistoryCSV(limitRows: number): Promise<ImportReport>;
           ApplyHistoryCSV(selected: number[]): Promise<ImportReport>;
           CancelPendingImport(): Promise<void>;
-          PreviewMaterialsCSV(): Promise<ImportReport>;
-          ApplyMaterialsCSV(): Promise<ImportReport>;
+          PreviewMaterialsCSV(limitRows: number): Promise<ImportReport>;
+          ApplyMaterialsCSV(selected: number[]): Promise<ImportReport>;
           Login(login: string, password: string): Promise<UserDTO>;
           Logout(): Promise<void>;
           CurrentUser(): Promise<UserDTO | null>;
@@ -625,8 +638,8 @@ export const wails = {
   previewHistoryCSV: (limitRows: number) => api().PreviewHistoryCSV(limitRows),
   applyHistoryCSV: (selected: number[]) => api().ApplyHistoryCSV(selected),
   cancelPendingImport: () => api().CancelPendingImport(),
-  previewMaterialsCSV: () => api().PreviewMaterialsCSV(),
-  applyMaterialsCSV: () => api().ApplyMaterialsCSV(),
+  previewMaterialsCSV: (limitRows: number) => api().PreviewMaterialsCSV(limitRows),
+  applyMaterialsCSV: (selected: number[]) => api().ApplyMaterialsCSV(selected),
   login: (login: string, password: string) => api().Login(login, password),
   logout: () => api().Logout(),
   currentUser: () => api().CurrentUser(),

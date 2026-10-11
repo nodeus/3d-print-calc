@@ -6,33 +6,23 @@
   let {
     report,
     perPage = 50,
-    onApply,
+    checked = $bindable<boolean[]>([]),
     onClose,
   }: {
     report: ImportReport;
     perPage?: number;
-    onApply: (selected: number[]) => void;
+    checked?: boolean[];
     onClose: () => void;
   } = $props();
 
   let page = $state(0);
   const rows = $derived(report.rows ?? []);
-  // Отмеченные для импорта (индексы в rows); по умолчанию — все.
-  // $effect: при новом отчёте выбор сбрасывается.
-  let checked = $state<boolean[]>([]);
-  $effect(() => {
-    checked = rows.map(() => true);
-  });
+  // Выбор общий со страницей (инлайн-Применить берёт отмеченное).
   const selectedCount = $derived(checked.filter(Boolean).length);
   const allChecked = $derived(rows.length > 0 && selectedCount === rows.length);
   function toggleAll() {
     const v = !allChecked;
     checked = rows.map(() => v);
-  }
-  function selected(): number[] {
-    const out: number[] = [];
-    for (let i = 0; i < checked.length; i++) if (checked[i]) out.push(i);
-    return out;
   }
   const pp = $derived(perPage > 0 ? perPage : 50);
   const pages = $derived(Math.max(1, Math.ceil(rows.length / pp)));
@@ -108,8 +98,7 @@
       </div>
     {/if}
     <div class="row">
-      {#if report.new > 0}<button class="warn" onclick={() => onApply(selected())} disabled={selectedCount === 0}>{$t('set.csv_apply')} ({selectedCount})</button>{/if}
-      <button onclick={onClose}>{$t('common.cancel')}</button>
+      <button onclick={onClose}>{$t('imp.close')}</button>
     </div>
   </div>
 </div>

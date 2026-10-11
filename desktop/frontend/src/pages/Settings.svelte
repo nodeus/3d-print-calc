@@ -16,6 +16,7 @@
   import { calcFormDefaults, applyCalcDefaults, type CalcForm } from '../lib/calcform';
   import Users from './Users.svelte';
   import ImportPreview from '../lib/ImportPreview.svelte';
+  import ImportMatsPreview from '../lib/ImportMatsPreview.svelte';
 
   let currency = $state('RUB');
   const codes = ['RUB', 'USD', 'EUR', 'KZT', 'BYN'];
@@ -31,10 +32,20 @@
   let csvApplied: ImportReport | null = $state(null);
   // Открытая модалка табличного предпросмотра CSV (null — закрыта).
   let csvPreview: ImportReport | null = $state(null);
+  // Выбор строк общий с модалкой (инлайн-Применить берёт отмеченное).
+  let csvChecked: boolean[] = $state([]);
+  function selIdx(checked: boolean[]): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < checked.length; i++) if (checked[i]) out.push(i);
+    return out;
+  }
   // Лимит последних работ CSV (null — пусто, т.е. весь файл).
   let csvLimit: number | null = $state(null);
   let matsReport: ImportReport | null = $state(null);
   let matsApplied: ImportReport | null = $state(null);
+  // Открытая модалка предпросмотра материалов.
+  let matsPreview: ImportReport | null = $state(null);
+  let matsChecked: boolean[] = $state([]);
   let importing = $state(false);
   let progress = $state({ done: 0, total: 0 });
   let error = $state('');
@@ -455,7 +466,10 @@
     try {
       const r = await wails.previewHistoryCSV(csvLimit ?? 0);
       csvReport = r;
-      if (r?.dryRun) csvPreview = r;
+      if (r?.dryRun) {
+        csvPreview = r;
+        csvChecked = (r.rows ?? []).map(() => true);
+      }
     } catch (e) {
       error = String(e);
     }
@@ -492,7 +506,21 @@
     csvPreview = null;
   }
 
-  async function applyMatsCSV() {
+  async function previewMatsCSV() {
+    error = '';
+    try {
+      const r = await wails.previewMaterialsCSV(csvLimit ?? 0);
+      matsReport = r;
+      if (r?.dryRun) {
+        matsPreview = r;
+        matsChecked = (r.matRows ?? []).map(() => true);
+      }
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function applyMatsCSV(selected: number[]) {
     error = '';
     importing = true;
     progress = { done: 0, total: 0 };
@@ -500,14 +528,28 @@
       progress = { done, total };
     });
     try {
-      matsApplied = await wails.applyMaterialsCSV();
+      matsApplied = await wails.applyMaterialsCSV(selected);
+      matsReport = null;
       notify($t('common.saved'));
     } catch (e) {
       error = String(e);
     } finally {
       importing = false;
       wails.offImportProgress();
+      matsPreview = null;
     }
+  }
+
+  // Отмена импорта материалов: сбрасывает pending-буфер.
+  async function cancelMats() {
+    error = '';
+    try {
+      await wails.cancelPendingImport();
+    } catch (e) {
+      error = String(e);
+    }
+    matsReport = null;
+    matsPreview = null;
   }
 </script>
 
@@ -654,11 +696,13 @@
     <button onclick={() => run(wails.exportMaterialsCSV, (p) => (backupPath = p))}>{$t('set.csv_mats_out')}</button>
     <input type="number" min="1" step="1" bind:value={csvLimit} placeholder={$t('set.csv_limit')} title={$t('set.csv_limit')} style={`width:${$t('set.csv_limit').length + 5}ch`} />
     <button onclick={previewCSV}>{$t('set.csv_in')}</button>
-    {#if csvReport?.dryRun}<button class="warn" onclick={() => applyCSV((csvReport?.rows ?? []).map((_, i) => i))} disabled={importing}>{$t('set.csv_apply')}</button>{/if}
+    {#if csvReport?.dryRun}<button class="warn" onclick={() => applyCSV(selIdx(csvChecked))} disabled={importing || selIdx(csvChecked).length === 0}>{$t('set.csv_apply')} ({selIdx(csvChecked).length})</button>{/if}
     {#if csvReport?.dryRun && !csvPreview}<button onclick={() => (csvPreview = csvReport)}>{$t('imp.repreview')}</button>{/if}
     {#if csvReport?.dryRun}<button onclick={cancelCSV}>{$t('imp.cancel')}</button>{/if}
-    <button onclick={() => run(wails.previewMaterialsCSV, (r) => (matsReport = r))}>{$t('set.csv_mats_in')}</button>
-    {#if matsReport?.dryRun}<button class="warn" onclick={applyMatsCSV}>{$t('set.csv_apply')}</button>{/if}
+    <button onclick={previewMatsCSV}>{$t('set.csv_mats_in')}</button>
+    {#if matsReport?.dryRun}<button class="warn" onclick={() => applyMatsCSV(selIdx(matsChecked))} disabled={importing || selIdx(matsChecked).length === 0}>{$t('set.csv_apply')} ({selIdx(matsChecked).length})</button>{/if}
+    {#if matsReport?.dryRun && !matsPreview}<button onclick={() => (matsPreview = matsReport)}>{$t('imp.repreview')}</button>{/if}
+    {#if matsReport?.dryRun}<button onclick={cancelMats}>{$t('imp.cancel')}</button>{/if}
   </div>
   {#if importing}<progress value={progress.done} max={progress.total || 1}></progress> {progress.done}/{progress.total}{/if}
   {#if csvReport}<p>{$t('set.csv_preview')}: total {csvReport.total}, new {csvReport.new}, existing {csvReport.existing}</p>{/if}
@@ -666,7 +710,8 @@
   {#if matsReport}<p>{$t('set.csv_preview')}: total {matsReport.total}, new {matsReport.new}, existing {matsReport.existing}</p>{/if}
   {#if matsApplied}<p class="ok">{$t('set.csv_done')}: +{matsApplied.new}</p>{/if}
 </div>
-{#if csvPreview}<ImportPreview report={csvPreview} perPage={historyPerPage} onApply={applyCSV} onClose={() => (csvPreview = null)} />{/if}
+{#if csvPreview}<ImportPreview report={csvPreview} perPage={historyPerPage} bind:checked={csvChecked} onClose={() => (csvPreview = null)} />{/if}
+{#if matsPreview}<ImportMatsPreview report={matsPreview} perPage={historyPerPage} bind:checked={matsChecked} onClose={() => (matsPreview = null)} />{/if}
 
 {:else if setTab === 'access'}
 <div class="card">
