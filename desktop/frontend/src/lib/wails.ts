@@ -54,6 +54,7 @@ export interface MaterialDTO {
   diameter: number;
   defaultWeightG: number;
   pricePerKg: number;
+  avgPricePerKg: number;
   currency: string;
   spoolId: number;
   spoolLeftG: number;
