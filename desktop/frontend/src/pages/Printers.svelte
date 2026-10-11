@@ -414,7 +414,7 @@
             <tr>
               <td><input type="date" bind:value={partEdit.boughtAt} /></td>
               <td><input bind:value={partEdit.name} placeholder={$t('part.name')} /></td>
-              <td><input type="number" min="0" step="0.01" bind:value={partEdit.price} placeholder="500" /></td>
+              <td><input type="number" min="0" step="0.01" bind:value={partEdit.price} placeholder={$t('part.price')} /></td>
               <td><input type="number" min="0" step="0.5" bind:value={partEdit.qty} placeholder="1" /></td>
               <td class="n">{money(Math.round(((partEdit.price ?? 0) * (partEdit.qty ?? 1)) * 100) / 100, 'RUB', 'ru')}</td>
               <td><input bind:value={partEdit.note} placeholder={$t('part.note')} /></td>
@@ -433,7 +433,7 @@
         <div class="row">
           <input type="date" bind:value={partEdit.boughtAt} />
           <input bind:value={partEdit.name} placeholder={$t('part.name')} />
-          <input type="number" min="0" step="0.01" bind:value={partEdit.price} placeholder="500" />
+          <input type="number" min="0" step="0.01" bind:value={partEdit.price} placeholder={$t('part.price')} />
           <input type="number" min="0" step="0.5" bind:value={partEdit.qty} placeholder="1" />
           <input bind:value={partEdit.note} placeholder={$t('part.note')} />
           <button onclick={savePart}>{$t('common.save')}</button>
