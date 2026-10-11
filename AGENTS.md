@@ -152,6 +152,9 @@ drag за грип `⋮⋮` (общий `startColDrag` в `lib/coldrag.ts`, по
 в массиве видимых колонок).
 Ширины колонок — drag за край `th` (`span.rz`, `table.tw`), хранятся
 `widths[table][col]` в секции пользователя. Сортировка `button.th` — во всех таблицах.
+Межвкладочная навигация — `lib/nav.ts` (`goTab` + payload-сторы по образцу
+`openOrderId`: `openMaterial{code,spoolNo}` → Materials раскрывает и подсвечивает).
+Счётчик катушек у материала — всегда из DTO (`m.spools`: живые + архив).
 Настройки интерфейса — `user_settings.json` рядом с `app.db`
 (`desktop/uisettings.go`): окно общее, остальное по логинам; нет файла — дефолты.
 Размер окна задаётся в options до `wails.Run` (SetSize после старта ненадёжен),
