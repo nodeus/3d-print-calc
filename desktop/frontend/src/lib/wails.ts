@@ -73,6 +73,7 @@ export interface Spool {
   WeightInitG: number;
   WeightLeftG: number;
   Archived: boolean;
+  Note: string;
 }
 
 export interface SpoolDTO {
@@ -86,6 +87,7 @@ export interface SpoolDTO {
   weightLeftG: number;
   leftG?: number;
   archived: boolean;
+  note: string;
 }
 
 export interface Material {
@@ -245,6 +247,57 @@ export interface ImportReport {
 export interface BulkDeleteReport {
   deleted: number;
   skippedOrder: string[];
+}
+
+export interface BulkChange {
+  field: string;
+  old: number | string | null;
+  new: number | string | null;
+}
+
+export interface BulkJobPreview {
+  jobId: number;
+  filename: string;
+  cost: number;
+  price: number;
+  changes: BulkChange[];
+}
+
+export interface BulkApplyReport {
+  updated: number;
+}
+
+// Разреженный патч bulk-правки: null/''/0 = поле нетронуто.
+export interface JobBulkPatch {
+  status: string | null;
+  startAt: string | null;
+  endAt: string | null;
+  printSec: number | null;
+  totalSec: number | null;
+  weightG: number | null;
+  lengthM: number | null;
+  slicer: string | null;
+  material: string;
+  spoolId: number;
+  tariff: number | null;
+  powerKW: number | null;
+  amortPerHour: number | null;
+  maintPerHour: number | null;
+  purgeWasteG: number | null;
+  opRate: number | null;
+  prepH: number | null;
+  postH: number | null;
+  designerRate: number | null;
+  modelH: number | null;
+  modelPrice: number | null;
+  extraMat: number | null;
+  failRate: number | null;
+  marginProfit: number | null;
+  marginDev: number | null;
+  fees: number | null;
+  copies: number | null;
+  vatRate: number | null;
+  roundStep: number | null;
 }
 
 export interface UserDTO {
@@ -465,6 +518,8 @@ declare global {
           DeleteOrder(id: number): Promise<void>;
           DeleteJob(id: number): Promise<void>;
           DeleteJobs(ids: number[]): Promise<BulkDeleteReport>;
+          BulkPreviewJobs(ids: number[], patch: JobBulkPatch): Promise<BulkJobPreview[]>;
+          BulkApplyJobs(ids: number[], patch: JobBulkPatch): Promise<BulkApplyReport>;
           UpdateManualJob(job: JobEdit): Promise<void>;
           OrderNumberSettings(): Promise<Record<string, string>>;
           SetOrderNumberSettings(template: string, seq: string): Promise<void>;
@@ -572,6 +627,8 @@ export const wails = {
   deleteOrder: (id: number) => api().DeleteOrder(id),
   deleteJob: (id: number) => api().DeleteJob(id),
   deleteJobs: (ids: number[]) => api().DeleteJobs(ids),
+  bulkPreviewJobs: (ids: number[], patch: JobBulkPatch) => api().BulkPreviewJobs(ids, patch),
+  bulkApplyJobs: (ids: number[], patch: JobBulkPatch) => api().BulkApplyJobs(ids, patch),
   updateManualJob: (job: JobEdit) => api().UpdateManualJob(job),
   orderNumberSettings: () => api().OrderNumberSettings(),
   setOrderNumberSettings: (template: string, seq: string) => api().SetOrderNumberSettings(template, seq),

@@ -536,3 +536,45 @@ func TestUpdateManualSpool(t *testing.T) {
 		t.Fatalf("линк затёрт: %d", got.SpoolID)
 	}
 }
+
+// TestSpoolNote: заметка катушки кругом (создание → чтение → правка),
+// по умолчанию пусто.
+func TestSpoolNote(t *testing.T) {
+	db := openTestDB(t)
+	mats := db.Materials()
+	mid, err := mats.UpsertByCode(models.Material{Code: "PETG-N", Type: "PETG", Density: 1.27})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 100, Currency: "RUB",
+		WeightInitG: 1000, WeightLeftG: 1000, Note: "первая закупка"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spools, err := mats.ListSpools(mid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spools) != 1 || spools[0].Note != "первая закупка" {
+		t.Fatalf("note не сохранилась: %+v", spools)
+	}
+	if err := mats.UpdateSpool(models.Spool{ID: sid, MaterialID: mid, Price: 100,
+		Currency: "RUB", WeightInitG: 1000, WeightLeftG: 1000, Note: "обновлено"}); err != nil {
+		t.Fatalf("UpdateSpool: %v", err)
+	}
+	spools, _ = mats.ListSpools(mid)
+	if spools[0].Note != "обновлено" {
+		t.Fatalf("note не обновилась: %+v", spools[0])
+	}
+	// Дефолт пустой заметки.
+	sid2, err := mats.AddSpool(models.Spool{MaterialID: mid, Price: 200, Currency: "RUB"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spools, _ = mats.ListSpools(mid)
+	for _, s := range spools {
+		if s.ID == sid2 && s.Note != "" {
+			t.Fatalf("дефолт note не пуст: %+v", s)
+		}
+	}
+}

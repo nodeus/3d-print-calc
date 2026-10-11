@@ -101,8 +101,8 @@ func (r *materialsRepo) UpdateSpool(s models.Spool) error {
 		return fmt.Errorf("ERR_SPOOL_SAVE: пустой id")
 	}
 	if _, err := r.db.Exec(`UPDATE spools SET price=?, currency=?, fx_rate=?,
-		bought_at=?, weight_init_g=?, weight_left_g=?, archived=? WHERE id=?`,
-		s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.ID); err != nil {
+		bought_at=?, weight_init_g=?, weight_left_g=?, archived=?, note=? WHERE id=?`,
+		s.Price, s.Currency, s.FxRate, s.BoughtAt, s.WeightInitG, s.WeightLeftG, s.Archived, s.Note, s.ID); err != nil {
 		return fmt.Errorf("ERR_SPOOL_SAVE: %w", err)
 	}
 	return nil
