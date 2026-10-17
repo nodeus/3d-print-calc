@@ -101,6 +101,7 @@
   "hist.origin": "Источник",
   "hist.columns_btn": "Колонки",
   "hist.total": "Итого",
+  "hist.total_selected": "Итого (выбрано)",
   "hist.drag_cols": "Тянуть — порядок колонок",
   "hist.manual": "вручную",
   "hist.edited": "изменена",
