@@ -101,6 +101,7 @@
   "hist.origin": "Source",
   "hist.columns_btn": "Columns",
   "hist.total": "Total",
+  "hist.total_selected": "Total (selected)",
   "hist.drag_cols": "Drag to reorder columns",
   "hist.manual": "manual",
   "hist.edited": "modified",

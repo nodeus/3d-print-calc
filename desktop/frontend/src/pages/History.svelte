@@ -390,22 +390,33 @@
     }
   }
 
+  // Массовое удаление чекбоксами: выбор сквозной (страницы/фильтр/сортировка).
+  let selected: number[] = $state([]);
+
+  // Итоги: по выборке чекбоксами (сквозной выбор), иначе по отфильтрованному списку.
+  let totalsScope = $derived(
+    selected.length ? jobs.filter((j) => selected.includes(j.ID)) : filtered
+  );
+
   // Суммы по выборке — всегда актуальны (дешёвый проход, кнопки нет).
   let totals: Record<string, number> = $derived.by(() => {
     const t: Record<string, number> = {};
     for (const k of summable) {
       let s = 0;
-      for (const j of filtered) s += rawVal(j, k) || 0;
+      for (const j of totalsScope) s += rawVal(j, k) || 0;
       t[k] = Math.round(s * 100) / 100;
     }
     return t;
   });
-  let totalsN = $derived(filtered.length);
+  let totalsN = $derived(totalsScope.length);
 
   function footText(k: string): string {
     if (!totals) return '';
     const labelCol = columns.includes('filename') ? 'filename' : columns[0];
-    if (k === labelCol) return `${$t('hist.total')} · ${totalsN}`;
+    if (k === labelCol) {
+      const label = selected.length ? $t('hist.total_selected') : $t('hist.total');
+      return `${label} · ${totalsN}`;
+    }
     if (!(k in totals)) return '';
     const v = totals[k];
     if (k === 'duration') return hms(Math.round(v));
@@ -501,8 +512,6 @@
     }
   }
 
-  // Массовое удаление чекбоксами: выбор сквозной (страницы/фильтр/сортировка).
-  let selected: number[] = $state([]);
   let bulkMsg = $state('');
   let headBox: HTMLInputElement | null = $state(null);
 
